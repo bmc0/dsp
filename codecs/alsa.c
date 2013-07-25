@@ -1,0 +1,240 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <math.h>
+#include <alsa/asoundlib.h>
+#include "alsa.h"
+#include "../util.h"
+#include "../sampleconv.h"
+
+struct alsa_enc_info {
+	const char *name;
+	snd_pcm_format_t fmt;
+	int bytes, prec;
+	void (*write_func)(sample_t *, char *, ssize_t);
+	void (*read_func)(char *, sample_t *, ssize_t);
+};
+
+struct alsa_state {
+	snd_pcm_t *dev;
+	struct alsa_enc_info *enc_info;
+	snd_pcm_sframes_t delay;
+	char *buf;
+	size_t buf_frames;
+};
+
+ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
+{
+	ssize_t n;
+	struct alsa_state *state = (struct alsa_state *) c->data;
+
+	try_again:
+	n = snd_pcm_readi(state->dev, (char *) buf, frames);
+	if (n < 0) {
+		n = snd_pcm_recover(state->dev, n, 1);
+		if (n < 0) {
+			LOG(LL_ERROR, "dsp: alsa: snd_pcm_readi: read failed\n");
+			return 0;
+		}
+		else
+			goto try_again;
+	}
+	state->enc_info->read_func((char *) buf, buf, n * c->channels);
+	return n;
+}
+
+ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
+{
+	ssize_t n, i = 0;
+	struct alsa_state *state = (struct alsa_state *) c->data;
+
+	while (i < frames) {
+		if (frames - i > state->buf_frames)
+			n = state->buf_frames;
+		else
+			n = frames - i;
+		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
+		try_again:
+		n = snd_pcm_writei(state->dev, state->buf, n);
+		if (n < 0) {
+			n = snd_pcm_recover(state->dev, n, 1);
+			if (n < 0) {
+				LOG(LL_ERROR, "dsp: alsa: snd_pcm_writei: write failed\n");
+				return i;
+			}
+			else
+				goto try_again;
+		}
+		i += n;
+	}
+	return i;
+}
+
+ssize_t alsa_seek(struct codec *c, ssize_t pos)
+{
+	return -1;
+}
+
+ssize_t alsa_delay(struct codec *c)
+{
+	struct alsa_state *state = (struct alsa_state *) c->data;
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_PAUSED)
+		return state->delay;
+	snd_pcm_delay(state->dev, &state->delay);
+	return state->delay;
+}
+
+void alsa_reset(struct codec *c)
+{
+	struct alsa_state *state = (struct alsa_state *) c->data;
+	snd_pcm_reset(state->dev);
+	state->delay = 0;
+}
+
+void alsa_pause(struct codec *c, int p)
+{
+	struct alsa_state *state = (struct alsa_state *) c->data;
+	if (snd_pcm_state(state->dev) != SND_PCM_STATE_PAUSED)
+		snd_pcm_delay(state->dev, &state->delay);
+	snd_pcm_pause(state->dev, p);
+}
+
+void alsa_destroy(struct codec *c)
+{
+	struct alsa_state *state = (struct alsa_state *) c->data;
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING)
+		snd_pcm_drain(state->dev);
+	snd_pcm_close(state->dev);
+	if (state->buf != NULL)
+		free(state->buf);
+	free(state);
+}
+
+static struct alsa_enc_info encodings[] = {
+	{ "s16",    SND_PCM_FORMAT_S16,     2, 16, write_buf_s16,    read_buf_s16 },
+	{ "u8",     SND_PCM_FORMAT_S8,      1, 8,  write_buf_u8,     read_buf_u8 },
+	{ "s8",     SND_PCM_FORMAT_S8,      1, 8,  write_buf_s8,     read_buf_s8 },
+	{ "s24",    SND_PCM_FORMAT_S24,     4, 24, write_buf_s24,    read_buf_s24 },
+	{ "s24_3",  SND_PCM_FORMAT_S24_3LE, 3, 24, write_buf_s24_3,  read_buf_s24_3 },
+	{ "s32",    SND_PCM_FORMAT_S32,     4, 32, write_buf_s32,    read_buf_s32 },
+	{ "float",  SND_PCM_FORMAT_FLOAT,   4, 24, write_buf_float,  read_buf_float },
+	{ "double", SND_PCM_FORMAT_FLOAT64, 8, 53, write_buf_double, read_buf_double },
+};
+
+static struct alsa_enc_info * alsa_get_enc_info(const char *enc)
+{
+	int i;
+	if (enc == NULL) {
+		return &encodings[0];
+	}
+	for (i = 0; i < LENGTH(encodings); ++i) {
+		if (strcmp(enc, encodings[i].name) == 0) {
+			return &encodings[i];
+		}
+	}
+	return NULL;
+}
+
+struct codec * alsa_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+{
+	int err;
+	unsigned int r;
+	snd_pcm_t *dev = NULL;
+	snd_pcm_hw_params_t *p = NULL;
+	struct codec *c = NULL;
+	struct alsa_state *state = NULL;
+	snd_pcm_uframes_t buf_len;
+	struct alsa_enc_info *enc_info;
+
+	rate = SELECT_FS(rate);
+	channels = SELECT_CHANNELS(channels);
+	if ((err = snd_pcm_open(&dev, (path == NULL) ? "default" : path, (mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to open device: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((enc_info = alsa_get_enc_info(enc)) == NULL) {
+		LOG(LL_ERROR, "dsp: alsa: error: bad encoding: %s\n", enc);
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params_malloc(&p)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to allocate hw params: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params_any(dev, p)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to initialize hw params: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params_set_access(dev, p, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set access: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params_set_format(dev, p, enc_info->fmt)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set format: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	r = (unsigned int) rate;
+	if ((err = snd_pcm_hw_params_set_rate(dev, p, r, 0)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set rate: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	rate = (int) r;
+	if ((err = snd_pcm_hw_params_set_channels(dev, p, channels)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set channels: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	buf_len = BUF_SAMPLES * 8;
+	if ((err = snd_pcm_hw_params_set_buffer_size_near(dev, p, &buf_len)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params(dev, p)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set params: %s\n", snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_prepare(dev)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to prepare device: %s\n", snd_strerror(err));
+		goto fail;
+	}
+
+	state = calloc(1, sizeof(struct alsa_state));
+	state->dev = dev;
+	state->enc_info = enc_info;
+	state->delay = 0;
+	if (mode == CODEC_MODE_WRITE) {
+		state->buf = calloc(BUF_SAMPLES, enc_info->bytes);
+		state->buf_frames = BUF_SAMPLES / channels;
+	}
+
+	c = calloc(1, sizeof(struct codec));
+	c->type = type;
+	c->enc = enc_info->name;
+	c->path = path;
+	c->fs = rate;
+	c->prec = enc_info->prec;
+	c->channels = channels;
+	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
+	c->read = alsa_read;
+	c->write = alsa_write;
+	c->seek = alsa_seek;
+	c->delay = alsa_delay;
+	c->reset = alsa_reset;
+	c->pause = alsa_pause;
+	c->destroy = alsa_destroy;
+	c->data = state;
+
+	return c;
+
+	fail:
+	if (p != NULL)
+		snd_pcm_hw_params_free(p);
+	if (dev != NULL)
+		snd_pcm_close(dev);
+	return NULL;
+}
+
+void alsa_codec_print_encodings(const char *type)
+{
+	int i;
+	for (i = 0; i < LENGTH(encodings); ++i)
+		fprintf(stderr, " %s", encodings[i].name);
+}
