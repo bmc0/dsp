@@ -11,7 +11,7 @@
 #include "dither.h"
 
 #define SHOULD_DITHER(in, out, has_effects) (force_dither != -1 && (force_dither == 1 || (out->prec < 24 && (has_effects || in->prec > out->prec))))
-#define TIME_FMT "%.2ld:%.2ld:%05.2lf"
+#define TIME_FMT "%.2zu:%.2zu:%05.2lf"
 #define TIME_FMT_ARGS(frames, fs) frames / fs / 3600, (frames / fs / 60) % 60, fmod((double) frames / fs, 60.0)
 
 static struct termios term_attrs;
@@ -234,7 +234,7 @@ static struct codec * init_io(int mode, const char *path, const char *type, cons
 
 static void print_io_info(struct codec *c, const char *n)
 {
-	fprintf(stderr, "dsp: %s: %s; type=%s enc=%s precision=%d channels=%d fs=%d frames=%ld ["TIME_FMT"]\n",
+	fprintf(stderr, "dsp: %s: %s; type=%s enc=%s precision=%d channels=%d fs=%d frames=%zu ["TIME_FMT"]\n",
 		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
 }
 
