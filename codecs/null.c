@@ -48,7 +48,6 @@ struct codec * null_codec_init(const char *type, int mode, const char *path, con
 	c->fs = SELECT_FS(rate);
 	c->prec = 53;
 	c->channels = SELECT_CHANNELS(channels);
-	c->interactive = 0;
 	c->read = null_read;
 	c->write = null_write;
 	c->seek = null_seek;
