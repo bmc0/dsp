@@ -6,7 +6,6 @@ Dsp is an audio processing program with simple digital signal processing capabil
 
 #### Dependencies:
 
-* dash
 * libsndfile
 * libmad
 * alsa-lib
