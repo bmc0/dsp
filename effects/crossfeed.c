@@ -3,6 +3,17 @@
 #include <string.h>
 #include <math.h>
 #include "crossfeed.h"
+#include "biquad.h"
+
+struct crossfeed_state {
+	int type;
+	double direct_gain;
+	double cross_gain;
+	struct biquad_state f0_c0;  /* lowpass for channel 0 */
+	struct biquad_state f0_c1;  /* lowpass for channel 1 */
+	struct biquad_state f1_c0;  /* highpass for channel 0 */
+	struct biquad_state f1_c1;  /* highpass for channel 1 */
+};
 
 void crossfeed_init(struct crossfeed_state *state, double freq, double sep_db)
 {
@@ -69,11 +80,11 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, int argc, char **a
 		return NULL;
 	}
 
-	e = malloc(sizeof(struct effect));
+	e = calloc(1, sizeof(struct effect));
 	e->run = crossfeed_effect_run;
 	e->plot = crossfeed_effect_plot;
 	e->destroy = crossfeed_effect_destroy;
-	state = malloc(sizeof(struct crossfeed_state));
+	state = calloc(1, sizeof(struct crossfeed_state));
 	crossfeed_init(state, freq, sep_db);
 	e->data = state;
 	return e;
