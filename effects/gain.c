@@ -3,6 +3,10 @@
 #include <math.h>
 #include "gain.h"
 
+struct gain_state {
+	double mult;
+};
+
 void gain_init(struct gain_state *state, double gain)
 {
 	state->mult = pow(10, gain / 20);
