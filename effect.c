@@ -7,6 +7,7 @@
 #include "effects/biquad.h"
 #include "effects/gain.h"
 #include "effects/crossfeed.h"
+#include "effects/crossfeed_hrtf.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
@@ -24,6 +25,7 @@ static struct effect_info effects[] = {
 	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",             biquad_effect_init },
 	{ "gain",               "gain gain",                            gain_effect_init },
 	{ "crossfeed",          "crossfeed f0[k] separation",           crossfeed_effect_init },
+	{ "crossfeed_hrtf",     "crossfeed_hrtf left_fir right_fir",    crossfeed_hrtf_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)

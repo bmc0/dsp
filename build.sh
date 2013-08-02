@@ -6,8 +6,8 @@ fail() {
 }
 
 [ -z "$CC" ] && CC="cc"
-CFLAGS="-Os -Wall $(pkg-config --cflags alsa sndfile mad) $CFLAGS"
-LDFLAGS="-lm $(pkg-config --libs alsa sndfile mad) $LDFLAGS"
+CFLAGS="-Os -Wall -std=gnu99 $(pkg-config --cflags alsa sndfile mad fftw3) $CFLAGS"
+LDFLAGS="-lm $(pkg-config --libs alsa sndfile mad fftw3) $LDFLAGS"
 
 $CC -o dsp \
 	dsp.c \
@@ -19,6 +19,7 @@ $CC -o dsp \
 	effects/biquad.c \
 	effects/gain.c \
 	effects/crossfeed.c \
+	effects/crossfeed_hrtf.c \
 	codecs/sndfile.c \
 	codecs/alsa.c \
 	codecs/mp3.c \
