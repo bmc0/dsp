@@ -9,7 +9,7 @@ enum {
 	LL_VERBOSE,
 };
 #define LOG(l, ...) do { if (dsp_globals.loglevel >= l) fprintf(stderr, __VA_ARGS__); } while (0)
-#define IF_LOGLEVEL(l) if (dsp_globals.loglevel >= l)
+#define LOGLEVEL(l) dsp_globals.loglevel >= l
 #define SELECT_FS(x) ((x == -1) ? (dsp_globals.fs == -1) ? DEFAULT_FS : dsp_globals.fs : x)
 #define SELECT_CHANNELS(x) ((x == -1) ? (dsp_globals.channels == -1) ? DEFAULT_CHANNELS : dsp_globals.channels : x)
 

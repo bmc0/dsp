@@ -212,7 +212,7 @@ static void print_io_info(struct codec *c, const char *n)
 		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
 }
 
-static struct codec * init_io(int mode, const char *path, const char *type, const char *enc, int endian, int rate, int channels)
+static struct codec * init_io(int mode, const char *path, const char *type, const char *enc, int endian, int rate, int channels, size_t frames)
 {
 	struct codec *c = NULL;
 
@@ -221,7 +221,10 @@ static struct codec * init_io(int mode, const char *path, const char *type, cons
 		LOG(LL_ERROR, "dsp: error: failed to open %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path);
 		return NULL;
 	}
-	IF_LOGLEVEL(LL_VERBOSE) print_io_info(c, (mode == CODEC_MODE_WRITE) ? "output" : "input");
+	if (mode == CODEC_MODE_WRITE)
+		c->frames = frames;
+	if ((LOGLEVEL(LL_NORMAL) && mode == CODEC_MODE_WRITE) || LOGLEVEL(LL_VERBOSE))
+		print_io_info(c, (mode == CODEC_MODE_WRITE) ? "output" : "input");
 	if (dsp_globals.fs == -1)
 		dsp_globals.fs = c->fs;
 	else if (c->fs != dsp_globals.fs) {
@@ -285,7 +288,7 @@ int main(int argc, char *argv[])
 		if (params.mode == CODEC_MODE_WRITE)
 			out_params = params;
 		else {
-			if ((c = init_io(params.mode, params.path, params.type, params.enc, params.endian, params.rate, params.channels)) == NULL)
+			if ((c = init_io(params.mode, params.path, params.type, params.enc, params.endian, params.rate, params.channels, 0)) == NULL)
 				cleanup_and_exit(1);
 			out_frames += c->frames;
 			append_codec(&in_codecs, c);
@@ -309,12 +312,11 @@ int main(int argc, char *argv[])
 			cleanup_and_exit(1);
 		}
 		if (out_params.path == NULL)
-			out_codec = init_io(CODEC_MODE_WRITE, DEFAULT_OUTPUT_PATH, DEFAULT_OUTPUT_TYPE, NULL, CODEC_ENDIAN_DEFAULT, dsp_globals.fs, dsp_globals.channels);
+			out_codec = init_io(CODEC_MODE_WRITE, DEFAULT_OUTPUT_PATH, DEFAULT_OUTPUT_TYPE, NULL, CODEC_ENDIAN_DEFAULT, dsp_globals.fs, dsp_globals.channels, out_frames);
 		else
-			out_codec = init_io(out_params.mode, out_params.path, out_params.type, out_params.enc, out_params.endian, out_params.rate, out_params.channels);
+			out_codec = init_io(out_params.mode, out_params.path, out_params.type, out_params.enc, out_params.endian, out_params.rate, out_params.channels, out_frames);
 		if (out_codec == NULL)
 			cleanup_and_exit(1);
-		out_codec->frames = out_frames;
 	}
 	if (interactive == -1)
 		interactive = 0;  /* disable if not set */
