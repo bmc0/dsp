@@ -206,6 +206,12 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 	return 0;
 }
 
+static void print_io_info(struct codec *c, const char *n)
+{
+	fprintf(stderr, "dsp: %s: %s; type=%s enc=%s precision=%d channels=%d fs=%d frames=%zu ["TIME_FMT"]\n",
+		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
+}
+
 static struct codec * init_io(int mode, const char *path, const char *type, const char *enc, int endian, int rate, int channels)
 {
 	struct codec *c = NULL;
@@ -215,6 +221,7 @@ static struct codec * init_io(int mode, const char *path, const char *type, cons
 		LOG(LL_ERROR, "dsp: error: failed to open %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path);
 		return NULL;
 	}
+	IF_LOGLEVEL(LL_VERBOSE) print_io_info(c, (mode == CODEC_MODE_WRITE) ? "output" : "input");
 	if (dsp_globals.fs == -1)
 		dsp_globals.fs = c->fs;
 	else if (c->fs != dsp_globals.fs) {
@@ -230,12 +237,6 @@ static struct codec * init_io(int mode, const char *path, const char *type, cons
 	if (interactive == -1 && c->interactive)
 		interactive = 1;
 	return c;
-}
-
-static void print_io_info(struct codec *c, const char *n)
-{
-	fprintf(stderr, "dsp: %s: %s; type=%s enc=%s precision=%d channels=%d fs=%d frames=%zu ["TIME_FMT"]\n",
-		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
 }
 
 static void terminate(int s)
@@ -287,7 +288,6 @@ int main(int argc, char *argv[])
 			if ((c = init_io(params.mode, params.path, params.type, params.enc, params.endian, params.rate, params.channels)) == NULL)
 				cleanup_and_exit(1);
 			out_frames += c->frames;
-			IF_LOGLEVEL(LL_VERBOSE) print_io_info(c, "input");
 			append_codec(&in_codecs, c);
 		}
 	}
@@ -315,7 +315,6 @@ int main(int argc, char *argv[])
 		if (out_codec == NULL)
 			cleanup_and_exit(1);
 		out_codec->frames = out_frames;
-		IF_LOGLEVEL(LL_NORMAL) print_io_info(out_codec, "output");
 	}
 	if (interactive == -1)
 		interactive = 0;  /* disable if not set */
