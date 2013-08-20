@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include "biquad.h"
+#include "../util.h"
 
 void biquad_init(struct biquad_state *state, double b0, double b1, double b2, double a0, double a1, double a2)
 {
@@ -178,7 +179,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_LOWPASS_1;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 	}
 	else if (strcmp(argv[0], "highpass_1") == 0) {
 		if (argc != 2) {
@@ -186,7 +187,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_HIGHPASS_1;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 	}
 	else if (strcmp(argv[0], "lowpass") == 0) {
 		if (argc != 3) {
@@ -194,7 +195,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_LOWPASS;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "highpass") == 0) {
@@ -203,7 +204,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_HIGHPASS;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
@@ -212,7 +213,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_BANDPASS_SKIRT;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "bandpass_peak") == 0) {
@@ -221,7 +222,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_BANDPASS_PEAK;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "notch") == 0) {
@@ -230,7 +231,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_NOTCH;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "allpass") == 0) {
@@ -239,7 +240,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_ALLPASS;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 	}
 	else if (strcmp(argv[0], "eq") == 0) {
@@ -248,7 +249,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_PEAK;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 		gain = atof(argv[3]);
 	}
@@ -258,7 +259,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_LOWSHELF;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 		gain = atof(argv[3]);
 	}
@@ -268,7 +269,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_HIGHSHELF;
-		freq = atof(argv[1]);
+		freq = parse_freq(argv[1]);
 		q = atof(argv[2]);
 		gain = atof(argv[3]);
 	}

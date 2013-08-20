@@ -9,20 +9,20 @@
 #include "effects/crossfeed.h"
 
 static struct effect_info effects[] = {
-	{ "lowpass_1",      "lowpass_1 <freq>",                     biquad_effect_init },
-	{ "highpass_1",     "highpass_1 <freq>",                    biquad_effect_init },
-	{ "lowpass",        "lowpass <freq> <q>",                   biquad_effect_init },
-	{ "highpass",       "highpass <freq> <q>",                  biquad_effect_init },
-	{ "bandpass_skirt", "bandpass_skirt <freq> <q>",            biquad_effect_init },
-	{ "bandpass_peak",  "bandpass_peak <freq> <q>",             biquad_effect_init },
-	{ "notch",          "notch <freq> <q>",                     biquad_effect_init },
-	{ "allpass",        "allpass <freq> <q>",                   biquad_effect_init },
-	{ "eq",             "eq <freq> <q> <gain>",                 biquad_effect_init },
-	{ "lowshelf",       "lowshelf <freq> <q> <gain>",           biquad_effect_init },
-	{ "highshelf",      "highshelf <freq> <q> <gain>",          biquad_effect_init },
-	{ "biquad",         "biquad <b0> <b1> <b2> <a0> <a1> <a2>", biquad_effect_init },
-	{ "gain",           "gain <gain>",                          gain_effect_init },
-	{ "crossfeed",      "crossfeed <freq> <separation>",        crossfeed_effect_init },
+	{ "lowpass_1",      "lowpass_1 frequency[k]",                     biquad_effect_init },
+	{ "highpass_1",     "highpass_1 frequency[k]",                    biquad_effect_init },
+	{ "lowpass",        "lowpass frequency[k] q",                     biquad_effect_init },
+	{ "highpass",       "highpass frequency[k] q",                    biquad_effect_init },
+	{ "bandpass_skirt", "bandpass_skirt frequency[k] q",              biquad_effect_init },
+	{ "bandpass_peak",  "bandpass_peak frequency[k] q",               biquad_effect_init },
+	{ "notch",          "notch frequency[k] q",                       biquad_effect_init },
+	{ "allpass",        "allpass frequency[k] q",                     biquad_effect_init },
+	{ "eq",             "eq frequency[k] q gain",                     biquad_effect_init },
+	{ "lowshelf",       "lowshelf frequency[k] q gain",               biquad_effect_init },
+	{ "highshelf",      "highshelf frequency[k] q gain",              biquad_effect_init },
+	{ "biquad",         "biquad b0 b1 b2 a0 a1 a2",                   biquad_effect_init },
+	{ "gain",           "gain gain",                                  gain_effect_init },
+	{ "crossfeed",      "crossfeed frequency[k] separation",          crossfeed_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)

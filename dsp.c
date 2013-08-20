@@ -9,6 +9,7 @@
 #include "effect.h"
 #include "codec.h"
 #include "dither.h"
+#include "util.h"
 
 #define SHOULD_DITHER(in, out, has_effects) (force_dither != -1 && (force_dither == 1 || (out->prec < 24 && (has_effects || in->prec > out->prec))))
 #define TIME_FMT "%.2zu:%.2zu:%05.2lf"
@@ -34,13 +35,13 @@ static const char usage[] =
 	"  -D  disable dithering\n"
 	"\n"
 	"input/output options:\n"
-	"  -o             output\n"
-	"  -t <type>      type\n"
-	"  -e <encoding>  encoding\n"
-	"  -B/L/N         big/little/native endian\n"
-	"  -r <rate>      sample rate\n"
-	"  -c <channels>  channels\n"
-	"  -n             shortcut for '-t null null'\n"
+	"  -o               output\n"
+	"  -t type          type\n"
+	"  -e encoding      encoding\n"
+	"  -B/L/N           big/little/native endian\n"
+	"  -r frequency[k]  sample rate\n"
+	"  -c channels      channels\n"
+	"  -n               shortcut for '-t null null'\n"
 	"\n"
 	"default output:\n"
 	"  type: "DEFAULT_OUTPUT_TYPE"\n"
@@ -173,7 +174,7 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 				*endian = CODEC_ENDIAN_NATIVE;
 				break;
 			case 'r':
-				*rate = atoi(optarg);
+				*rate = parse_freq(optarg);
 				if (*rate <= 0) {
 					LOG(LL_ERROR, "dsp: error: rate must be > 0\n");
 					return 1;

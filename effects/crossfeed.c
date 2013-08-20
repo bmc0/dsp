@@ -4,6 +4,7 @@
 #include <math.h>
 #include "crossfeed.h"
 #include "biquad.h"
+#include "../util.h"
 
 struct crossfeed_state {
 	int type;
@@ -66,7 +67,7 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, int argc, char **a
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
-	freq = atof(argv[1]);
+	freq = parse_freq(argv[1]);
 	sep_db = atof(argv[2]);
 
 	if (dsp_globals.channels != 2)
