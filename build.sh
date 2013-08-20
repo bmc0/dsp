@@ -15,6 +15,7 @@ $CC -o dsp \
 	codec.c \
 	dither.c \
 	sampleconv.c \
+	util.c \
 	effects/biquad.c \
 	effects/gain.c \
 	effects/crossfeed.c \
