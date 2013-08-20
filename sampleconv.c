@@ -92,9 +92,9 @@ void read_buf_s24_3(char *in, sample_t *out, ssize_t s)
 {
 	signed int v;
 	while (s-- > 0) {
-		v = (unsigned char) in[s * 3 + 2] << 0;
-		v |= (unsigned char) in[s * 3 + 1] << 8;
-		v |= (unsigned char) in[s * 3 + 0] << 16;
+		v = (unsigned int) in[s * 3 + 2] << 0;
+		v |= (unsigned int) in[s * 3 + 1] << 8;
+		v |= (unsigned int) in[s * 3 + 0] << 16;
 		out[s] = S24_TO_SAMPLE(v);
 	}
 }
