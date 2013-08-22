@@ -40,8 +40,8 @@ static const char usage[] =
 	"  -e encoding      encoding\n"
 	"  -B/L/N           big/little/native endian\n"
 	"  -r frequency[k]  sample rate\n"
-	"  -c channels      channels\n"
-	"  -n               shortcut for '-t null null'\n"
+	"  -c channels      number of channels\n"
+	"  -n               equivalent to '-t null null'\n"
 	"\n"
 	"default output:\n"
 	"  type: "DEFAULT_OUTPUT_TYPE"\n"
@@ -54,8 +54,8 @@ static const char interactive_help[] =
 	"  . : seek forward 5 sec\n"
 	"  < : seek backward 30 sec\n"
 	"  > : seek forward 30 sec\n"
-	"  r : restart current\n"
-	"  n : skip current\n"
+	"  r : restart current input\n"
+	"  n : skip current input\n"
 	"  c : pause\n"
 	"  q : quit\n";
 
