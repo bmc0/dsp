@@ -220,7 +220,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		}
 		type = BIQUAD_LOWPASS_1;
 		arg0 = parse_freq(argv[1]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 	}
 	else if (strcmp(argv[0], "highpass_1") == 0) {
 		if (argc != 2) {
@@ -229,7 +229,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		}
 		type = BIQUAD_HIGHPASS_1;
 		arg0 = parse_freq(argv[1]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 	}
 	else if (strcmp(argv[0], "lowpass") == 0) {
 		if (argc != 3) {
@@ -239,7 +239,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_LOWPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "highpass") == 0) {
@@ -250,7 +250,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_HIGHPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
@@ -261,7 +261,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_BANDPASS_SKIRT;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "bandpass_peak") == 0) {
@@ -272,7 +272,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_BANDPASS_PEAK;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "notch") == 0) {
@@ -283,7 +283,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_NOTCH;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "allpass") == 0) {
@@ -294,7 +294,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		type = BIQUAD_ALLPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "eq") == 0) {
@@ -306,7 +306,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "lowshelf") == 0) {
@@ -318,7 +318,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "highshelf") == 0) {
@@ -330,7 +330,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "frequency");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "f0");
 		CHECK_RANGE(arg1 > 0.0, "q");
 	}
 	else if (strcmp(argv[0], "linkwitz_transform") == 0) {
