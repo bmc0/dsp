@@ -22,10 +22,10 @@ void crossfeed_init(struct crossfeed_state *state, double freq, double sep_db)
 	state->direct_gain = sep / (1 + sep);
 	state->cross_gain = 1 / (1 + sep);
 
-	biquad_init_using_type(&state->f0_c0, BIQUAD_LOWPASS_1, dsp_globals.fs, freq, 0, 0);
-	biquad_init_using_type(&state->f0_c1, BIQUAD_LOWPASS_1, dsp_globals.fs, freq, 0, 0);
-	biquad_init_using_type(&state->f1_c0, BIQUAD_HIGHPASS_1, dsp_globals.fs, freq, 0, 0);
-	biquad_init_using_type(&state->f1_c1, BIQUAD_HIGHPASS_1, dsp_globals.fs, freq, 0, 0);
+	biquad_init_using_type(&state->f0_c0, BIQUAD_LOWPASS_1, dsp_globals.fs, freq, 0, 0, 0);
+	biquad_init_using_type(&state->f0_c1, BIQUAD_LOWPASS_1, dsp_globals.fs, freq, 0, 0, 0);
+	biquad_init_using_type(&state->f1_c0, BIQUAD_HIGHPASS_1, dsp_globals.fs, freq, 0, 0, 0);
+	biquad_init_using_type(&state->f1_c1, BIQUAD_HIGHPASS_1, dsp_globals.fs, freq, 0, 0, 0);
 }
 
 void crossfeed_effect_run(struct effect *e, sample_t s[2])
