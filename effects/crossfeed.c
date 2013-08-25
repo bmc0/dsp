@@ -73,7 +73,7 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, int argc, char **a
 	if (dsp_globals.channels != 2)
 		LOG(LL_ERROR, "dsp: %s: warning: channels != 2; crossfeed will have no effect\n", argv[0]);
 	if (freq < 0.0 || freq > (double) dsp_globals.fs / 2.0) {
-		LOG(LL_ERROR, "dsp: %s: error: freq out of range\n", argv[0]);
+		LOG(LL_ERROR, "dsp: %s: error: f0 out of range\n", argv[0]);
 		return NULL;
 	}
 	if (sep_db < 0.0) {
