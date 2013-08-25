@@ -339,9 +339,9 @@ struct effect * biquad_effect_init(struct effect_info *ei, int argc, char **argv
 			return NULL;
 		}
 		type = BIQUAD_LINKWITZ_TRANSFORM;
-		arg0 = atof(argv[1]);
+		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		arg2 = atof(argv[3]);
+		arg2 = parse_freq(argv[3]);
 		arg3 = atof(argv[4]);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) dsp_globals.fs / 2.0, "fz");
 		CHECK_RANGE(arg1 > 0.0, "qz");
