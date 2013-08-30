@@ -9,6 +9,7 @@ Dsp is an audio processing program with simple digital signal processing capabil
 * libsndfile
 * libmad
 * alsa-lib
+* fftw3
 
 #### Build:
 
