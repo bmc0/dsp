@@ -11,7 +11,6 @@ struct crossfeed_hrtf_state {
 	fftw_complex *filter_fr_left[2];
 	fftw_complex *filter_fr_right[2];
 	fftw_complex *tmp_fr[2];
-	sample_t *impulse[2];
 	sample_t *input[2];
 	sample_t *output_left_input[2];
 	sample_t *output_right_input[2];
@@ -134,8 +133,7 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	int i;
 	size_t frames;
 	fftw_plan impulse_plan0, impulse_plan1;
-	sample_t *impulse_left[2];
-	sample_t *impulse_right[2];
+	sample_t *impulse[2];
 
 	if (argc != 3) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
@@ -196,40 +194,34 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	state->overlap_right_input[0] = calloc(state->input_frames / 2, sizeof(sample_t));
 	state->overlap_right_input[1] = calloc(state->input_frames / 2, sizeof(sample_t));
 
-	impulse_left[0] = calloc(state->input_frames, sizeof(sample_t));
-	impulse_left[1] = calloc(state->input_frames, sizeof(sample_t));
-	impulse_right[0] = calloc(state->input_frames, sizeof(sample_t));
-	impulse_right[1] = calloc(state->input_frames, sizeof(sample_t));
+	impulse[0] = calloc(state->input_frames, sizeof(sample_t));
+	impulse[1] = calloc(state->input_frames, sizeof(sample_t));
 
 	tmp_buf = calloc(frames * 2, sizeof(sample_t));
+	impulse_plan0 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[0], state->filter_fr_left[0], FFTW_ESTIMATE);
+	impulse_plan1 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[1], state->filter_fr_left[1], FFTW_ESTIMATE);
 	if (c_left->read(c_left, tmp_buf, c_left->frames) != c_left->frames)
 		LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
 	for (i = 0; i < c_left->frames; ++i) {
-		impulse_left[0][i] = tmp_buf[i * 2];
-		impulse_left[1][i] = tmp_buf[i * 2 + 1];
+		impulse[0][i] = tmp_buf[i * 2];
+		impulse[1][i] = tmp_buf[i * 2 + 1];
 	}
+	fftw_execute(impulse_plan0);
+	fftw_execute(impulse_plan1);
 	memset(tmp_buf, 0, frames * 2 * sizeof(sample_t));
+	memset(impulse[0], 0, state->input_frames * sizeof(sample_t));
+	memset(impulse[1], 0, state->input_frames * sizeof(sample_t));
 	if (c_right->read(c_right, tmp_buf, c_right->frames) != c_right->frames)
 		LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
 	for (i = 0; i < c_right->frames; ++i) {
-		impulse_right[0][i] = tmp_buf[i * 2];
-		impulse_right[1][i] = tmp_buf[i * 2 + 1];
+		impulse[0][i] = tmp_buf[i * 2];
+		impulse[1][i] = tmp_buf[i * 2 + 1];
 	}
+	fftw_execute(impulse_plan0);
+	fftw_execute(impulse_plan1);
+	fftw_destroy_plan(impulse_plan0);
+	fftw_destroy_plan(impulse_plan1);
 	free(tmp_buf);
-
-	impulse_plan0 = fftw_plan_dft_r2c_1d(state->input_frames, impulse_left[0], state->filter_fr_left[0], FFTW_ESTIMATE);
-	impulse_plan1 = fftw_plan_dft_r2c_1d(state->input_frames, impulse_left[1], state->filter_fr_left[1], FFTW_ESTIMATE);
-	fftw_execute(impulse_plan0);
-	fftw_execute(impulse_plan1);
-	fftw_destroy_plan(impulse_plan0);
-	fftw_destroy_plan(impulse_plan1);
-
-	impulse_plan0 = fftw_plan_dft_r2c_1d(state->input_frames, impulse_right[0], state->filter_fr_right[0], FFTW_ESTIMATE);
-	impulse_plan1 = fftw_plan_dft_r2c_1d(state->input_frames, impulse_right[1], state->filter_fr_right[1], FFTW_ESTIMATE);
-	fftw_execute(impulse_plan0);
-	fftw_execute(impulse_plan1);
-	fftw_destroy_plan(impulse_plan0);
-	fftw_destroy_plan(impulse_plan1);
 
 	/* init left input plans */
 	state->plan_r2c_left_c0 = fftw_plan_dft_r2c_1d(state->input_frames, state->input[0], state->tmp_fr[0], FFTW_ESTIMATE);
@@ -246,10 +238,8 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	LOG(LL_VERBOSE, "dsp: %s: impulse frames=%zu\n", argv[0], frames);
 	destroy_codec(c_left);
 	destroy_codec(c_right);
-	free(impulse_left[0]);
-	free(impulse_left[1]);
-	free(impulse_right[0]);
-	free(impulse_right[1]);
+	free(impulse[0]);
+	free(impulse[1]);
 
 	e->data = state;
 	return e;
