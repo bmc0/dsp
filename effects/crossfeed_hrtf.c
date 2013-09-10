@@ -196,8 +196,8 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 
 	impulse[0] = calloc(state->input_frames, sizeof(sample_t));
 	impulse[1] = calloc(state->input_frames, sizeof(sample_t));
-
 	tmp_buf = calloc(frames * 2, sizeof(sample_t));
+
 	impulse_plan0 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[0], state->filter_fr_left[0], FFTW_ESTIMATE);
 	impulse_plan1 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[1], state->filter_fr_left[1], FFTW_ESTIMATE);
 	if (c_left->read(c_left, tmp_buf, c_left->frames) != c_left->frames)
@@ -208,9 +208,14 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	}
 	fftw_execute(impulse_plan0);
 	fftw_execute(impulse_plan1);
+	fftw_destroy_plan(impulse_plan0);
+	fftw_destroy_plan(impulse_plan1);
+
 	memset(tmp_buf, 0, frames * 2 * sizeof(sample_t));
 	memset(impulse[0], 0, state->input_frames * sizeof(sample_t));
 	memset(impulse[1], 0, state->input_frames * sizeof(sample_t));
+	impulse_plan0 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[0], state->filter_fr_right[0], FFTW_ESTIMATE);
+	impulse_plan1 = fftw_plan_dft_r2c_1d(state->input_frames, impulse[1], state->filter_fr_right[1], FFTW_ESTIMATE);
 	if (c_right->read(c_right, tmp_buf, c_right->frames) != c_right->frames)
 		LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
 	for (i = 0; i < c_right->frames; ++i) {
@@ -222,6 +227,8 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	fftw_destroy_plan(impulse_plan0);
 	fftw_destroy_plan(impulse_plan1);
 	free(tmp_buf);
+	free(impulse[0]);
+	free(impulse[1]);
 
 	/* init left input plans */
 	state->plan_r2c_left_c0 = fftw_plan_dft_r2c_1d(state->input_frames, state->input[0], state->tmp_fr[0], FFTW_ESTIMATE);
@@ -238,8 +245,6 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	LOG(LL_VERBOSE, "dsp: %s: impulse frames=%zu\n", argv[0], frames);
 	destroy_codec(c_left);
 	destroy_codec(c_right);
-	free(impulse[0]);
-	free(impulse[1]);
 
 	e->data = state;
 	return e;
