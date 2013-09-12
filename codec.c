@@ -109,7 +109,7 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 	struct codec *c;
 	const char *ext;
 	ext = strrchr(path, '.');
-	if (type == NULL && get_codec_info_by_ext(ext) == NULL && mode == CODEC_MODE_WRITE)
+	if (type == NULL && (ext == NULL || get_codec_info_by_ext(ext) == NULL) && mode == CODEC_MODE_WRITE)
 		type = DEFAULT_OUTPUT_TYPE;
 	if (type != NULL) {
 		info = get_codec_info_by_type(type);
