@@ -17,38 +17,63 @@ struct codec_info {
 	void (*print_encodings)(const char *);
 };
 
-static const char *mp3_ext[] = { ".mp3", NULL };
+static const char *wav_ext[]   = { ".wav", NULL };
+static const char *aiff_ext[]  = { ".aif", ".aiff", ".aifc", NULL };
+static const char *au_ext[]    = { ".au", NULL };
+static const char *raw_ext[]   = { ".raw", NULL };
+static const char *paf_ext[]   = { ".paf", NULL };
+static const char *svx_ext[]   = { ".8svx", ".iff", NULL };
+static const char *nist_ext[]  = { ".nist", NULL };
+static const char *voc_ext[]   = { ".voc", NULL };
+static const char *ircam_ext[] = { ".sf", NULL };
+static const char *w64_ext[]   = { ".w64", NULL };
+static const char *mat4_ext[]  = { ".mat", NULL };
+static const char *mat5_ext[]  = { ".mat", NULL };
+static const char *pvf_ext[]   = { ".pvf", NULL };
+static const char *xi_ext[]    = { ".xi", NULL };
+static const char *htk_ext[]   = { ".htk", NULL };
+static const char *sds_ext[]   = { ".sds", NULL };
+static const char *avr_ext[]   = { ".avr", NULL };
+static const char *wavex_ext[] = { ".wav", ".wavex", NULL };
+static const char *sd2_ext[]   = { ".sd2", NULL };
+static const char *flac_ext[]  = { ".flac", NULL };
+static const char *caf_ext[]   = { ".caf", NULL };
+static const char *wve_ext[]   = { ".wve", NULL };
+static const char *ogg_ext[]   = { ".ogg", ".oga", ".ogv", NULL };
+static const char *mpc2k_ext[] = { ".mpc2k", NULL };
+static const char *rf64_ext[]  = { ".wav", ".rf64", NULL };
+static const char *mp3_ext[]   = { ".mp3", NULL };
 
 struct codec_info codecs[] = {
-	{ "sndfile", NULL,    CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "wav",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "aiff",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "au",      NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "raw",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "paf",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "svx",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "nist",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "voc",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "ircam",   NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "w64",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "mat4",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "mat5",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "pvf",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "xi",      NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "htk",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "sds",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "avr",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "wavex",   NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "sd2",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "flac",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "caf",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "wve",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "ogg",     NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "mpc2k",   NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "rf64",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
-	{ "alsa",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
-	{ "mp3",     mp3_ext, CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
-	{ "null",    NULL,    CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
+	{ "sndfile", NULL,      CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "wav",     wav_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "aiff",    aiff_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "au",      au_ext,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "raw",     raw_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "paf",     paf_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "svx",     svx_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "nist",    nist_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "voc",     voc_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "ircam",   ircam_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "w64",     w64_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "mat4",    mat4_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "mat5",    mat5_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "pvf",     pvf_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "xi",      xi_ext,    CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "htk",     htk_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "sds",     sds_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "avr",     avr_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "wavex",   wavex_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "sd2",     sd2_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "flac",    flac_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "caf",     caf_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "wve",     wve_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "ogg",     ogg_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "mpc2k",   mpc2k_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "rf64",    rf64_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+	{ "alsa",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
+	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
+	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
 };
 
 static const char *fallback_codecs[] = {
@@ -83,7 +108,8 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 	struct codec_info *info;
 	struct codec *c;
 	const char *ext;
-	if (type == NULL && mode == CODEC_MODE_WRITE)
+	ext = strrchr(path, '.');
+	if (type == NULL && get_codec_info_by_ext(ext) == NULL && mode == CODEC_MODE_WRITE)
 		type = DEFAULT_OUTPUT_TYPE;
 	if (type != NULL) {
 		info = get_codec_info_by_type(type);
@@ -96,9 +122,12 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
-	ext = strrchr(path, '.');
-	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
-		return c;
+	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
+		if (info->modes & mode)
+			return info->init(info->type, mode, path, enc, endian, rate, channels);
+		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
+		return NULL;
+	}
 	for (i = 0; i < LENGTH(fallback_codecs); ++i) {
 		info = get_codec_info_by_type(fallback_codecs[i]);
 		if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
