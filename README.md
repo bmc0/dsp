@@ -36,3 +36,4 @@ Plot amplitude vs frequency for a complex effects chain:
 ### Bugs:
 
 * No support for metadata.
+* Crossfeed_hrtf does not currently support plotting.
