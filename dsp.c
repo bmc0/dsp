@@ -371,8 +371,7 @@ int main(int argc, char *argv[])
 				print_progress(in_codecs.head, out_codec, pos, pause, peak);
 			}
 			do {
-				while (interactive && input_pending()) {
-					pause_loop:
+				while (interactive && (input_pending() || pause)) {
 					delay = out_codec->delay(out_codec);
 					switch (getchar()) {
 						case 'h':
@@ -417,7 +416,6 @@ int main(int argc, char *argv[])
 							break;
 						case 'n':
 							out_codec->reset(out_codec);
-							out_codec->pause(out_codec, pause = 0);
 							goto next_input;
 						case 'c':
 							out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
@@ -430,8 +428,6 @@ int main(int argc, char *argv[])
 					}
 					if (show_progress)
 						print_progress(in_codecs.head, out_codec, pos, pause, peak);
-					if (pause)
-						goto pause_loop;
 				}
 				pos += r = in_codecs.head->read(in_codecs.head, buf, BUF_SAMPLES / dsp_globals.channels);
 				k += r;
