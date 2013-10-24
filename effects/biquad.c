@@ -5,12 +5,6 @@
 #include "biquad.h"
 #include "../util.h"
 
-#define CHECK_RANGE(cond, name) \
-	if (!(cond)) { \
-		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \
-		return NULL; \
-	}
-
 void biquad_init(struct biquad_state *state, double b0, double b1, double b2, double a0, double a1, double a2)
 {
 	state->c0 = b0 / a0;
