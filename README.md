@@ -31,7 +31,7 @@ Read file.flac, apply a bass boost, and write to alsa device hw:2:
 
 Plot amplitude vs frequency for a complex effects chain:
 
-	dsp plot gain -1.5 lowshelf 41 0.75 +8.0 lowshelf 90 0.6 +2.5 eq 100 2.5 -4.5 eq 240 1.2 -4.7 eq 620 2.8 +2.0 lowshelf 1450 0.60 -12.0 eq 2250 2.0 +2.0 eq 3000 8.0 -1.0 eq 3750 2.1 +2.8 eq 5000 2.5 -2.1 eq 9500 1.8 -7.2 highshelf 10000 0.7 +1.5 | gnuplot -p
+	dsp -pn gain -1.5 lowshelf 60 0.7 +7.8 eq 50 2.0 -2.7 eq 100 2.0 -3.9 eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0 lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8 eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6 highshelf 10000 0.7 -0.5
 
 ### Bugs:
 

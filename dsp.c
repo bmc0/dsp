@@ -23,7 +23,7 @@ static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
 
 static const char usage[] =
-	"usage: dsp [[options] path ...] [plot] [[effect] [args ...] ...]\n"
+	"usage: dsp [[options] path ...] [[effect] [args ...] ...]\n"
 	"\n"
 	"global options:\n"
 	"  -h  show this help\n"
@@ -33,6 +33,7 @@ static const char usage[] =
 	"  -v  verbose mode\n"
 	"  -d  force dithering\n"
 	"  -D  disable dithering\n"
+	"  -p  plot effects chain instead of processing audio\n"
 	"\n"
 	"input/output options:\n"
 	"  -o               output\n"
@@ -132,7 +133,7 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 	*channels = *rate = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hIqsvdDot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hIqsvdDpot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 			case 'h':
 				print_usage();
@@ -154,6 +155,9 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 				break;
 			case 'D':
 				force_dither = -1;
+				break;
+			case 'p':
+				plot = 1;
 				break;
 			case 'o':
 				*mode = CODEC_MODE_WRITE;
@@ -283,7 +287,7 @@ int main(int argc, char *argv[])
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
-	while (optind < argc && get_effect_info(argv[optind]) == NULL && strcmp(argv[optind], "plot") != 0) {
+	while (optind < argc && get_effect_info(argv[optind]) == NULL) {
 		if (parse_io_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.rate, &params.channels))
 			cleanup_and_exit(1);
 		if (params.mode == CODEC_MODE_WRITE)
@@ -295,10 +299,6 @@ int main(int argc, char *argv[])
 			append_codec(&in_codecs, c);
 		}
 	}
-	if (optind < argc && strcmp(argv[optind], "plot") == 0) {
-		plot = 1;
-		++optind;
-	}
 
 	if (dsp_globals.fs == -1)
 		dsp_globals.fs = DEFAULT_FS;  /* set default if not set */
@@ -306,12 +306,14 @@ int main(int argc, char *argv[])
 		dsp_globals.channels = DEFAULT_CHANNELS;  /* set default if not set */
 	if (dsp_globals.loglevel == 0)	
 		show_progress = 0;  /* disable progress display if in silent mode */
+	if (interactive == -1)
+		interactive = 0;  /* disable if not set */
+	if (in_codecs.head == NULL) {
+		LOG(LL_ERROR, "dsp: error: no inputs\n");
+		cleanup_and_exit(1);
+	}
 
 	if (!plot) {
-		if (in_codecs.head == NULL) {
-			LOG(LL_ERROR, "dsp: error: no inputs\n");
-			cleanup_and_exit(1);
-		}
 		if (out_params.path == NULL)
 			out_codec = init_io(CODEC_MODE_WRITE, DEFAULT_OUTPUT_PATH, DEFAULT_OUTPUT_TYPE, NULL, CODEC_ENDIAN_DEFAULT, dsp_globals.fs, dsp_globals.channels, out_frames);
 		else
@@ -319,8 +321,6 @@ int main(int argc, char *argv[])
 		if (out_codec == NULL)
 			cleanup_and_exit(1);
 	}
-	if (interactive == -1)
-		interactive = 0;  /* disable if not set */
 
 	k = effect_start = optind;
 	i = k + 1;
