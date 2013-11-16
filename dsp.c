@@ -306,8 +306,6 @@ int main(int argc, char *argv[])
 		dsp_globals.channels = DEFAULT_CHANNELS;  /* set default if not set */
 	if (dsp_globals.loglevel == 0)	
 		show_progress = 0;  /* disable progress display if in silent mode */
-	if (interactive == -1)
-		interactive = 0;  /* disable if not set */
 	if (in_codecs.head == NULL) {
 		LOG(LL_ERROR, "dsp: error: no inputs\n");
 		cleanup_and_exit(1);
@@ -321,6 +319,8 @@ int main(int argc, char *argv[])
 		if (out_codec == NULL)
 			cleanup_and_exit(1);
 	}
+	if (interactive == -1)
+		interactive = 0;  /* disable if not set */
 
 	k = effect_start = optind;
 	i = k + 1;
