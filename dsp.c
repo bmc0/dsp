@@ -260,10 +260,10 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 	ssize_t delay = out->delay(out);
 	ssize_t p = (pos > delay) ? pos - delay : 0;
 	ssize_t rem = (in->frames > p) ? in->frames - p : 0;
-	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  peak:%.2f dBFS  clip:%ld  ",
+	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  lat:%.2fms  peak:%.2f dBFS  clip:%ld  ",
 		(pause) ? '|' : '>', (in->frames > 0) ? (double) p / in->frames * 100.0 : 0,
 		TIME_FMT_ARGS(p, dsp_globals.fs), TIME_FMT_ARGS(rem, dsp_globals.fs),
-		log10(peak) * 20, dsp_globals.clip_count);
+		(double) delay / dsp_globals.fs * 1000, log10(peak) * 20, dsp_globals.clip_count);
 }
 
 int main(int argc, char *argv[])
