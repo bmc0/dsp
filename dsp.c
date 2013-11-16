@@ -192,9 +192,9 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 				return 0;
 			default:
 				if (opt == ':')
-					LOG(LL_ERROR, "dsp: error: expected argument to option '%s'\n", argv[optind - 1]);
+					LOG(LL_ERROR, "dsp: error: expected argument to option '%c'\n", optopt);
 				else
-					LOG(LL_ERROR, "dsp: error: illegal option '%s'\n", argv[optind - 1]);
+					LOG(LL_ERROR, "dsp: error: illegal option '%c'\n", optopt);
 				return 1;
 		}
 	}
