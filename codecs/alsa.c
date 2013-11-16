@@ -143,7 +143,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	snd_pcm_hw_params_t *p = NULL;
 	struct codec *c = NULL;
 	struct alsa_state *state = NULL;
-	snd_pcm_uframes_t buf_len;
+	snd_pcm_uframes_t buf_frames;
 	struct alsa_enc_info *enc_info;
 
 	rate = SELECT_FS(rate);
@@ -182,9 +182,9 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set channels: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	buf_len = BUF_SAMPLES * 8;
-	if ((err = snd_pcm_hw_params_set_buffer_size_near(dev, p, &buf_len)) < 0) {
-		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size: %s\n", snd_strerror(err));
+	buf_frames = BUF_SAMPLES * 2 / channels;
+	if ((err = snd_pcm_hw_params_set_buffer_size_min(dev, p, &buf_frames)) < 0) {
+		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size minimum: %s\n", snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params(dev, p)) < 0) {
