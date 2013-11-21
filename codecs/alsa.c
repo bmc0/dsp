@@ -182,12 +182,12 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set channels: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	buf_frames = BUF_SAMPLES * 2 / channels;
+	buf_frames = dsp_globals.buf_frames;
 	if ((err = snd_pcm_hw_params_set_buffer_size_min(dev, p, &buf_frames)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size minimum: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	buf_frames = BUF_SAMPLES * 32 / channels;
+	buf_frames = dsp_globals.buf_frames * 32;
 	if ((err = snd_pcm_hw_params_set_buffer_size_max(dev, p, &buf_frames)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size maximum: %s\n", snd_strerror(err));
 		goto fail;
@@ -206,8 +206,8 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	state->enc_info = enc_info;
 	state->delay = 0;
 	if (mode == CODEC_MODE_WRITE) {
-		state->buf = calloc(BUF_SAMPLES, enc_info->bytes);
-		state->buf_frames = BUF_SAMPLES / channels;
+		state->buf = calloc(dsp_globals.buf_frames * channels, enc_info->bytes);
+		state->buf_frames = dsp_globals.buf_frames;
 	}
 
 	c = calloc(1, sizeof(struct codec));

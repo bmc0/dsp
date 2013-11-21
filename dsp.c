@@ -16,7 +16,6 @@
 #define TIME_FMT_ARGS(frames, fs) frames / fs / 3600, (frames / fs / 60) % 60, fmod((double) frames / fs, 60.0)
 
 static struct termios term_attrs;
-static sample_t buf[BUF_SAMPLES];
 static int interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0, force_dither = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
@@ -27,6 +26,7 @@ static const char usage[] =
 	"\n"
 	"global options:\n"
 	"  -h  show this help\n"
+	"  -b  set buffer size in frames (must be specified before the first input)\n"
 	"  -I  disable interactive mode\n"
 	"  -q  disable progress display\n"
 	"  -s  silent mode\n"
@@ -61,10 +61,11 @@ static const char interactive_help[] =
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
-	-1,         /* fs: set by first input; DEFAULT_FS if no input */
-	-1,         /* channels: set by first input; DEFAULT_CHANNELS if no input */
-	0,          /* clip_count */
-	LL_NORMAL,  /* loglevel */
+	-1,                  /* fs: set by first input; DEFAULT_FS if no input */
+	-1,                  /* channels: set by first input; DEFAULT_CHANNELS if no input */
+	0,                   /* clip_count */
+	LL_NORMAL,           /* loglevel */
+	DEFAULT_BUF_FRAMES,  /* buf_frames */
 };
 
 static sample_t clip(sample_t s)
@@ -133,11 +134,23 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 	*channels = *rate = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hIqsvdDpot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:IqsvdDpot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 			case 'h':
 				print_usage();
 				cleanup_and_exit(0);
+			case 'b':
+				if (in_codecs.head == NULL) {
+					dsp_globals.buf_frames = atoi(optarg);
+					if (dsp_globals.buf_frames <= 0) {
+						LOG(LL_ERROR, "dsp: error: buffer size must be > 0\n");
+						return 1;
+					}
+					break;
+				}
+				else
+					LOG(LL_ERROR, "dsp: warning: buffer size must be specified before the first input\n");
+				break;
 			case 'I':
 				interactive = 0;
 				break;
@@ -263,11 +276,13 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  lat:%.2fms  peak:%.2fdBFS  clip:%ld  ",
 		(pause) ? '|' : '>', (in->frames > 0) ? (double) p / in->frames * 100.0 : 0,
 		TIME_FMT_ARGS(p, dsp_globals.fs), TIME_FMT_ARGS(rem, dsp_globals.fs),
-		(double) delay / dsp_globals.fs * 1000, log10(peak) * 20, dsp_globals.clip_count);
+		(double) (out->delay(out) + in->delay(in)) / dsp_globals.fs * 1000,
+		log10(peak) * 20, dsp_globals.clip_count);
 }
 
 int main(int argc, char *argv[])
 {
+	sample_t *buf;
 	int i, k, j, effect_start = 1, pause = 0, do_dither = 0;
 	ssize_t r, delay, out_frames = 0, seek, pos = 0;
 	sample_t peak = 0;
@@ -358,6 +373,7 @@ int main(int argc, char *argv[])
 	if (plot)
 		plot_effects_chain(&chain);
 	else {
+		buf = calloc(dsp_globals.buf_frames * dsp_globals.channels, sizeof(sample_t));
 		if (interactive) {
 			setup_term();
 			LOG(LL_NORMAL, "dsp: info: running interactively; type 'h' for help\n");
@@ -429,7 +445,7 @@ int main(int argc, char *argv[])
 					if (show_progress)
 						print_progress(in_codecs.head, out_codec, pos, pause, peak);
 				}
-				pos += r = in_codecs.head->read(in_codecs.head, buf, BUF_SAMPLES / dsp_globals.channels);
+				pos += r = in_codecs.head->read(in_codecs.head, buf, dsp_globals.buf_frames);
 				k += r;
 				for (i = 0; i < r * dsp_globals.channels; i += dsp_globals.channels) {
 					run_effects_chain(&chain, &buf[i]);

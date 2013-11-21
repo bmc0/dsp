@@ -15,7 +15,7 @@ enum {
 
 #define DEFAULT_FS           44100
 #define DEFAULT_CHANNELS     1
-#define BUF_SAMPLES          4096
+#define DEFAULT_BUF_FRAMES   2048
 #define DEFAULT_OUTPUT_TYPE  "alsa"
 #define DEFAULT_OUTPUT_PATH  "default"
 
@@ -27,6 +27,7 @@ struct dsp_globals {
 	int fs, channels;
 	long clip_count;
 	int loglevel;
+	size_t buf_frames;
 };
 
 struct encoding {
