@@ -5,9 +5,17 @@ fail() {
 	exit $1
 }
 
+packages="alsa sndfile mad fftw3"
+for i in $packages; do
+	if ! pkg-config --exists $i; then
+		echo ">> Error: dsp requires $i"
+		fail 1
+	fi
+done
+
 [ -z "$CC" ] && CC="cc"
-CFLAGS="-Os -Wall -std=gnu99 $(pkg-config --cflags alsa sndfile mad fftw3) $CFLAGS"
-LDFLAGS="-lm $(pkg-config --libs alsa sndfile mad fftw3) $LDFLAGS"
+CFLAGS="-Os -Wall -std=gnu99 $(pkg-config --cflags $packages) $CFLAGS"
+LDFLAGS="-lm $(pkg-config --libs $packages) $LDFLAGS"
 
 $CC -o dsp \
 	dsp.c \
