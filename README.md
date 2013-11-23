@@ -19,13 +19,13 @@ Dsp is an audio processing program with simple digital signal processing capabil
 
 #### Synopsis:
 
-	dsp [[options] path ...] [plot] [[effect] [args ...] ...]
+	dsp [[options] path ...] [[effect] [args ...] ...]
 
 Run `dsp -h` for options, supported input/output types and supported effects.
 
 #### Examples:
 
-Read file.flac, apply a bass boost, and write to alsa device hw:2:
+Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
 
 	dsp file.flac -ot alsa -e s24_3 hw:2 lowshelf 60 0.5 +4.0
 
