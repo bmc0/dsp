@@ -1,6 +1,7 @@
 #ifndef _SAMPLECONV_H
 #define _SAMPLECONV_H
 
+#include <math.h>
 #include "dsp.h"
 
 /* ### NOTE ###

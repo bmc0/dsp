@@ -1,4 +1,3 @@
-#include <math.h>
 #include "sampleconv.h"
 
 void write_buf_u8(sample_t *in, char *out, ssize_t s)
