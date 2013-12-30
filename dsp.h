@@ -30,12 +30,6 @@ struct dsp_globals {
 	size_t buf_frames;
 };
 
-struct encoding {
-	const char *name;
-	int enc;
-	int prec;
-};
-
 extern struct dsp_globals dsp_globals;
 
 #endif
