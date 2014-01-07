@@ -227,6 +227,8 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	c->destroy = alsa_destroy;
 	c->data = state;
 
+	snd_pcm_hw_params_free(p);
+
 	return c;
 
 	fail:
