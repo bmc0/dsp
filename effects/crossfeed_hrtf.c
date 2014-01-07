@@ -18,7 +18,7 @@ struct crossfeed_hrtf_state {
 	sample_t *overlap_right_input[2];
 	fftw_plan plan_r2c_left_c0, plan_r2c_left_c1, plan_c2r_left_c0, plan_c2r_left_c1;
 	fftw_plan plan_r2c_right_c0, plan_r2c_right_c1, plan_c2r_right_c0, plan_c2r_right_c1;
-	int input_frames, fr_frames, buf_pos, frames_read;
+	size_t input_frames, fr_frames, buf_pos;
 };
 
 void crossfeed_hrtf_effect_run(struct effect *e, sample_t s[2])
@@ -84,7 +84,6 @@ void crossfeed_hrtf_effect_run(struct effect *e, sample_t s[2])
 		}
 	}
 
-	++state->frames_read;
 	++state->buf_pos;
 	state->buf_pos %= state->input_frames / 2;
 }
