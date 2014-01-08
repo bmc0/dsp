@@ -298,7 +298,7 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream
 	state->plan_c2r_right_c0 = fftw_plan_dft_c2r_1d(state->input_frames, state->tmp_fr[0], state->output_right_input[0], FFTW_ESTIMATE);
 	state->plan_c2r_right_c1 = fftw_plan_dft_c2r_1d(state->input_frames, state->tmp_fr[1], state->output_right_input[1], FFTW_ESTIMATE);
 
-	LOG(LL_VERBOSE, "dsp: %s: impulse frames=%zu\n", argv[0], frames);
+	LOG(LL_VERBOSE, "dsp: %s: impulse frames=%zd\n", argv[0], frames);
 	destroy_codec(c_left);
 	destroy_codec(c_right);
 
