@@ -216,6 +216,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	c->prec = enc_info->prec;
 	c->channels = channels;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
+	c->frames = -1;
 	c->read = alsa_read;
 	c->write = alsa_write;
 	c->seek = alsa_seek;
