@@ -16,7 +16,7 @@ struct mp3_state {
 	struct mad_stream stream;
 	struct mad_frame frame;
 	struct mad_synth synth;
-	size_t pcm_pos;
+	ssize_t pcm_pos;
 	unsigned char *buf;
 };
 
@@ -38,7 +38,7 @@ static ssize_t refill_buffer(struct mp3_state *state)
 ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
-	size_t buf_pos = 0, samples = frames * c->channels;
+	ssize_t buf_pos = 0, samples = frames * c->channels;
 	while (buf_pos < samples) {
 		if (state->pcm_pos >= state->synth.pcm.length) {
 			state->pcm_pos = 0;
@@ -146,7 +146,7 @@ void mp3_destroy(struct codec *c)
 
 static ssize_t mp3_get_nframes(struct mp3_state *state)
 {
-	size_t len = 0;
+	ssize_t len = 0;
 
 	mad_stream_init(&state->stream);
 	mad_frame_init(&state->frame);
@@ -183,7 +183,7 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 	return len;
 }
 
-struct codec * mp3_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+struct codec * mp3_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
 {
 	struct mp3_state *state = NULL;
 	struct codec *c = NULL;

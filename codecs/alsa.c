@@ -20,7 +20,7 @@ struct alsa_state {
 	struct alsa_enc_info *enc_info;
 	snd_pcm_sframes_t delay;
 	char *buf;
-	size_t buf_frames;
+	ssize_t buf_frames;
 };
 
 ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
@@ -135,7 +135,7 @@ static struct alsa_enc_info * alsa_get_enc_info(const char *enc)
 	return NULL;
 }
 
-struct codec * alsa_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+struct codec * alsa_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
 {
 	int err;
 	unsigned int r;
@@ -146,8 +146,6 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	snd_pcm_uframes_t buf_frames;
 	struct alsa_enc_info *enc_info;
 
-	rate = SELECT_FS(rate);
-	channels = SELECT_CHANNELS(channels);
 	if ((err = snd_pcm_open(&dev, (path == NULL) ? "default" : path, (mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to open device: %s\n", snd_strerror(err));
 		goto fail;
@@ -172,12 +170,12 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set format: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	r = (unsigned int) rate;
+	r = (unsigned int) fs;
 	if ((err = snd_pcm_hw_params_set_rate(dev, p, r, 0)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set rate: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	rate = (int) r;
+	fs = (int) r;
 	if ((err = snd_pcm_hw_params_set_channels(dev, p, channels)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set channels: %s\n", snd_strerror(err));
 		goto fail;
@@ -214,7 +212,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	c->type = type;
 	c->enc = enc_info->name;
 	c->path = path;
-	c->fs = rate;
+	c->fs = fs;
 	c->prec = enc_info->prec;
 	c->channels = channels;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;

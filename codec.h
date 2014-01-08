@@ -19,7 +19,7 @@ struct codec {
 	struct codec *next;
 	const char *type, *path, *enc;
 	int fs, prec, channels, interactive;
-	size_t frames;
+	ssize_t frames;
 	ssize_t (*read)(struct codec *, sample_t *, ssize_t);
 	ssize_t (*write)(struct codec *, sample_t *, ssize_t);
 	ssize_t (*seek)(struct codec *, ssize_t);

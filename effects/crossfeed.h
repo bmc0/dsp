@@ -4,6 +4,6 @@
 #include "../dsp.h"
 #include "../effect.h"
 
-struct effect * crossfeed_effect_init(struct effect_info *, int, char **);
+struct effect * crossfeed_effect_init(struct effect_info *, struct stream_info *, int, char **);
 
 #endif

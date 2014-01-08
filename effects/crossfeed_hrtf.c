@@ -18,79 +18,131 @@ struct crossfeed_hrtf_state {
 	sample_t *overlap_right_input[2];
 	fftw_plan plan_r2c_left_c0, plan_r2c_left_c1, plan_c2r_left_c0, plan_c2r_left_c1;
 	fftw_plan plan_r2c_right_c0, plan_r2c_right_c1, plan_c2r_right_c0, plan_c2r_right_c1;
-	size_t input_frames, fr_frames, buf_pos;
+	ssize_t input_frames, fr_frames, buf_pos, drain_pos;
+	int has_output;
 };
 
-void crossfeed_hrtf_effect_run(struct effect *e, sample_t s[2])
+void crossfeed_hrtf_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct crossfeed_hrtf_state *state = (struct crossfeed_hrtf_state *) e->data;
-	int i;
+	ssize_t i, iframes = 0, oframes = 0;
 
-	state->input[0][state->buf_pos] = s[0];
-	state->input[1][state->buf_pos] = s[1];
+	while (iframes < *frames) {
+		while (state->buf_pos < state->input_frames / 2 && iframes < *frames) {
+			state->input[0][state->buf_pos] = ibuf[iframes * 2 + 0];
+			state->input[1][state->buf_pos] = ibuf[iframes * 2 + 1];
+			++iframes;
 
-	/* sum left ear output */
-	s[0] = state->output_left_input[0][state->buf_pos] + state->output_right_input[0][state->buf_pos];
-	/* sum right ear output */
-	s[1] = state->output_left_input[1][state->buf_pos] + state->output_right_input[1][state->buf_pos];
+			if (state->has_output) {
+				/* sum left ear output */
+				obuf[oframes * 2 + 0] = state->output_left_input[0][state->buf_pos] + state->output_right_input[0][state->buf_pos];
+				/* sum right ear output */
+				obuf[oframes * 2 + 1] = state->output_left_input[1][state->buf_pos] + state->output_right_input[1][state->buf_pos];
+				++oframes;
+			}
 
-	if (state->buf_pos == state->input_frames / 2 - 1) {
-		/* left input */
-		fftw_execute(state->plan_r2c_left_c0);
-		fftw_execute(state->plan_r2c_left_c1);
-		for (i = 0; i < state->fr_frames; ++i) {
-			/* channel 0 */
-			state->tmp_fr[0][i] *= state->filter_fr_left[0][i];
-			/* channel 1 */
-			state->tmp_fr[1][i] *= state->filter_fr_left[1][i];
-		}
-		fftw_execute(state->plan_c2r_left_c0);
-		fftw_execute(state->plan_c2r_left_c1);
-		/* normalize */
-		for (i = 0; i < state->input_frames; ++i) {
-			state->output_left_input[0][i] /= state->input_frames;
-			state->output_left_input[1][i] /= state->input_frames;
-		}
-		/* handle overlap */
-		for (i = 0; i < state->input_frames / 2; ++i) {
-			state->output_left_input[0][i] += state->overlap_left_input[0][i];
-			state->output_left_input[1][i] += state->overlap_left_input[1][i];
-			state->overlap_left_input[0][i] = state->output_left_input[0][i + state->input_frames / 2];
-			state->overlap_left_input[1][i] = state->output_left_input[1][i + state->input_frames / 2];
+			++state->buf_pos;
 		}
 
-		/* right input */
-		fftw_execute(state->plan_r2c_right_c0);
-		fftw_execute(state->plan_r2c_right_c1);
-		for (i = 0; i < state->fr_frames; ++i) {
-			/* channel 0 */
-			state->tmp_fr[0][i] *= state->filter_fr_right[0][i];
-			/* channel 1 */
-			state->tmp_fr[1][i] *= state->filter_fr_right[1][i];
-		}
-		fftw_execute(state->plan_c2r_right_c0);
-		fftw_execute(state->plan_c2r_right_c1);
-		/* normalize */
-		for (i = 0; i < state->input_frames; ++i) {
-			state->output_right_input[0][i] /= state->input_frames;
-			state->output_right_input[1][i] /= state->input_frames;
-		}
-		/* handle overlap */
-		for (i = 0; i < state->input_frames / 2; ++i) {
-			state->output_right_input[0][i] += state->overlap_right_input[0][i];
-			state->output_right_input[1][i] += state->overlap_right_input[1][i];
-			state->overlap_right_input[0][i] = state->output_right_input[0][i + state->input_frames / 2];
-			state->overlap_right_input[1][i] = state->output_right_input[1][i + state->input_frames / 2];
+		if (state->buf_pos == state->input_frames / 2) {
+			/* left input */
+			fftw_execute(state->plan_r2c_left_c0);
+			fftw_execute(state->plan_r2c_left_c1);
+			for (i = 0; i < state->fr_frames; ++i) {
+				/* channel 0 */
+				state->tmp_fr[0][i] *= state->filter_fr_left[0][i];
+				/* channel 1 */
+				state->tmp_fr[1][i] *= state->filter_fr_left[1][i];
+			}
+			fftw_execute(state->plan_c2r_left_c0);
+			fftw_execute(state->plan_c2r_left_c1);
+			/* normalize */
+			for (i = 0; i < state->input_frames; ++i) {
+				state->output_left_input[0][i] /= state->input_frames;
+				state->output_left_input[1][i] /= state->input_frames;
+			}
+			/* handle overlap */
+			for (i = 0; i < state->input_frames / 2; ++i) {
+				state->output_left_input[0][i] += state->overlap_left_input[0][i];
+				state->output_left_input[1][i] += state->overlap_left_input[1][i];
+				state->overlap_left_input[0][i] = state->output_left_input[0][i + state->input_frames / 2];
+				state->overlap_left_input[1][i] = state->output_left_input[1][i + state->input_frames / 2];
+			}
+
+			/* right input */
+			fftw_execute(state->plan_r2c_right_c0);
+			fftw_execute(state->plan_r2c_right_c1);
+			for (i = 0; i < state->fr_frames; ++i) {
+				/* channel 0 */
+				state->tmp_fr[0][i] *= state->filter_fr_right[0][i];
+				/* channel 1 */
+				state->tmp_fr[1][i] *= state->filter_fr_right[1][i];
+			}
+			fftw_execute(state->plan_c2r_right_c0);
+			fftw_execute(state->plan_c2r_right_c1);
+			/* normalize */
+			for (i = 0; i < state->input_frames; ++i) {
+				state->output_right_input[0][i] /= state->input_frames;
+				state->output_right_input[1][i] /= state->input_frames;
+			}
+			/* handle overlap */
+			for (i = 0; i < state->input_frames / 2; ++i) {
+				state->output_right_input[0][i] += state->overlap_right_input[0][i];
+				state->output_right_input[1][i] += state->overlap_right_input[1][i];
+				state->overlap_right_input[0][i] = state->output_right_input[0][i + state->input_frames / 2];
+				state->overlap_right_input[1][i] = state->output_right_input[1][i + state->input_frames / 2];
+			}
+			state->buf_pos = 0;
+			state->has_output = 1;
 		}
 	}
+	*frames = oframes;
+}
 
-	++state->buf_pos;
-	state->buf_pos %= state->input_frames / 2;
+void crossfeed_hrtf_effect_reset(struct effect *e)
+{
+	ssize_t i;
+	struct crossfeed_hrtf_state *state = (struct crossfeed_hrtf_state *) e->data;
+	state->buf_pos = 0;
+	state->has_output = 0;
+	for (i = 0; i < state->input_frames / 2; ++i) {
+		state->overlap_left_input[0][i] = 0;
+		state->overlap_left_input[1][i] = 0;
+		state->overlap_right_input[0][i] = 0;
+		state->overlap_right_input[1][i] = 0;
+	}
 }
 
 void crossfeed_hrtf_effect_plot(struct effect *e, int i)
 {
 	printf("H%d(f)=0\n", i); /* fixme */
+}
+
+void crossfeed_hrtf_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+{
+	struct crossfeed_hrtf_state *state = (struct crossfeed_hrtf_state *) e->data;
+	sample_t *ibuf;
+	ssize_t npad = state->input_frames / 2 - state->buf_pos, oframes = 0;
+	npad = (npad > *frames) ? *frames : npad;
+	if (state->has_output && state->buf_pos != 0 && npad > 0) {
+		ibuf = calloc(npad * e->ostream.channels, sizeof(sample_t));
+		crossfeed_hrtf_effect_run(e, &npad, ibuf, obuf);
+		free(ibuf);
+		*frames = npad;
+	}
+	else if (state->has_output) {
+		while (state->drain_pos < state->input_frames / 2 && oframes < *frames) {
+			/* sum left ear output */
+			obuf[oframes * 2 + 0] = state->output_left_input[0][state->drain_pos] + state->output_right_input[0][state->drain_pos];
+			/* sum right ear output */
+			obuf[oframes * 2 + 1] = state->output_left_input[1][state->drain_pos] + state->output_right_input[1][state->drain_pos];
+			++oframes;
+			++state->drain_pos;
+		}
+		*frames = oframes;
+	}
+	else
+		*frames = 0;
 }
 
 void crossfeed_hrtf_effect_destroy(struct effect *e)
@@ -123,14 +175,14 @@ void crossfeed_hrtf_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, char **argv)
+struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream_info *istream, int argc, char **argv)
 {
 	struct effect *e;
 	struct crossfeed_hrtf_state *state;
 	struct codec *c_left, *c_right;
 	sample_t *tmp_buf;
 	int i;
-	size_t frames;
+	ssize_t frames;
 	fftw_plan impulse_plan0, impulse_plan1;
 	sample_t *impulse[2];
 
@@ -138,7 +190,7 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
-	if (dsp_globals.channels != 2) {
+	if (istream->channels != 2) {
 		LOG(LL_ERROR, "dsp: %s: error: channels != 2\n", argv[0]);
 		return NULL;
 	}
@@ -154,7 +206,7 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 		destroy_codec(c_right);
 		return NULL;
 	}
-	if (c_left->fs != dsp_globals.fs || c_right->fs != dsp_globals.fs) {
+	if (c_left->fs != istream->fs || c_right->fs != istream->fs) {
 		LOG(LL_ERROR, "dsp: %s: error: sample rate mismatch\n", argv[0]);
 		destroy_codec(c_left);
 		destroy_codec(c_right);
@@ -169,8 +221,13 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, int argc, cha
 	frames = (c_left->frames > c_right->frames) ? c_left->frames : c_right->frames;
 
 	e = calloc(1, sizeof(struct effect));
+	e->istream.fs = e->ostream.fs = istream->fs;
+	e->istream.channels = e->ostream.channels = istream->channels;
+	e->ratio = 1.0;
 	e->run = crossfeed_hrtf_effect_run;
+	e->reset = crossfeed_hrtf_effect_reset;
 	e->plot = crossfeed_hrtf_effect_plot;
+	e->drain = crossfeed_hrtf_effect_drain;
 	e->destroy = crossfeed_hrtf_effect_destroy;
 
 	state = calloc(1, sizeof(struct crossfeed_hrtf_state));

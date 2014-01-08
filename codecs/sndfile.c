@@ -175,7 +175,7 @@ static int sndfile_get_endian(int endian)
 	}
 }
 
-struct codec * sndfile_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+struct codec * sndfile_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
 {
 	SNDFILE *f = NULL;
 	SF_INFO *info = NULL;
@@ -183,8 +183,8 @@ struct codec * sndfile_codec_init(const char *type, int mode, const char *path, 
 	struct sndfile_state *state = NULL;
 
 	info = calloc(1, sizeof(SF_INFO));
-	info->samplerate = SELECT_FS(rate);
-	info->channels = SELECT_CHANNELS(channels);
+	info->samplerate = fs;
+	info->channels = channels;
 	info->format = ((type == NULL) ? 0 : sndfile_get_type(type)) | sndfile_get_sf_enc(enc) | sndfile_get_endian(endian);
 	if (info->format == -1) {
 		LOG(LL_ERROR, "dsp: sndfile: error: bad format type or encoding: %s: type=%s enc=%s\n", path, type, enc);

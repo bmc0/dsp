@@ -39,9 +39,9 @@ struct effect_info * get_effect_info(const char *name)
 	return NULL;
 }
 
-struct effect * init_effect(struct effect_info *ei, int argc, char **argv)
+struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, int argc, char **argv)
 {
-	return ei->init(ei, argc, argv);
+	return ei->init(ei, istream, argc, argv);
 }
 
 void destroy_effect(struct effect *e)
@@ -60,21 +60,37 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 	e->next = NULL;
 }
 
-void destroy_effects_chain(struct effects_chain *chain)
+double get_effects_chain_max_ratio(struct effects_chain *chain)
 {
-	struct effect *e;
-	while (chain->head != NULL) {
-		e = chain->head;
-		chain->head = e->next;
-		destroy_effect(e);
+	struct effect *e = chain->head;
+	double ratio = 1.0, max_ratio = 1.0;
+	while (e != NULL) {
+		ratio *= e->ratio;
+		max_ratio = (ratio > max_ratio) ? ratio : max_ratio;
+		e = e->next;
 	}
+	return max_ratio;
 }
 
-void run_effects_chain(struct effects_chain *chain, sample_t *s)
+sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+{
+	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
+	struct effect *e = chain->head;
+	while (e != NULL && *frames > 0) {
+		e->run(e, frames, ibuf, obuf);
+		tmp = ibuf;
+		ibuf = obuf;
+		obuf = tmp;
+		e = e->next;
+	}
+	return ibuf;
+}
+
+void reset_effects_chain(struct effects_chain *chain)
 {
 	struct effect *e = chain->head;
 	while (e != NULL) {
-		e->run(e, s);
+		e->reset(e);
 		e = e->next;
 	}
 }
@@ -83,6 +99,10 @@ void plot_effects_chain(struct effects_chain *chain)
 {
 	int i = 0, k;
 	struct effect *e = chain->head;
+	if (e == NULL) {
+		LOG(LL_ERROR, "dsp: error: effects chain empty\n");
+		return;
+	}
 	printf(
 		"set xlabel 'frequency (Hz)'\n"
 		"set ylabel 'amplitude (dB)'\n"
@@ -92,7 +112,7 @@ void plot_effects_chain(struct effects_chain *chain)
 		"set key off\n"
 		"Fs=%d\n"
 		"o=2*pi/Fs\n"
-		, dsp_globals.fs
+		, e->istream.fs
 	);
 	while (e != NULL) {
 		e->plot(e, i++);
@@ -102,6 +122,37 @@ void plot_effects_chain(struct effects_chain *chain)
 	for (k = 0; k < i; ++k)
 		printf("H%d(f) + ", k);
 	printf("0\nplot [f=10:Fs/2] [-30:20] Hsum(f)\n");
+}
+
+sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+{
+	ssize_t dframes = 0;
+	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
+	struct effect *e = chain->head;
+	while (e != NULL && dframes == 0) {
+		dframes = *frames;
+		e->drain(e, &dframes, ibuf);
+		e = e->next;
+	}
+	*frames = dframes;
+	while (e != NULL && *frames > 0) {
+		e->run(e, frames, ibuf, obuf);
+		tmp = ibuf;
+		ibuf = obuf;
+		obuf = tmp;
+		e = e->next;
+	}
+	return ibuf;
+}
+
+void destroy_effects_chain(struct effects_chain *chain)
+{
+	struct effect *e;
+	while (chain->head != NULL) {
+		e = chain->head;
+		chain->head = e->next;
+		destroy_effect(e);
+	}
 }
 
 void print_all_effects(void)
