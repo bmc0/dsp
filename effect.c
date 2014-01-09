@@ -128,10 +128,12 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 {
 	ssize_t dframes = 0;
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
+	double ratio = 1.0;
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == 0) {
-		dframes = *frames;
+		dframes = *frames * ratio;
 		e->drain(e, &dframes, ibuf);
+		ratio *= e->ratio;
 		e = e->next;
 	}
 	*frames = dframes;
