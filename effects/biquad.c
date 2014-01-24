@@ -194,9 +194,10 @@ void biquad_effect_plot(struct effect *e, int i)
 {
 	struct biquad_state *state = (struct biquad_state *) e->data;
 	printf(
+		"o%d=2*pi/%d\n"
 		"c%d0=%.15e; c%d1=%.15e; c%d2=%.15e; c%d3=%.15e; c%d4=%.15e\n"
-		"H%d(f)=20*log10(sqrt((c%d0*c%d0+c%d1*c%d1+c%d2*c%d2+2.*(c%d0*c%d1+c%d1*c%d2)*cos(f*o)+2.*(c%d0*c%d2)*cos(2.*f*o))/(1.+c%d3*c%d3+c%d4*c%d4+2.*(c%d3+c%d3*c%d4)*cos(f*o)+2.*c%d4*cos(2.*f*o))))\n",
-		i, state->c0, i, state->c1, i, state->c2, i, state->c3, i, state->c4, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i
+		"H%d(f)=20*log10(sqrt((c%d0*c%d0+c%d1*c%d1+c%d2*c%d2+2.*(c%d0*c%d1+c%d1*c%d2)*cos(f*o%d)+2.*(c%d0*c%d2)*cos(2.*f*o%d))/(1.+c%d3*c%d3+c%d4*c%d4+2.*(c%d3+c%d3*c%d4)*cos(f*o%d)+2.*c%d4*cos(2.*f*o%d))))\n",
+		i, e->ostream.fs, i, state->c0, i, state->c1, i, state->c2, i, state->c3, i, state->c4, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i
 	);
 }
 

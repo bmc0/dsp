@@ -366,7 +366,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (plot)
-		plot_effects_chain(&chain);
+		plot_effects_chain(&chain, input_fs);
 	else {
 		if (out_params.path == NULL)
 			out_codec = init_codec(DEFAULT_OUTPUT_TYPE, CODEC_MODE_WRITE, DEFAULT_OUTPUT_PATH, NULL, CODEC_ENDIAN_DEFAULT, stream.fs, stream.channels);

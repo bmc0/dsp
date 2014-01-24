@@ -33,7 +33,7 @@ void append_effect(struct effects_chain *, struct effect *);
 double get_effects_chain_max_ratio(struct effects_chain *);
 sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void reset_effects_chain(struct effects_chain *);
-void plot_effects_chain(struct effects_chain *);
+void plot_effects_chain(struct effects_chain *, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);

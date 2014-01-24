@@ -95,14 +95,10 @@ void reset_effects_chain(struct effects_chain *chain)
 	}
 }
 
-void plot_effects_chain(struct effects_chain *chain)
+void plot_effects_chain(struct effects_chain *chain, int input_fs)
 {
-	int i = 0, k;
+	int i = 0, k, max_fs = -1;
 	struct effect *e = chain->head;
-	if (e == NULL) {
-		LOG(LL_ERROR, "dsp: error: effects chain empty\n");
-		return;
-	}
 	printf(
 		"set xlabel 'frequency (Hz)'\n"
 		"set ylabel 'amplitude (dB)'\n"
@@ -110,18 +106,16 @@ void plot_effects_chain(struct effects_chain *chain)
 		"set samples 500\n"
 		"set grid xtics ytics\n"
 		"set key off\n"
-		"Fs=%d\n"
-		"o=2*pi/Fs\n"
-		, e->istream.fs
 	);
 	while (e != NULL) {
 		e->plot(e, i++);
+		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
 		e = e->next;
 	}
 	printf("Hsum(f)=");
 	for (k = 0; k < i; ++k)
 		printf("H%d(f) + ", k);
-	printf("0\nplot [f=10:Fs/2] [-30:20] Hsum(f)\n");
+	printf("0\nplot [f=10:%d/2] [-30:20] Hsum(f)\n", (max_fs == -1) ? input_fs : max_fs);
 }
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
