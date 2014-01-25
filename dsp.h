@@ -1,6 +1,7 @@
 #ifndef _DSP_H
 #define _DSP_H
 
+#include <stdio.h>
 #include <sys/types.h>
 
 enum {

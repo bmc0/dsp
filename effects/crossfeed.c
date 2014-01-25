@@ -21,9 +21,6 @@ void crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 	ssize_t samples, i;
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
 
-	if (e->ostream.channels != 2)
-		return;
-
 	samples = *frames * 2;
 	for (i = 0; i < samples; i += 2) {
 		obuf[i + 0] = (ibuf[i + 0] * state->direct_gain)
@@ -45,7 +42,8 @@ void crossfeed_effect_reset(struct effect *e)
 void crossfeed_effect_plot(struct effect *e, int i)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
-	printf("H%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
+	printf("H0_%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
+	printf("H1_%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
 }
 
 void crossfeed_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
@@ -56,9 +54,10 @@ void crossfeed_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void crossfeed_effect_destroy(struct effect *e)
 {
 	free(e->data);
+	free(e->channel_bit_array);
 }
 
-struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, int argc, char **argv)
+struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
 {
 	struct effect *e;
 	struct crossfeed_state *state;
@@ -71,14 +70,19 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	freq = parse_freq(argv[1]);
 	sep_db = atof(argv[2]);
 
-	if (istream->channels != 2)
-		LOG(LL_ERROR, "dsp: %s: warning: channels != 2; crossfeed will have no effect\n", argv[0]);
+	if (istream->channels != 2) {
+		LOG(LL_ERROR, "dsp: %s: error: channels != 2\n", argv[0]);
+		return NULL;
+	}
 	CHECK_RANGE(freq >= 0.0 && freq < (double) istream->fs / 2.0, "f0");
 	CHECK_RANGE(sep_db >= 0.0, "separation");
 
 	e = calloc(1, sizeof(struct effect));
+	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->channel_bit_array = NEW_BIT_ARRAY(istream->channels);
+	COPY_BIT_ARRAY(e->channel_bit_array, channel_bit_array, istream->channels);
 	e->ratio = 1.0;
 	e->run = crossfeed_effect_run;
 	e->reset = crossfeed_effect_reset;

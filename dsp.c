@@ -24,7 +24,7 @@ static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
 
 static const char usage[] =
-	"usage: dsp [[options] path ...] [[effect] [args ...] ...]\n"
+	"usage: dsp [[options] path ...] [[:channel_selector] [effect] [args ...] ...]\n"
 	"\n"
 	"global options:\n"
 	"  -h         show this help\n"
@@ -270,9 +270,9 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 int main(int argc, char *argv[])
 {
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
-	int i, k, j, effect_start = 1, pause = 0, do_dither = 0;
+	int i, k, j, effect_start = 1, pause = 0, do_dither = 0, all_channels = 1;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
-	char **args = NULL;
+	char *channel_bit_array, *tmp_bit_array;
 	struct effect_info *ei = NULL;
 	struct effect *e = NULL;
 	struct codec *c = NULL;
@@ -289,7 +289,7 @@ int main(int argc, char *argv[])
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
-	while (optind < argc && get_effect_info(argv[optind]) == NULL) {
+	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':') {
 		if (parse_io_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.fs, &params.channels))
 			cleanup_and_exit(1);
 		if (params.mode == CODEC_MODE_WRITE)
@@ -333,7 +333,16 @@ int main(int argc, char *argv[])
 	i = k + 1;
 	stream.fs = input_fs;
 	stream.channels = input_channels;
+	channel_bit_array = NEW_BIT_ARRAY(stream.channels);
+	SET_BIT_ARRAY(channel_bit_array, stream.channels);
 	while (k < argc) {
+		if (argv[k][0] == ':') {
+			if (parse_selector(&argv[k][1], channel_bit_array, stream.channels))
+				cleanup_and_exit(1);
+			++k;
+			i = k + 1;
+			continue;
+		}
 		ei = get_effect_info(argv[k]);
 		if (ei == NULL) {
 			if (k == effect_start) {
@@ -342,19 +351,17 @@ int main(int argc, char *argv[])
 			}
 			else break;
 		}
-		while (i < argc && get_effect_info(argv[i]) == NULL)
+		while (i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':')
 			++i;
-		args = calloc(i - k, sizeof(char *));
-		LOG(LL_VERBOSE, "dsp: effect:");
-		for (j = 0; j < i - k; ++j) {
-			LOG(LL_VERBOSE, " %s", argv[k + j]);
-			args[j] = strdup(argv[k + j]);
+		if (LOGLEVEL(LL_VERBOSE)) {
+			fprintf(stderr, "dsp: effect:");
+			for (j = 0; j < i - k; ++j)
+				fprintf(stderr, " %s", argv[k + j]);
+			fprintf(stderr, "; channels=%d [", stream.channels);
+			print_selector(channel_bit_array, stream.channels);
+			fprintf(stderr, "] fs=%d\n", stream.fs);
 		}
-		LOG(LL_VERBOSE, "\n");
-		e = init_effect(ei, &stream, i - k, args);
-		for (j = 0; j < i - k; ++j)
-			free(args[j]);
-		free(args);
+		e = init_effect(ei, &stream, channel_bit_array, i - k, &argv[k]);
 		if (e == NULL) {
 			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
 			cleanup_and_exit(1);
@@ -362,8 +369,18 @@ int main(int argc, char *argv[])
 		append_effect(&chain, e);
 		k = i;
 		i = k + 1;
+		if (e->ostream.channels > stream.channels) {
+			tmp_bit_array = NEW_BIT_ARRAY(e->ostream.channels);
+			if (all_channels)
+				COPY_BIT_ARRAY(tmp_bit_array, channel_bit_array, stream.channels);
+			else
+				SET_BIT_ARRAY(tmp_bit_array, stream.channels);
+			free(channel_bit_array);
+			channel_bit_array = tmp_bit_array;
+		}
 		stream = e->ostream;
 	}
+	free(channel_bit_array);
 
 	if (plot)
 		plot_effects_chain(&chain, input_fs);

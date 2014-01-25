@@ -4,6 +4,6 @@
 #include "../dsp.h"
 #include "../effect.h"
 
-struct effect * mono_effect_init(struct effect_info *, struct stream_info *, int, char **);
+struct effect * mono_effect_init(struct effect_info *, struct stream_info *, char *, int, char **);
 
 #endif

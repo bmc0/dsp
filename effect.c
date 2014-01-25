@@ -39,9 +39,9 @@ struct effect_info * get_effect_info(const char *name)
 	return NULL;
 }
 
-struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, int argc, char **argv)
+struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
 {
-	return ei->init(ei, istream, argc, argv);
+	return ei->init(ei, istream, channel_bit_array, argc, argv);
 }
 
 void destroy_effect(struct effect *e)
@@ -97,25 +97,44 @@ void reset_effects_chain(struct effects_chain *chain)
 
 void plot_effects_chain(struct effects_chain *chain, int input_fs)
 {
-	int i = 0, k, max_fs = -1;
+	int i = 0, k, j, max_fs = -1, channels = -1;
 	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (e->plot == NULL) {
+			LOG(LL_ERROR, "dsp: plot: error: effect '%s' does not support plotting\n", e->name);
+			return;
+		}
+		if (channels == -1)
+			channels = e->ostream.channels;
+		else if (channels != e->ostream.channels) {
+			LOG(LL_ERROR, "dsp: plot: error: number of channels cannot change: %s", e->name);
+			return;
+		}
+		e = e->next;
+	}
 	printf(
 		"set xlabel 'frequency (Hz)'\n"
 		"set ylabel 'amplitude (dB)'\n"
 		"set logscale x\n"
 		"set samples 500\n"
 		"set grid xtics ytics\n"
-		"set key off\n"
+		"set key on\n"
 	);
+	e = chain->head;
 	while (e != NULL) {
 		e->plot(e, i++);
 		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
 		e = e->next;
 	}
-	printf("Hsum(f)=");
-	for (k = 0; k < i; ++k)
-		printf("H%d(f) + ", k);
-	printf("0\nplot [f=10:%d/2] [-30:20] Hsum(f)\n", (max_fs == -1) ? input_fs : max_fs);
+	for (k = 0; k < channels; ++k) {
+		printf("Hsum%d(f)=", k);
+		for (j = 0; j < i; ++j)
+			printf("H%d_%d(f) + ", k, j);
+		if (k == 0)
+			printf("0\nplot [f=10:%d/2] [-30:20] Hsum%d(f) title 'Channel %d'\n", (max_fs == -1) ? input_fs : max_fs, k, k);
+		else
+			printf("0\nreplot Hsum%d(f) title 'Channel %d'\n", k, k);
+	}
 }
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)

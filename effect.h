@@ -6,12 +6,14 @@
 struct effect_info {
 	const char *name;
 	const char *usage;
-	struct effect * (*init)(struct effect_info *, struct stream_info *, int, char **);
+	struct effect * (*init)(struct effect_info *, struct stream_info *, char *, int, char **);
 };
 
 struct effect {
 	struct effect *next;
+	const char *name;
 	struct stream_info istream, ostream;
+	char *channel_bit_array;
 	double ratio;
 	void (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*reset)(struct effect *);
@@ -27,7 +29,7 @@ struct effects_chain {
 };
 
 struct effect_info * get_effect_info(const char *);
-struct effect * init_effect(struct effect_info *, struct stream_info *, int, char **);
+struct effect * init_effect(struct effect_info *, struct stream_info *, char *, int, char **);
 void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
 double get_effects_chain_max_ratio(struct effects_chain *);

@@ -6,6 +6,7 @@
 #include <fftw3.h>
 #include "crossfeed_hrtf.h"
 #include "../codec.h"
+#include "../util.h"
 
 struct crossfeed_hrtf_state {
 	fftw_complex *filter_fr_left[2];
@@ -113,11 +114,6 @@ void crossfeed_hrtf_effect_reset(struct effect *e)
 	}
 }
 
-void crossfeed_hrtf_effect_plot(struct effect *e, int i)
-{
-	printf("H%d(f)=0\n", i); /* fixme */
-}
-
 void crossfeed_hrtf_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	struct crossfeed_hrtf_state *state = (struct crossfeed_hrtf_state *) e->data;
@@ -173,9 +169,10 @@ void crossfeed_hrtf_effect_destroy(struct effect *e)
 	fftw_destroy_plan(state->plan_c2r_right_c0);
 	fftw_destroy_plan(state->plan_c2r_right_c1);
 	free(state);
+	free(e->channel_bit_array);
 }
 
-struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream_info *istream, int argc, char **argv)
+struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
 {
 	struct effect *e;
 	struct crossfeed_hrtf_state *state;
@@ -221,12 +218,15 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream
 	frames = (c_left->frames > c_right->frames) ? c_left->frames : c_right->frames;
 
 	e = calloc(1, sizeof(struct effect));
+	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->channel_bit_array = NEW_BIT_ARRAY(istream->channels);
+	COPY_BIT_ARRAY(e->channel_bit_array, channel_bit_array, istream->channels);
 	e->ratio = 1.0;
 	e->run = crossfeed_hrtf_effect_run;
 	e->reset = crossfeed_hrtf_effect_reset;
-	e->plot = crossfeed_hrtf_effect_plot;
+	e->plot = NULL;
 	e->drain = crossfeed_hrtf_effect_drain;
 	e->destroy = crossfeed_hrtf_effect_destroy;
 
