@@ -19,7 +19,7 @@ Dsp is an audio processing program with simple digital signal processing capabil
 
 #### Synopsis:
 
-	dsp [[options] path ...] [[effect] [args ...] ...]
+	dsp [[options] path ...] [[:channel_selector] [effect] [args ...] ...]
 
 Run `dsp -h` for options, supported input/output types and supported effects.
 
@@ -36,4 +36,4 @@ Plot amplitude vs frequency for a complex effects chain:
 ### Bugs:
 
 * No support for metadata.
-* Crossfeed_hrtf does not currently support plotting.
+* Some effects do not support plotting.
