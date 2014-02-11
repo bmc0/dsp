@@ -270,7 +270,7 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 int main(int argc, char *argv[])
 {
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
-	int i, k, j, last_selector_index, pause = 0, do_dither = 0, all_channels = 1;
+	int i, k, j, last_selector_index = -1, pause = 0, do_dither = 0;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
 	char *channel_bit_array, *tmp_bit_array;
 	struct effect_info *ei = NULL;
@@ -329,7 +329,7 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 	}
 
-	k = last_selector_index = optind;
+	k = optind;
 	i = k + 1;
 	stream.fs = input_fs;
 	stream.channels = input_channels;
@@ -339,17 +339,14 @@ int main(int argc, char *argv[])
 		if (argv[k][0] == ':') {
 			if (parse_selector(&argv[k][1], channel_bit_array, stream.channels))
 				cleanup_and_exit(1);
-			last_selector_index = ++k;
+			last_selector_index = k++;
 			i = k + 1;
 			continue;
 		}
 		ei = get_effect_info(argv[k]);
 		if (ei == NULL) {
-			if (k == last_selector_index) {
-				LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
-				cleanup_and_exit(1);
-			}
-			else break;
+			LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
+			cleanup_and_exit(1);
 		}
 		while (i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':')
 			++i;
@@ -369,12 +366,14 @@ int main(int argc, char *argv[])
 		append_effect(&chain, e);
 		k = i;
 		i = k + 1;
-		if (e->ostream.channels > stream.channels) {
+		if (e->ostream.channels != stream.channels) {
 			tmp_bit_array = NEW_BIT_ARRAY(e->ostream.channels);
-			if (all_channels)
-				COPY_BIT_ARRAY(tmp_bit_array, channel_bit_array, stream.channels);
-			else
+			if (last_selector_index == -1)
 				SET_BIT_ARRAY(tmp_bit_array, stream.channels);
+			else {
+				if (parse_selector(&argv[last_selector_index][1], tmp_bit_array, e->ostream.channels))
+					cleanup_and_exit(1);
+			}
 			free(channel_bit_array);
 			channel_bit_array = tmp_bit_array;
 		}
