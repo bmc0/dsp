@@ -39,9 +39,9 @@ struct effect_info * get_effect_info(const char *name)
 	return NULL;
 }
 
-struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
+struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
 {
-	return ei->init(ei, istream, channel_bit_array, argc, argv);
+	return ei->init(ei, istream, channel_selector, argc, argv);
 }
 
 void destroy_effect(struct effect *e)

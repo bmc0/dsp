@@ -272,7 +272,7 @@ int main(int argc, char *argv[])
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 	int i, k, j, last_selector_index = -1, pause = 0, do_dither = 0;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
-	char *channel_bit_array, *tmp_bit_array;
+	char *channel_selector, *tmp_channel_selector;
 	struct effect_info *ei = NULL;
 	struct effect *e = NULL;
 	struct codec *c = NULL;
@@ -333,11 +333,11 @@ int main(int argc, char *argv[])
 	i = k + 1;
 	stream.fs = input_fs;
 	stream.channels = input_channels;
-	channel_bit_array = NEW_BIT_ARRAY(stream.channels);
-	SET_BIT_ARRAY(channel_bit_array, stream.channels);
+	channel_selector = NEW_BIT_ARRAY(stream.channels);
+	SET_BIT_ARRAY(channel_selector, stream.channels);
 	while (k < argc) {
 		if (argv[k][0] == ':') {
-			if (parse_selector(&argv[k][1], channel_bit_array, stream.channels))
+			if (parse_selector(&argv[k][1], channel_selector, stream.channels))
 				cleanup_and_exit(1);
 			last_selector_index = k++;
 			i = k + 1;
@@ -355,10 +355,10 @@ int main(int argc, char *argv[])
 			for (j = 0; j < i - k; ++j)
 				fprintf(stderr, " %s", argv[k + j]);
 			fprintf(stderr, "; channels=%d [", stream.channels);
-			print_selector(channel_bit_array, stream.channels);
+			print_selector(channel_selector, stream.channels);
 			fprintf(stderr, "] fs=%d\n", stream.fs);
 		}
-		e = init_effect(ei, &stream, channel_bit_array, i - k, &argv[k]);
+		e = init_effect(ei, &stream, channel_selector, i - k, &argv[k]);
 		if (e == NULL) {
 			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
 			cleanup_and_exit(1);
@@ -367,19 +367,19 @@ int main(int argc, char *argv[])
 		k = i;
 		i = k + 1;
 		if (e->ostream.channels != stream.channels) {
-			tmp_bit_array = NEW_BIT_ARRAY(e->ostream.channels);
+			tmp_channel_selector = NEW_BIT_ARRAY(e->ostream.channels);
 			if (last_selector_index == -1)
-				SET_BIT_ARRAY(tmp_bit_array, stream.channels);
+				SET_BIT_ARRAY(tmp_channel_selector, stream.channels);
 			else {
-				if (parse_selector(&argv[last_selector_index][1], tmp_bit_array, e->ostream.channels))
+				if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels))
 					cleanup_and_exit(1);
 			}
-			free(channel_bit_array);
-			channel_bit_array = tmp_bit_array;
+			free(channel_selector);
+			channel_selector = tmp_channel_selector;
 		}
 		stream = e->ostream;
 	}
-	free(channel_bit_array);
+	free(channel_selector);
 
 	if (plot)
 		plot_effects_chain(&chain, input_fs);

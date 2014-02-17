@@ -182,7 +182,7 @@ void biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample
 	struct biquad_state *state = (struct biquad_state *) e->data;
 	for (i = 0; i < samples; i += e->ostream.channels) {
 		for (k = 0; k < e->ostream.channels; ++k) {
-			if (GET_BIT(e->channel_bit_array, k))
+			if (GET_BIT(e->channel_selector, k))
 				obuf[i + k] = biquad(&state[k], ibuf[i + k]);
 			else
 				obuf[i + k] = ibuf[i + k];
@@ -205,7 +205,7 @@ void biquad_effect_plot(struct effect *e, int i)
 		i, e->ostream.fs, i, state->c0, i, state->c1, i, state->c2, i, state->c3, i, state->c4
 	);
 	for (k = 0; k < e->ostream.channels; ++k) {
-		if (GET_BIT(e->channel_bit_array, k))
+		if (GET_BIT(e->channel_selector, k))
 			printf(
 				"H%d_%d(f)=20*log10(sqrt((c%d0*c%d0+c%d1*c%d1+c%d2*c%d2+2.*(c%d0*c%d1+c%d1*c%d2)*cos(f*o%d)+2.*(c%d0*c%d2)*cos(2.*f*o%d))/(1.+c%d3*c%d3+c%d4*c%d4+2.*(c%d3+c%d3*c%d4)*cos(f*o%d)+2.*c%d4*cos(2.*f*o%d))))\n",
 				k, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i
@@ -223,10 +223,10 @@ void biquad_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void biquad_effect_destroy(struct effect *e)
 {
 	free(e->data);
-	free(e->channel_bit_array);
+	free(e->channel_selector);
 }
 
-struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
+struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
 {
 	int i, type;
 	double arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
@@ -391,8 +391,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_bit_array = NEW_BIT_ARRAY(istream->channels);
-	COPY_BIT_ARRAY(e->channel_bit_array, channel_bit_array, istream->channels);
+	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
+	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
 	e->ratio = 1.0;
 	e->run = biquad_effect_run;
 	e->reset = biquad_effect_reset;

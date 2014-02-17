@@ -54,10 +54,10 @@ void crossfeed_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void crossfeed_effect_destroy(struct effect *e)
 {
 	free(e->data);
-	free(e->channel_bit_array);
+	free(e->channel_selector);
 }
 
-struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_bit_array, int argc, char **argv)
+struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
 {
 	struct effect *e;
 	struct crossfeed_state *state;
@@ -81,8 +81,8 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_bit_array = NEW_BIT_ARRAY(istream->channels);
-	COPY_BIT_ARRAY(e->channel_bit_array, channel_bit_array, istream->channels);
+	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
+	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
 	e->ratio = 1.0;
 	e->run = crossfeed_effect_run;
 	e->reset = crossfeed_effect_reset;
