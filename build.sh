@@ -28,7 +28,7 @@ $CC -o dsp \
 	effects/gain.c \
 	effects/crossfeed.c \
 	effects/crossfeed_hrtf.c \
-	effects/mono.c \
+	effects/remix.c \
 	codecs/sndfile.c \
 	codecs/alsa.c \
 	codecs/mp3.c \
