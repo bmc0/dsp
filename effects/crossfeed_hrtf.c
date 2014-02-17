@@ -169,7 +169,6 @@ void crossfeed_hrtf_effect_destroy(struct effect *e)
 	fftw_destroy_plan(state->plan_c2r_right_c0);
 	fftw_destroy_plan(state->plan_c2r_right_c1);
 	free(state);
-	free(e->channel_selector);
 }
 
 struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
@@ -221,8 +220,6 @@ struct effect * crossfeed_hrtf_effect_init(struct effect_info *ei, struct stream
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
-	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
 	e->ratio = 1.0;
 	e->run = crossfeed_hrtf_effect_run;
 	e->reset = crossfeed_hrtf_effect_reset;
