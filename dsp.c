@@ -389,7 +389,7 @@ int main(int argc, char *argv[])
 		else
 			out_codec = init_codec(out_params.type, out_params.mode, out_params.path, out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs, (out_params.channels == -1) ? stream.channels : out_params.channels);
 		if (out_codec == NULL) {
-			LOG(LL_ERROR, "dsp: error: failed to open output: %s\n", out_params.path);
+			LOG(LL_ERROR, "dsp: error: failed to open output: %s\n", (out_params.path == NULL) ? DEFAULT_OUTPUT_PATH : out_params.path);
 			cleanup_and_exit(1);
 		}
 		if (out_codec->fs != stream.fs) {
