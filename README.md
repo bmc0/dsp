@@ -25,7 +25,7 @@ Run `dsp -h` for options, supported input/output types and supported effects.
 
 #### Selector syntax:
 
-	[[start]-[end][,]...]
+	[[start][-[end]][,...]]
 
 Examples:
 

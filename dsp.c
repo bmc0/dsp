@@ -48,7 +48,10 @@ static const char usage[] =
 	"\n"
 	"default output:\n"
 	"  type: "DEFAULT_OUTPUT_TYPE"\n"
-	"  path: "DEFAULT_OUTPUT_PATH"\n";
+	"  path: "DEFAULT_OUTPUT_PATH"\n"
+	"\n"
+	"selector syntax:\n"
+	"  [[start][-[end]][,...]]\n";
 
 static const char interactive_help[] =
 	"Keys:\n"
