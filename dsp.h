@@ -15,8 +15,13 @@ enum {
 #define DEFAULT_FS           44100
 #define DEFAULT_CHANNELS     1
 #define DEFAULT_BUF_FRAMES   2048
-#define DEFAULT_OUTPUT_TYPE  "alsa"
-#define DEFAULT_OUTPUT_PATH  "default"
+#ifdef __HAVE_ALSA__
+	#define DEFAULT_OUTPUT_TYPE  "alsa"
+	#define DEFAULT_OUTPUT_PATH  "default"
+#else
+	#define DEFAULT_OUTPUT_TYPE  "null"
+	#define DEFAULT_OUTPUT_PATH  "null"
+#endif
 
 #define BIT_PERFECT 1
 

@@ -42,7 +42,9 @@ static const char *wve_ext[]   = { ".wve", NULL };
 static const char *ogg_ext[]   = { ".ogg", ".oga", ".ogv", NULL };
 static const char *mpc2k_ext[] = { ".mpc2k", NULL };
 static const char *rf64_ext[]  = { ".wav", ".rf64", NULL };
+#ifdef __HAVE_MAD__
 static const char *mp3_ext[]   = { ".mp3", NULL };
+#endif
 
 struct codec_info codecs[] = {
 	{ "sndfile", NULL,      CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
@@ -71,8 +73,12 @@ struct codec_info codecs[] = {
 	{ "ogg",     ogg_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "mpc2k",   mpc2k_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "rf64",    rf64_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+#ifdef __HAVE_ALSA__
 	{ "alsa",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
+#endif
+#ifdef __HAVE_MAD__
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
+#endif
 	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
 };
 
