@@ -23,8 +23,7 @@ static int ao_open_count = 0;
 
 static struct ao_enc_info encodings[] = {
 	{ "s16", 2, 16, write_buf_s16 },
-	{ "s8",  1, 8,  write_buf_s8 },
-	{ "s24", 3, 24, write_buf_s24 },
+	{ "u8",  1, 8,  write_buf_u8 },
 	{ "s32", 4, 32, write_buf_s32 },
 };
 
