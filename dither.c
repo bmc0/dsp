@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <math.h>
 #include "dither.h"
 
 sample_t tpdf_dither_sample(sample_t s, int prec)

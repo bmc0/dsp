@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
-#include <math.h>
+#include <string.h>
 #include <alsa/asoundlib.h>
 #include "alsa.h"
 #include "../util.h"
@@ -49,10 +48,7 @@ ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
 	while (i < frames) {
-		if (frames - i > state->buf_frames)
-			n = state->buf_frames;
-		else
-			n = frames - i;
+		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
 		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
 		try_again:
 		n = snd_pcm_writei(state->dev, state->buf, n);
@@ -124,14 +120,11 @@ static struct alsa_enc_info encodings[] = {
 static struct alsa_enc_info * alsa_get_enc_info(const char *enc)
 {
 	int i;
-	if (enc == NULL) {
+	if (enc == NULL)
 		return &encodings[0];
-	}
-	for (i = 0; i < LENGTH(encodings); ++i) {
-		if (strcmp(enc, encodings[i].name) == 0) {
+	for (i = 0; i < LENGTH(encodings); ++i)
+		if (strcmp(enc, encodings[i].name) == 0)
 			return &encodings[i];
-		}
-	}
 	return NULL;
 }
 
