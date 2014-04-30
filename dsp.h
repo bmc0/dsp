@@ -16,11 +16,14 @@ enum {
 #define DEFAULT_CHANNELS     1
 #define DEFAULT_BUF_FRAMES   2048
 #ifdef __HAVE_ALSA__
-	#define DEFAULT_OUTPUT_TYPE  "alsa"
-	#define DEFAULT_OUTPUT_PATH  "default"
+	#define DEFAULT_OUTPUT_TYPE "alsa"
+	#define DEFAULT_OUTPUT_PATH "default"
+#elif defined __HAVE_AO__
+	#define DEFAULT_OUTPUT_TYPE "ao"
+	#define DEFAULT_OUTPUT_PATH "default"
 #else
-	#define DEFAULT_OUTPUT_TYPE  "null"
-	#define DEFAULT_OUTPUT_PATH  "null"
+	#define DEFAULT_OUTPUT_TYPE "null"
+	#define DEFAULT_OUTPUT_PATH "null"
 #endif
 
 #define BIT_PERFECT 1
