@@ -6,6 +6,7 @@
 
 #include "codecs/sndfile.h"
 #include "codecs/alsa.h"
+#include "codecs/ao.h"
 #include "codecs/mp3.h"
 #include "codecs/null.h"
 
@@ -75,6 +76,9 @@ struct codec_info codecs[] = {
 	{ "rf64",    rf64_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 #ifdef __HAVE_ALSA__
 	{ "alsa",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
+#endif
+#ifdef __HAVE_AO__
+	{ "ao",      NULL,      CODEC_MODE_WRITE,                 ao_codec_init,      ao_codec_print_encodings },
 #endif
 #ifdef __HAVE_MAD__
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },

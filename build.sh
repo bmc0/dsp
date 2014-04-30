@@ -22,6 +22,12 @@ if pkg-config --exists alsa; then
 	CFLAGS="$CFLAGS -D__HAVE_ALSA__"
 	echo -n " codecs/alsa.c"
 fi
+if pkg-config --exists ao; then
+	PACKAGES="$PACKAGES ao"
+	PLUGIN_SOURCES="$PLUGIN_SOURCES codecs/ao.c"
+	CFLAGS="$CFLAGS -D__HAVE_AO__"
+	echo -n " codecs/ao.c"
+fi
 if pkg-config --exists mad; then
 	PACKAGES="$PACKAGES mad"
 	PLUGIN_SOURCES="$PLUGIN_SOURCES codecs/mp3.c"
