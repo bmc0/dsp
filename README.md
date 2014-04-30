@@ -13,6 +13,7 @@ Dsp is an audio processing program with simple digital signal processing capabil
 * libmad: for mp3 input support
 * alsa-lib: for alsa input/output support
 * fftw3: for crossfeed_hrtf effect
+* libao: for ao output support
 
 #### Build:
 
