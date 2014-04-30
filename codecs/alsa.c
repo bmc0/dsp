@@ -108,7 +108,7 @@ void alsa_destroy(struct codec *c)
 
 static struct alsa_enc_info encodings[] = {
 	{ "s16",    SND_PCM_FORMAT_S16,     2, 16, write_buf_s16,    read_buf_s16 },
-	{ "u8",     SND_PCM_FORMAT_S8,      1, 8,  write_buf_u8,     read_buf_u8 },
+	{ "u8",     SND_PCM_FORMAT_U8,      1, 8,  write_buf_u8,     read_buf_u8 },
 	{ "s8",     SND_PCM_FORMAT_S8,      1, 8,  write_buf_s8,     read_buf_s8 },
 	{ "s24",    SND_PCM_FORMAT_S24,     4, 24, write_buf_s24,    read_buf_s24 },
 	{ "s24_3",  SND_PCM_FORMAT_S24_3LE, 3, 24, write_buf_s24_3,  read_buf_s24_3 },
