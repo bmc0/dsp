@@ -96,7 +96,7 @@ struct codec * ao_codec_init(const char *type, int mode, const char *path, const
 	int driver;
 	struct ao_enc_info *enc_info;
 	struct ao_sample_format format;
-	ao_device * dev = NULL;
+	ao_device *dev = NULL;
 	struct ao_state *state = NULL;
 	struct codec *c = NULL;
 
