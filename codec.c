@@ -9,6 +9,7 @@
 #include "codecs/ao.h"
 #include "codecs/mp3.h"
 #include "codecs/null.h"
+#include "codecs/pcm.h"
 
 struct codec_info {
 	const char *type;
@@ -84,6 +85,7 @@ struct codec_info codecs[] = {
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
 #endif
 	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
+	{ "pcm",     NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pcm_codec_init,     pcm_codec_print_encodings },
 };
 
 static const char *fallback_codecs[] = {

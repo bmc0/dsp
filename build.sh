@@ -59,6 +59,7 @@ $CC -o dsp \
 	effects/remix.c \
 	codecs/sndfile.c \
 	codecs/null.c \
+	codecs/pcm.c \
 	$PLUGIN_SOURCES \
 	$CFLAGS $LDFLAGS || fail $?
 
