@@ -81,9 +81,9 @@ void write_buf_s24_3(sample_t *in, char *out, ssize_t s)
 	ssize_t p = -1;
 	while (++p < s) {
 		v = SAMPLE_TO_S24(in[p]);
-		out[p * 3 + 2] = (unsigned char) (v >> 16);
-		out[p * 3 + 1] = (unsigned char) (v >> 8);
-		out[p * 3 + 0] = (unsigned char) (v >> 0);
+		out[p * 3 + 0] = (v >> 0) & 0xff;
+		out[p * 3 + 1] = (v >> 8) & 0xff;
+		out[p * 3 + 2] = (v >> 16) & 0xff;
 	}
 }
 
@@ -91,9 +91,9 @@ void read_buf_s24_3(char *in, sample_t *out, ssize_t s)
 {
 	signed int v;
 	while (s-- > 0) {
-		v = (unsigned int) in[s * 3 + 2] << 0;
-		v |= (unsigned int) in[s * 3 + 1] << 8;
-		v |= (unsigned int) in[s * 3 + 0] << 16;
+		v = (in[s * 3 + 0] & 0xff) << 0;
+		v |= (in[s * 3 + 1] & 0xff) << 8;
+		v |= (in[s * 3 + 2] & 0xff) << 16;
 		out[s] = S24_TO_SAMPLE(v);
 	}
 }
