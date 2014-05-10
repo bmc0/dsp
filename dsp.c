@@ -29,6 +29,7 @@ static const char usage[] =
 	"global options:\n"
 	"  -h         show this help\n"
 	"  -b frames  set buffer size (must be specified before the first input)\n"
+	"  -R ratio   set codec maximum buffer ratio (must be specified before the first input)\n"
 	"  -I         disable interactive mode\n"
 	"  -q         disable progress display\n"
 	"  -s         silent mode\n"
@@ -66,10 +67,11 @@ static const char interactive_help[] =
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
-	0,                   /* clip_count */
-	0,                   /* peak */
-	LL_NORMAL,           /* loglevel */
-	DEFAULT_BUF_FRAMES,  /* buf_frames */
+	0,                      /* clip_count */
+	0,                      /* peak */
+	LL_NORMAL,              /* loglevel */
+	DEFAULT_BUF_FRAMES,     /* buf_frames */
+	DEFAULT_MAX_BUF_RATIO,  /* max_buf_ratio */
 };
 
 static sample_t clip(sample_t s)
@@ -138,7 +140,7 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 	*channels = *fs = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hb:IqsvdDpot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 			case 'h':
 				print_usage();
@@ -150,10 +152,20 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 						LOG(LL_ERROR, "dsp: error: buffer size must be > 0\n");
 						return 1;
 					}
-					break;
 				}
 				else
 					LOG(LL_ERROR, "dsp: warning: buffer size must be specified before the first input\n");
+				break;
+			case 'R':
+				if (in_codecs.head == NULL) {
+					dsp_globals.max_buf_ratio = atoi(optarg);
+					if (dsp_globals.max_buf_ratio <= 0) {
+						LOG(LL_ERROR, "dsp: error: buffer ratio must be > 0\n");
+						return 1;
+					}
+				}
+				else
+					LOG(LL_ERROR, "dsp: warning: buffer ratio must be specified before the first input\n");
 				break;
 			case 'I':
 				interactive = 0;

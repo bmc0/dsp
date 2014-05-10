@@ -178,7 +178,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size minimum: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	buf_frames = dsp_globals.buf_frames * 32;
+	buf_frames = dsp_globals.buf_frames * dsp_globals.max_buf_ratio;
 	if ((err = snd_pcm_hw_params_set_buffer_size_max(dev, p, &buf_frames)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set buffer size maximum: %s\n", snd_strerror(err));
 		goto fail;

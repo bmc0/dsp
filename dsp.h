@@ -12,9 +12,10 @@ enum {
 #define LOG(l, ...) do { if (dsp_globals.loglevel >= l) fprintf(stderr, __VA_ARGS__); } while (0)
 #define LOGLEVEL(l) dsp_globals.loglevel >= l
 
-#define DEFAULT_FS           44100
-#define DEFAULT_CHANNELS     1
-#define DEFAULT_BUF_FRAMES   2048
+#define DEFAULT_FS            44100
+#define DEFAULT_CHANNELS      1
+#define DEFAULT_BUF_FRAMES    2048
+#define DEFAULT_MAX_BUF_RATIO 32
 #ifdef __HAVE_ALSA__
 	#define DEFAULT_OUTPUT_TYPE "alsa"
 	#define DEFAULT_OUTPUT_PATH "default"
@@ -35,6 +36,7 @@ struct dsp_globals {
 	sample_t peak;
 	int loglevel;
 	ssize_t buf_frames;
+	ssize_t max_buf_ratio;
 };
 
 struct stream_info {
