@@ -13,7 +13,7 @@ struct effect {
 	struct effect *next;
 	const char *name;
 	struct stream_info istream, ostream;
-	char *channel_selector;
+	char *channel_selector;  /* for use *only* by the effect */
 	double ratio;
 	void (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*reset)(struct effect *);
