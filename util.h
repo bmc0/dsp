@@ -2,6 +2,8 @@
 #define _UTIL_H
 
 #include <string.h>
+#include "dsp.h"
+#include "effect.h"
 
 #define LENGTH(x) (sizeof(x) / sizeof(x[0]))
 #define CHECK_RANGE(cond, name) \
@@ -19,5 +21,6 @@
 double parse_freq(const char *);
 int parse_selector(const char *, char *, int);
 void print_selector(char *, int);
+int parse_effects_chain(char **, int, struct effects_chain *, struct stream_info *, char *);
 
 #endif

@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include "util.h"
-#include "dsp.h"
 
 double parse_freq(const char *s)
 {
@@ -99,4 +98,58 @@ void print_selector(char *b, int n)
 		fprintf(stderr, "%s%d-%d", (f) ? "" : ",", range_start, n - 1);
 	else if (l)
 		fprintf(stderr, "%s%d", (f) ? "" : ",", n - 1);
+}
+
+int parse_effects_chain(char **argv, int argc, struct effects_chain *chain, struct stream_info *stream, char *channel_selector)
+{
+	int i = 1, k = 0, j, last_selector_index = -1;
+	char *tmp_channel_selector;
+	struct effect_info *ei = NULL;
+	struct effect *e = NULL;
+
+	while (k < argc) {
+		if (argv[k][0] == ':') {
+			if (parse_selector(&argv[k][1], channel_selector, stream->channels))
+				return 1;
+			last_selector_index = k++;
+			i = k + 1;
+			continue;
+		}
+		ei = get_effect_info(argv[k]);
+		if (ei == NULL) {
+			LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
+			return 1;
+		}
+		while (i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':')
+			++i;
+		if (LOGLEVEL(LL_VERBOSE)) {
+			fprintf(stderr, "dsp: effect:");
+			for (j = 0; j < i - k; ++j)
+				fprintf(stderr, " %s", argv[k + j]);
+			fprintf(stderr, "; channels=%d [", stream->channels);
+			print_selector(channel_selector, stream->channels);
+			fprintf(stderr, "] fs=%d\n", stream->fs);
+		}
+		e = init_effect(ei, stream, channel_selector, i - k, &argv[k]);
+		if (e == NULL) {
+			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
+			return 1;
+		}
+		append_effect(chain, e);
+		k = i;
+		i = k + 1;
+		if (e->ostream.channels != stream->channels) {
+			tmp_channel_selector = NEW_BIT_ARRAY(e->ostream.channels);
+			if (last_selector_index == -1)
+				SET_BIT_ARRAY(tmp_channel_selector, stream->channels);
+			else {
+				if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels))
+					return 1;
+			}
+			free(channel_selector);
+			channel_selector = tmp_channel_selector;
+		}
+		*stream = e->ostream;
+	}
+	return 0;
 }

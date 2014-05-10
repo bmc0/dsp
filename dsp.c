@@ -285,11 +285,9 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 int main(int argc, char *argv[])
 {
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
-	int i, k, j, last_selector_index = -1, pause = 0, do_dither = 0;
+	int k, pause = 0, do_dither = 0;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
-	char *channel_selector, *tmp_channel_selector;
-	struct effect_info *ei = NULL;
-	struct effect *e = NULL;
+	char *channel_selector;
 	struct codec *c = NULL;
 	struct stream_info stream;
 
@@ -344,56 +342,12 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 	}
 
-	k = optind;
-	i = k + 1;
 	stream.fs = input_fs;
 	stream.channels = input_channels;
 	channel_selector = NEW_BIT_ARRAY(stream.channels);
 	SET_BIT_ARRAY(channel_selector, stream.channels);
-	while (k < argc) {
-		if (argv[k][0] == ':') {
-			if (parse_selector(&argv[k][1], channel_selector, stream.channels))
-				cleanup_and_exit(1);
-			last_selector_index = k++;
-			i = k + 1;
-			continue;
-		}
-		ei = get_effect_info(argv[k]);
-		if (ei == NULL) {
-			LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
-			cleanup_and_exit(1);
-		}
-		while (i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':')
-			++i;
-		if (LOGLEVEL(LL_VERBOSE)) {
-			fprintf(stderr, "dsp: effect:");
-			for (j = 0; j < i - k; ++j)
-				fprintf(stderr, " %s", argv[k + j]);
-			fprintf(stderr, "; channels=%d [", stream.channels);
-			print_selector(channel_selector, stream.channels);
-			fprintf(stderr, "] fs=%d\n", stream.fs);
-		}
-		e = init_effect(ei, &stream, channel_selector, i - k, &argv[k]);
-		if (e == NULL) {
-			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
-			cleanup_and_exit(1);
-		}
-		append_effect(&chain, e);
-		k = i;
-		i = k + 1;
-		if (e->ostream.channels != stream.channels) {
-			tmp_channel_selector = NEW_BIT_ARRAY(e->ostream.channels);
-			if (last_selector_index == -1)
-				SET_BIT_ARRAY(tmp_channel_selector, stream.channels);
-			else {
-				if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels))
-					cleanup_and_exit(1);
-			}
-			free(channel_selector);
-			channel_selector = tmp_channel_selector;
-		}
-		stream = e->ostream;
-	}
+	if (parse_effects_chain(&argv[optind], argc - optind, &chain, &stream, channel_selector))
+		cleanup_and_exit(1);
 	free(channel_selector);
 
 	if (plot)
