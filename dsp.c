@@ -24,7 +24,7 @@ static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
 
 static const char usage[] =
-	"usage: dsp [[options] path ...] [[:channel_selector] [effect] [args ...] ...]\n"
+	"usage: dsp [[options] path ...] [[:channel_selector] [@[~/]effects_file] [effect] [args ...] ...]\n"
 	"\n"
 	"global options:\n"
 	"  -h         show this help\n"
@@ -287,7 +287,6 @@ int main(int argc, char *argv[])
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 	int k, pause = 0, do_dither = 0;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
-	char *channel_selector;
 	struct codec *c = NULL;
 	struct stream_info stream;
 
@@ -302,7 +301,7 @@ int main(int argc, char *argv[])
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
-	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':') {
+	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':' && argv[optind][0] != '@') {
 		if (parse_io_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.fs, &params.channels))
 			cleanup_and_exit(1);
 		if (params.mode == CODEC_MODE_WRITE)
@@ -344,11 +343,8 @@ int main(int argc, char *argv[])
 
 	stream.fs = input_fs;
 	stream.channels = input_channels;
-	channel_selector = NEW_BIT_ARRAY(stream.channels);
-	SET_BIT_ARRAY(channel_selector, stream.channels);
-	if (parse_effects_chain(&argv[optind], argc - optind, &chain, &stream, channel_selector))
+	if (build_effects_chain(argc - optind, &argv[optind], &chain, &stream, NULL, NULL))
 		cleanup_and_exit(1);
-	free(channel_selector);
 
 	if (plot)
 		plot_effects_chain(&chain, input_fs);

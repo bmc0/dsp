@@ -23,7 +23,7 @@ Dsp is an audio processing program with simple digital signal processing capabil
 
 #### Synopsis:
 
-	dsp [[options] path ...] [[:channel_selector] [effect] [args ...] ...]
+	dsp [[options] path ...] [[:channel_selector] [@[~/]effects_file] [effect] [args ...] ...]
 
 Run `dsp -h` for options, supported input/output types and supported effects.
 
@@ -40,6 +40,19 @@ Examples:
 	1,3        1 and 3
 	1-4,7,9-   1 through 4, 7, and 9 to n
 
+#### Effects file syntax:
+
+* Arguments are delimited by whitespace.
+* Comments are specified using a `#` character at the beginning of a line (excluding any preceeding spaces or tabs).
+* The `\` character removes any special meaning of the character that follows it.
+
+Example:
+
+	gain -10
+	# This is a comment
+	eq 1k 1.0 +10.0 eq 3k 3.0 -4.0
+	lowshelf 90 0.7 +4.0
+
 #### Examples:
 
 Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
@@ -53,6 +66,10 @@ Plot amplitude vs frequency for a complex effects chain:
 Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the left and right woofers, and channels 1 and 3 are the left and right tweeters, respectively:
 
 	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 0 1 1 :0,2 lowpass 2.2k 0.707 lowpass 2.2k 0.707 :1,3 highpass 2.2k 0.707 highpass 2.2k 0.707 :
+
+Apply effects from a file:
+
+	dsp file.flac @eq.txt
 
 ### Bugs:
 
