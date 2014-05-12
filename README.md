@@ -43,8 +43,8 @@ Examples:
 #### Effects file syntax:
 
 * Arguments are delimited by whitespace.
-* Comments are specified using a `#` character at the beginning of a line (excluding any preceeding spaces or tabs).
-* The `\` character removes any special meaning of the character that follows it.
+* If the first non-whitespace character in a line is `#`, the line is ignored.
+* The `\` character removes any special meaning of the next character.
 
 Example:
 
