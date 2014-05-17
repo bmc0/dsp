@@ -1,6 +1,6 @@
 ### About:
 
-Dsp is an audio processing program with simple digital signal processing capabilities and an interactive mode. Dsp is also capable of generating gnuplot commands to plot the amplitude vs frequency response of a given effects chain.
+Dsp is an audio processing program with an interactive mode. Dsp is capable of generating gnuplot commands to plot the amplitude vs frequency response of a given effects chain.
 
 ### Building:
 
@@ -31,14 +31,14 @@ Run `dsp -h` for options, supported input/output types and supported effects.
 
 	[[start][-[end]][,...]]
 
-Examples:
-
-	<empty>    all
-	-          all
-	2-         2 to n
-	-4         0 through 4
-	1,3        1 and 3
-	1-4,7,9-   1 through 4, 7, and 9 to n
+Example | Description
+--- | ---
+<empty> | all
+- | all
+2- | 2 to n
+-4 | 0 through 4
+1,3 | 1 and 3
+1-4,7,9- | 1 through 4, 7, and 9 to n
 
 #### Effects file syntax:
 
@@ -70,6 +70,25 @@ Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the left
 Apply effects from a file:
 
 	dsp file.flac @eq.txt
+
+### LADSPA plugin (experimental):
+
+Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only crossfeed_hrtf).
+
+The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Whitespace is not ignored. Valid keys are:
+
+Key | Description
+--- | ---
+input_channels | Number of input channels.
+output_channels | Number of output channels.
+effects_chain | Args to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
+
+Example configuration:
+
+	# Comment
+	input_channels=2
+	output_channels=2
+	effects_chain=gain -4.0 lowshelf 90 0.7 +4.0 @/path/to/eq_file
 
 ### Bugs:
 
