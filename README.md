@@ -14,6 +14,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 * alsa-lib: for alsa input/output support
 * fftw3: for crossfeed_hrtf effect
 * libao: for ao output support
+* LADSPA: for building the LADSPA frontend
 
 #### Build:
 
@@ -23,7 +24,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 #### Synopsis:
 
-	dsp [[options] path ...] [[:channel_selector] [@[~/]effects_file] [effect] [args ...] ...]
+	dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...
 
 Run `dsp -h` for options, supported input/output types and supported effects.
 
@@ -40,6 +41,12 @@ Example | Description
 1,3 | 1 and 3
 1-4,7,9- | 1 through 4, 7, and 9 to n
 
+#### Effects file paths:
+
+* On the command line, relative paths are relative to `$PWD`.
+* Within an effects file, relative paths are relative to the directory containing said effects file.
+* The `~/` prefix will be expanded to the contents of `$HOME`.
+
 #### Effects file syntax:
 
 * Arguments are delimited by whitespace.
@@ -52,6 +59,12 @@ Example:
 	# This is a comment
 	eq 1k 1.0 +10.0 eq 3k 3.0 -4.0
 	lowshelf 90 0.7 +4.0
+
+Effects files inherit a copy of the current channel selector. In other words, if an effects chain is this:
+
+	:2,4 @eq_file.txt eq 2k 1.0 -2.0
+
+`eq_file.txt` will inherit the `2,4` selector, but any selector specified within `eq_file.txt` will not affect the `eq 2k 1.0 -2.0` effect that comes after it.
 
 #### Examples:
 
@@ -71,9 +84,15 @@ Apply effects from a file:
 
 	dsp file.flac @eq.txt
 
-### LADSPA plugin (experimental):
+### LADSPA frontend (experimental):
 
 Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only crossfeed_hrtf).
+
+#### Build:
+
+	$ ./build_ladspa.sh
+
+#### Configuration:
 
 The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Whitespace is not ignored. Valid keys are:
 
@@ -89,6 +108,49 @@ Example configuration:
 	input_channels=2
 	output_channels=2
 	effects_chain=gain -4.0 lowshelf 90 0.7 +4.0 @/path/to/eq_file
+
+#### Usage example: Route alsa audio through ladspa_dsp:
+
+Put this in `~/.asoundrc`:
+
+	pcm.<dev>_sampleconv {
+		type plug
+		slave {
+			pcm "<dev>"
+			format S32
+			rate unchanged
+		}
+	}
+	
+	pcm.ladspa_dsp {
+		type ladspa
+		slave.pcm "<dev>_sampleconv"
+		path "/ladspa/path"
+		plugins [{
+			label "ladspa_dsp"
+			policy none
+		}]
+	}
+	
+	pcm.dsp {
+		type plug
+		slave {
+			pcm "ladspa_dsp"
+			format FLOAT
+			rate unchanged
+		}
+	}
+
+Replace `/ladspa/path` with the path to the directory containing `ladspa_dsp.so` and `<dev>` with the preferred output device (`hw:1`, for example).
+
+To make `dsp` the default device, append this to `~/.asoundrc`:
+
+	pcm.!default {
+		type copy
+		slave.pcm "dsp"
+	}
+
+If mixing is desired, the `dmix` plugin can be used instead of `copy`.
 
 ### Bugs:
 

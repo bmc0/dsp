@@ -24,7 +24,7 @@ static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
 
 static const char usage[] =
-	"usage: dsp [[options] path ...] [[:channel_selector] [@[~/]effects_file] [effect] [args ...] ...]\n"
+	"usage: dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
 	"\n"
 	"global options:\n"
 	"  -h         show this help\n"
