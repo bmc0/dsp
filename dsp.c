@@ -64,6 +64,7 @@ static const char interactive_help[] =
 	"  r : restart current input\n"
 	"  n : skip current input\n"
 	"  c : pause\n"
+	"  e : rebuild the effects chain\n"
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
@@ -285,7 +286,7 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 int main(int argc, char *argv[])
 {
 	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
-	int k, pause = 0, do_dither = 0;
+	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
 	struct codec *c = NULL;
 	struct stream_info stream;
@@ -341,9 +342,11 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 	}
 
+	effect_start = optind;
+	effect_argc = argc - optind;
 	stream.fs = input_fs;
 	stream.channels = input_channels;
-	if (build_effects_chain(argc - optind, &argv[optind], &chain, &stream, NULL, NULL))
+	if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 		cleanup_and_exit(1);
 
 	if (plot)
@@ -444,6 +447,28 @@ int main(int argc, char *argv[])
 							goto next_input;
 						case 'c':
 							out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
+							break;
+						case 'e':
+							do {
+								w = dsp_globals.buf_frames;
+								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
+								write_to_output(w, obuf, do_dither);
+							} while (w > 0);
+							destroy_effects_chain(&chain);
+							stream.fs = input_fs;
+							stream.channels = input_channels;
+							if (show_progress)
+								LOG(LL_VERBOSE, "\n");
+							if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+								cleanup_and_exit(1);
+							if (out_codec->fs != stream.fs) {
+								LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
+							if (out_codec->channels != stream.channels) {
+								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
 							break;
 						case 'q':
 							out_codec->reset(out_codec);
