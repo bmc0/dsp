@@ -18,11 +18,6 @@
 #define SX(s) S(s)
 #define MAX(a, b) ((a > b) ? a : b)
 
-enum {
-	INPUT = 0,
-	OUTPUT,
-};
-
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
 	size_t buf_len;
