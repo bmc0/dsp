@@ -170,6 +170,7 @@ void destroy_effects_chain(struct effects_chain *chain)
 		chain->head = e->next;
 		destroy_effect(e);
 	}
+	chain->tail = NULL;
 }
 
 void print_all_effects(void)
