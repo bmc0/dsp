@@ -19,7 +19,7 @@ struct crossfeed_hrtf_state {
 	sample_t *overlap_right_input[2];
 	fftw_plan plan_r2c_left_c0, plan_r2c_left_c1, plan_c2r_left_c0, plan_c2r_left_c1;
 	fftw_plan plan_r2c_right_c0, plan_r2c_right_c1, plan_c2r_right_c0, plan_c2r_right_c1;
-	ssize_t input_frames, fr_frames, buf_pos, drain_pos;
+	ssize_t input_frames, fr_frames, buf_pos, drain_pos, drain_frames;
 	int has_output;
 };
 
@@ -120,6 +120,7 @@ void crossfeed_hrtf_effect_drain(struct effect *e, ssize_t *frames, sample_t *ob
 	sample_t *ibuf;
 	ssize_t npad = state->input_frames / 2 - state->buf_pos, oframes = 0;
 	npad = (npad > *frames) ? *frames : npad;
+	state->drain_frames = (state->drain_frames) ? state->drain_frames : state->buf_pos;
 	if (state->has_output && state->buf_pos != 0 && npad > 0) {
 		ibuf = calloc(npad * e->ostream.channels, sizeof(sample_t));
 		crossfeed_hrtf_effect_run(e, &npad, ibuf, obuf);
@@ -127,7 +128,7 @@ void crossfeed_hrtf_effect_drain(struct effect *e, ssize_t *frames, sample_t *ob
 		*frames = npad;
 	}
 	else if (state->has_output) {
-		while (state->drain_pos < state->input_frames / 2 && oframes < *frames) {
+		while (state->drain_pos < state->drain_frames && oframes < *frames) {
 			/* sum left ear output */
 			obuf[oframes * 2 + 0] = state->output_left_input[0][state->drain_pos] + state->output_right_input[0][state->drain_pos];
 			/* sum right ear output */
