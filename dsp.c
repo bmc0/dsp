@@ -64,7 +64,7 @@ static const char interactive_help[] =
 	"  r : restart current input\n"
 	"  n : skip current input\n"
 	"  c : pause\n"
-	"  e : rebuild the effects chain\n"
+	"  e : rebuild effects chain\n"
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
@@ -449,6 +449,9 @@ int main(int argc, char *argv[])
 							out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
 							break;
 						case 'e':
+							if (show_progress)
+								fputs("\033[1K\r", stderr);
+							LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
 							do {
 								w = dsp_globals.buf_frames;
 								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
@@ -457,8 +460,6 @@ int main(int argc, char *argv[])
 							destroy_effects_chain(&chain);
 							stream.fs = input_fs;
 							stream.channels = input_channels;
-							if (show_progress)
-								LOG(LL_VERBOSE, "\033[1K\r");
 							if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 								cleanup_and_exit(1);
 							if (out_codec->fs != stream.fs) {
