@@ -398,7 +398,7 @@ int main(int argc, char *argv[])
 					switch (getchar()) {
 						case 'h':
 							if (show_progress)
-								fputc('\n', stderr);
+								fputs("\033[1K\r", stderr);
 							fprintf(stderr, "\n%s\n", interactive_help);
 							break;
 						case ',':
@@ -458,7 +458,7 @@ int main(int argc, char *argv[])
 							stream.fs = input_fs;
 							stream.channels = input_channels;
 							if (show_progress)
-								LOG(LL_VERBOSE, "\n");
+								LOG(LL_VERBOSE, "\033[1K\r");
 							if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 								cleanup_and_exit(1);
 							if (out_codec->fs != stream.fs) {
@@ -473,7 +473,7 @@ int main(int argc, char *argv[])
 						case 'q':
 							out_codec->reset(out_codec);
 							if (show_progress)
-								fputc('\n', stderr);
+								fputs("\033[1K\r", stderr);
 							goto end_rw_loop;
 					}
 					if (show_progress)
@@ -493,7 +493,7 @@ int main(int argc, char *argv[])
 			pos = 0;
 			destroy_codec_list_head(&in_codecs);
 			if (show_progress)
-				fputc('\n', stderr);
+				fputs("\033[1K\r", stderr);
 		}
 		do {
 			w = dsp_globals.buf_frames;
