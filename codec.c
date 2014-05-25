@@ -4,12 +4,12 @@
 #include "util.h"
 #include "codec.h"
 
-#include "codecs/sndfile.h"
-#include "codecs/alsa.h"
-#include "codecs/ao.h"
-#include "codecs/mp3.h"
-#include "codecs/null.h"
-#include "codecs/pcm.h"
+#include "sndfile.h"
+#include "alsa.h"
+#include "ao.h"
+#include "mp3.h"
+#include "null.h"
+#include "pcm.h"
 
 struct codec_info {
 	const char *type;

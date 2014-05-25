@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "remix.h"
-#include "../util.h"
+#include "util.h"
 
 struct remix_state {
 	char **channel_selectors;

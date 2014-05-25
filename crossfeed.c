@@ -4,7 +4,7 @@
 #include <math.h>
 #include "crossfeed.h"
 #include "biquad.h"
-#include "../util.h"
+#include "util.h"
 
 struct crossfeed_state {
 	int type;

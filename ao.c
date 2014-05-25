@@ -3,8 +3,8 @@
 #include <string.h>
 #include <ao/ao.h>
 #include "ao.h"
-#include "../util.h"
-#include "../sampleconv.h"
+#include "util.h"
+#include "sampleconv.h"
 
 struct ao_state {
 	ao_device *dev;

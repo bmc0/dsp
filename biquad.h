@@ -1,8 +1,8 @@
 #ifndef _EFFECTS_BIQUAD_H
 #define _EFFECTS_BIQUAD_H
 
-#include "../dsp.h"
-#include "../effect.h"
+#include "dsp.h"
+#include "effect.h"
 
 /* See http://musicdsp.org/files/Audio-EQ-Cookbook.txt */
 

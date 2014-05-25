@@ -2,3 +2,4 @@ dsp
 .*.swp
 *.o
 *.so
+config.mk

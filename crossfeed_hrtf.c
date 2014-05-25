@@ -5,8 +5,8 @@
 #include <complex.h>
 #include <fftw3.h>
 #include "crossfeed_hrtf.h"
-#include "../codec.h"
-#include "../util.h"
+#include "codec.h"
+#include "util.h"
 
 struct crossfeed_hrtf_state {
 	fftw_complex *filter_fr_left[2];

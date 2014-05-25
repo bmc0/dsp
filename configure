@@ -1,0 +1,63 @@
+#!/bin/sh
+
+USAGE="Usage: $0 [option]
+
+Options:
+	--disable-fftw3
+	--disable-alsa
+	--disable-ao
+	--disable-mad
+	--disable-ladspa_dsp
+	--help"
+
+for i in "$@"; do
+	case "$i" in
+		--disable-fftw3)      CONFIG_DISABLE_FFTW3=y ;;
+		--disable-alsa)       CONFIG_DISABLE_ALSA=y ;;
+		--disable-ao)         CONFIG_DISABLE_AO=y ;;
+		--disable-mad)        CONFIG_DISABLE_MAD=y ;;
+		--disable-ladspa_dsp) CONFIG_DISABLE_LADSPA_DSP=y ;;
+		--help) echo "$USAGE"; exit 0 ;;
+		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;
+	esac
+done
+
+TARGETS="dsp"
+DSP_BASE_PACKAGES="sndfile"
+for i in $DSP_BASE_PACKAGES; do
+	if ! pkg-config --exists $i; then
+		echo "error: dsp requires $i"
+		exit 1
+	fi
+done
+
+# usage: check_pkg package_name disable objects cflags
+check_pkg() {
+	if [ "$2" != "y" ] && pkg-config --exists $1; then
+		echo "enabled ${3%.o} ($1)"
+		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS $3"
+		DSP_OPTIONAL_PACKAGES="$DSP_OPTIONAL_PACKAGES $1"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS $4"
+	else
+		echo "disabled ${3%.o} ($1)"
+	fi
+}
+
+unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS
+
+check_pkg fftw3 "$CONFIG_DISABLE_FFTW3" crossfeed_hrtf.o -D__HAVE_FFTW3__
+check_pkg alsa  "$CONFIG_DISABLE_ALSA"  alsa.o           -D__HAVE_ALSA__
+check_pkg ao    "$CONFIG_DISABLE_AO"    ao.o             -D__HAVE_AO__
+check_pkg mad   "$CONFIG_DISABLE_MAD"   mp3.o            -D__HAVE_MAD__
+
+if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
+	echo "enabled ladspa_dsp"
+	TARGETS="$TARGETS ladspa_dsp"
+else
+	echo "disabled ladspa_dsp"
+fi
+
+echo "all: $TARGETS
+DSP_OBJ += $DSP_OPTIONAL_OBJECTS
+DSP_EXTRA_CFLAGS := $DSP_EXTRA_CFLAGS $(pkg-config --cflags $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)
+DSP_EXTRA_LDFLAGS := $DSP_EXTRA_LDFLAGS $(pkg-config --libs $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)" > config.mk

@@ -6,8 +6,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include "pcm.h"
-#include "../util.h"
-#include "../sampleconv.h"
+#include "util.h"
+#include "sampleconv.h"
 
 struct pcm_state {
 	int fd;

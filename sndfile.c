@@ -3,7 +3,7 @@
 #include <string.h>
 #include <sndfile.h>
 #include "sndfile.h"
-#include "../util.h"
+#include "util.h"
 
 struct sndfile_type_info {
 	const char *name;

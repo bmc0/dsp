@@ -3,8 +3,8 @@
 #include <string.h>
 #include <alsa/asoundlib.h>
 #include "alsa.h"
-#include "../util.h"
-#include "../sampleconv.h"
+#include "util.h"
+#include "sampleconv.h"
 
 struct alsa_enc_info {
 	const char *name;

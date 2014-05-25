@@ -4,11 +4,11 @@
 #include "effect.h"
 #include "util.h"
 
-#include "effects/biquad.h"
-#include "effects/gain.h"
-#include "effects/crossfeed.h"
-#include "effects/crossfeed_hrtf.h"
-#include "effects/remix.h"
+#include "biquad.h"
+#include "gain.h"
+#include "crossfeed.h"
+#include "crossfeed_hrtf.h"
+#include "remix.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },

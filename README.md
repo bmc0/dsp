@@ -6,6 +6,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 #### Dependencies:
 
+* GNU Make
 * libsndfile
 
 #### Optional dependencies:
@@ -18,7 +19,9 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 #### Build:
 
-	$ ./build.sh
+	$ make
+
+Run `./configure [options]` manually if you want to build with non-default options. Run `./configure --help` to see all availiable options.
 
 ### Usage:
 
@@ -87,10 +90,6 @@ Apply effects from a file:
 ### LADSPA frontend (experimental):
 
 Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only crossfeed_hrtf).
-
-#### Build:
-
-	$ ./build_ladspa.sh
 
 #### Configuration:
 

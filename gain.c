@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "gain.h"
-#include "../util.h"
+#include "util.h"
 
 struct gain_state {
 	int channel;
