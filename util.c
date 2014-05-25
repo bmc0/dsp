@@ -226,6 +226,8 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 		LOG(LL_ERROR, "dsp: error: short read: %s\n", path);
 		goto fail;
 	}
+	close(fd);
+	fd = -1;
 	contents[file_size] = '\0';
 	if (gen_argv_from_string(contents, &argc, &argv))
 		goto fail;
