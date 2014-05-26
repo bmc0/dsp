@@ -22,6 +22,7 @@ static int input_fs = -1, input_channels = -1, interactive = -1, show_progress =
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
+static sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 
 static const char usage[] =
 	"usage: dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
@@ -95,6 +96,8 @@ static void cleanup_and_exit(int s)
 	if (out_codec != NULL)
 		destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
+	free(buf1);
+	free(buf2);
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (dsp_globals.clip_count > 0)
@@ -285,7 +288,6 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 
 int main(int argc, char *argv[])
 {
-	sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
 	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
 	struct codec *c = NULL;
