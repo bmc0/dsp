@@ -76,8 +76,8 @@ struct effect * remix_effect_init(struct effect_info *ei, struct stream_info *is
 	return e;
 
 	fail:
-	for (i = 0; i < out_channels; ++i)
-		if (state->channel_selectors)
+	if (state->channel_selectors)
+		for (i = 0; i < out_channels; ++i)
 			free(state->channel_selectors[i]);
 	free(state->channel_selectors);
 	free(state);

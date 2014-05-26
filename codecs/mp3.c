@@ -248,8 +248,7 @@ struct codec * mp3_codec_init(const char *type, int mode, const char *path, cons
 	mad_stream_finish(&state->stream);
 	mad_frame_finish(&state->frame);
 	mad_synth_finish(&state->synth);
-	if (state->buf != NULL)
-		free(state->buf);
+	free(state->buf);
 	free(state);
 	return NULL;
 }

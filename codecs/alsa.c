@@ -101,8 +101,7 @@ void alsa_destroy(struct codec *c)
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING)
 		snd_pcm_drain(state->dev);
 	snd_pcm_close(state->dev);
-	if (state->buf != NULL)
-		free(state->buf);
+	free(state->buf);
 	free(state);
 }
 

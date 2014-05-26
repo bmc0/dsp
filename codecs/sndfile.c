@@ -225,8 +225,7 @@ struct codec * sndfile_codec_init(const char *type, int mode, const char *path, 
 	fail:
 	if (f != NULL)
 		sf_close(f);
-	if (info != NULL)
-		free(info);
+	free(info);
 	return NULL;
 }
 
