@@ -18,7 +18,7 @@
 #define TIME_FMT_ARGS(frames, fs) (frames != -1) ? frames / fs / 3600 : 0, (frames != -1) ? (frames / fs / 60) % 60 : 0, (frames != -1) ? fmod((double) frames / fs, 60.0) : 0
 
 static struct termios term_attrs;
-static int input_fs = -1, input_channels = -1, interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0, force_dither = 0;
+static int input_fs = -1, input_channels = -1, interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -38,6 +38,7 @@ static const char usage[] =
 	"  -d         force dithering\n"
 	"  -D         disable dithering\n"
 	"  -p         plot effects chain instead of processing audio\n"
+	"  -V         enable verbose progress display\n"
 	"\n"
 	"input/output options:\n"
 	"  -o               output\n"
@@ -66,6 +67,7 @@ static const char interactive_help[] =
 	"  n : skip current input\n"
 	"  c : pause\n"
 	"  e : rebuild effects chain\n"
+	"  v : toggle verbose progress display\n"
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
@@ -144,7 +146,7 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 	*channels = *fs = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpVot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 			case 'h':
 				print_usage();
@@ -191,6 +193,9 @@ static int parse_io_params(int argc, char *argv[], int *mode, char **path, char 
 				break;
 			case 'p':
 				plot = 1;
+				break;
+			case 'V':
+				verbose_progress = 1;
 				break;
 			case 'o':
 				*mode = CODEC_MODE_WRITE;
@@ -263,11 +268,13 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 	ssize_t delay = lround((double) out->delay(out) / out->fs * in->fs);
 	ssize_t p = (pos > delay) ? pos - delay : 0;
 	ssize_t rem = (in->frames > p) ? in->frames - p : 0;
-	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  lat:%.2fms  peak:%.2fdBFS  clip:%ld  ",
+	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 		(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
-		TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs),
-		((double) delay / out->fs + (double) in->delay(in) / in->fs) * 1000,
-		log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
+		TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
+	if (verbose_progress)
+		fprintf(stderr, "lat:%.2fms+%.2fms  ", (double) in->delay(in) / in->fs * 1000, (double) out->delay(out) / out->fs * 1000);
+	if (verbose_progress || dsp_globals.clip_count != 0)
+		fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
 }
 
 static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
@@ -472,6 +479,9 @@ int main(int argc, char *argv[])
 								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
 								cleanup_and_exit(1);
 							}
+							break;
+						case 'v':
+							verbose_progress = (verbose_progress) ? 0 : 1;
 							break;
 						case 'q':
 							out_codec->reset(out_codec);
