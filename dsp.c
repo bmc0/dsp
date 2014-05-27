@@ -103,7 +103,7 @@ static void cleanup_and_exit(int s)
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (dsp_globals.clip_count > 0)
-		LOG(LL_NORMAL, "dsp: warning: clipped %ld samples\n", dsp_globals.clip_count);
+		LOG(LL_NORMAL, "dsp: warning: clipped %ld samples (%.2fdBFS peak)\n", dsp_globals.clip_count, log10(dsp_globals.peak) * 20);
 	exit(s);
 }
 
