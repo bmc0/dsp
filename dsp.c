@@ -260,7 +260,7 @@ static void terminate(int s)
 
 static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int pause)
 {
-	ssize_t delay = out->delay(out);
+	ssize_t delay = lround((double) out->delay(out) / out->fs * in->fs);
 	ssize_t p = (pos > delay) ? pos - delay : 0;
 	ssize_t rem = (in->frames > p) ? in->frames - p : 0;
 	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  lat:%.2fms  peak:%.2fdBFS  clip:%ld  ",
@@ -396,7 +396,7 @@ int main(int argc, char *argv[])
 			}
 			do {
 				while (interactive && (input_pending() || pause)) {
-					delay = out_codec->delay(out_codec);
+					delay = lround((double) out_codec->delay(out_codec) / out_codec->fs * in_codecs.head->fs);
 					switch (getchar()) {
 						case 'h':
 							if (show_progress)
