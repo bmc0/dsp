@@ -176,7 +176,7 @@ void destroy_effects_chain(struct effects_chain *chain)
 void print_all_effects(void)
 {
 	int i;
-	fprintf(stderr, "effects:\n");
+	fprintf(stderr, "Effects:\n");
 	for (i = 0; i < LENGTH(effects); ++i)
 		fprintf(stderr, "  %s\n", effects[i].usage);
 }

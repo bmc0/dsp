@@ -25,9 +25,9 @@ static struct codec *out_codec = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 
 static const char usage[] =
-	"usage: dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
+	"Usage: dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
 	"\n"
-	"global options:\n"
+	"Global options:\n"
 	"  -h         show this help\n"
 	"  -b frames  set buffer size (must be specified before the first input)\n"
 	"  -R ratio   set codec maximum buffer ratio (must be specified before the first input)\n"
@@ -40,7 +40,7 @@ static const char usage[] =
 	"  -p         plot effects chain instead of processing audio\n"
 	"  -V         enable verbose progress display\n"
 	"\n"
-	"input/output options:\n"
+	"Input/output options:\n"
 	"  -o               output\n"
 	"  -t type          type\n"
 	"  -e encoding      encoding\n"
@@ -49,11 +49,11 @@ static const char usage[] =
 	"  -c channels      number of channels\n"
 	"  -n               equivalent to '-t null null'\n"
 	"\n"
-	"default output:\n"
+	"Default output:\n"
 	"  type: "DEFAULT_OUTPUT_TYPE"\n"
 	"  path: "DEFAULT_OUTPUT_PATH"\n"
 	"\n"
-	"selector syntax:\n"
+	"Selector syntax:\n"
 	"  [[start][-[end]][,...]]\n";
 
 static const char interactive_help[] =

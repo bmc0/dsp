@@ -182,7 +182,7 @@ void destroy_codec_list(struct codec_list *l)
 void print_all_codecs(void)
 {
 	int i;
-	fprintf(stderr, "types:\n  type:    modes: encodings:\n");
+	fprintf(stderr, "Types:\n  Type:    Modes: Encodings:\n");
 	for (i = 0; i < LENGTH(codecs); ++i) {
 		fprintf(stderr, "  %-8s %c%c    ", codecs[i].type, (codecs[i].modes & CODEC_MODE_READ) ? 'r' : ' ', (codecs[i].modes & CODEC_MODE_WRITE) ? 'w' : ' ');
 		codecs[i].print_encodings(codecs[i].type);
