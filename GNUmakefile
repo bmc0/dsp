@@ -43,16 +43,16 @@ config.mk:
 ${DSP_OBJDIR} ${LADSPA_DSP_OBJDIR}:
 	mkdir -p $@
 
-${DSP_OBJ}: ${DSP_OBJDIR}/%.o: %.c ${DEPS}
+${DSP_OBJ}: ${DSP_OBJDIR}/%.o: %.c ${DEPS} | ${DSP_OBJDIR}
 	${CC} -c -o $@ ${DSP_CFLAGS} $<
 
-${LADSPA_DSP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.c ${DEPS}
+${LADSPA_DSP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.c ${DEPS} | ${LADSPA_DSP_OBJDIR}
 	${CC} -c -o $@ ${LADSPA_DSP_CFLAGS} $<
 
-dsp: ${DSP_OBJDIR} ${DSP_OBJ}
+dsp: ${DSP_OBJ}
 	${CC} -o $@ ${DSP_LDFLAGS} ${DSP_OBJ}
 
-ladspa_dsp.so: ${LADSPA_DSP_OBJDIR} ${LADSPA_DSP_OBJ}
+ladspa_dsp.so: ${LADSPA_DSP_OBJ}
 	${CC} -o $@ ${LADSPA_DSP_LDFLAGS} ${LADSPA_DSP_OBJ}
 
 clean:
