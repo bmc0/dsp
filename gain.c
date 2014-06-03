@@ -43,7 +43,7 @@ void gain_effect_plot(struct effect *e, int i)
 	if (state->channel == -1) {
 		for (k = 0; k < e->ostream.channels; ++k) {
 			if (GET_BIT(e->channel_selector, k))
-				printf("H%d_%d(f)=%.15e\n", k, i, 20 * log10(state->mult));
+				printf("H%d_%d(f)=%.15e\n", k, i, 20 * log10(fabs(state->mult)));
 			else
 				printf("H%d_%d(f)=0\n", k, i);
 		}
@@ -51,7 +51,7 @@ void gain_effect_plot(struct effect *e, int i)
 	else {
 		for (k = 0; k < e->ostream.channels; ++k) {
 			if (k == state->channel)
-				printf("H%d_%d(f)=%.15e\n", k, i, 20 * log10(state->mult));
+				printf("H%d_%d(f)=%.15e\n", k, i, 20 * log10(fabs(state->mult)));
 			else
 				printf("H%d_%d(f)=0\n", k, i);
 		}
@@ -74,6 +74,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	struct effect *e;
 	struct gain_state *state;
 	int channel = -1;
+	char *g;
 	double mult;
 
 	if (argc != 2 && argc != 3) {
@@ -83,10 +84,14 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	if (argc == 3) {
 		channel = atoi(argv[1]);
 		CHECK_RANGE(channel >= 0 && channel < istream->channels, "channel");
-		mult = pow(10, atof(argv[2]) / 20);
+		g = argv[2];
 	}
 	else
-		mult = pow(10, atof(argv[1]) / 20);
+		g = argv[1];
+	if (strcmp(argv[0], "mult") == 0)
+		mult = atof(g);
+	else
+		mult = pow(10, atof(g) / 20);
 	e = malloc(sizeof(struct effect));
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;

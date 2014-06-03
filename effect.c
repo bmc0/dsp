@@ -25,6 +25,7 @@ static struct effect_info effects[] = {
 	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp", biquad_effect_init },
 	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",             biquad_effect_init },
 	{ "gain",               "gain [channel] gain",                  gain_effect_init },
+	{ "mult",               "mult [channel] multiplier",            gain_effect_init },
 	{ "crossfeed",          "crossfeed f0[k] separation",           crossfeed_effect_init },
 #ifdef __HAVE_FFTW3__
 	{ "crossfeed_hrtf",     "crossfeed_hrtf left_fir right_fir",    crossfeed_hrtf_effect_init },
