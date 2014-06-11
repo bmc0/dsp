@@ -1,5 +1,5 @@
-#ifndef _CODEC_SNDFILE_H
-#define _CODEC_SNDFILE_H
+#ifndef _SNDFILE_H
+#define _SNDFILE_H
 
 #include "dsp.h"
 #include "codec.h"

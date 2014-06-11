@@ -1,5 +1,5 @@
-#ifndef _CODECS_NULL_H
-#define _CODECS_NULL_H
+#ifndef _NULL_H
+#define _NULL_H
 
 #include "dsp.h"
 #include "codec.h"

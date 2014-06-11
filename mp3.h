@@ -1,5 +1,5 @@
-#ifndef _CODEC_MP3_H
-#define _CODEC_MP3_H
+#ifndef _MP3_H
+#define _MP3_H
 
 #include "dsp.h"
 #include "codec.h"

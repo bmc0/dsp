@@ -1,5 +1,5 @@
-#ifndef _EFFECTS_BIQUAD_H
-#define _EFFECTS_BIQUAD_H
+#ifndef _BIQUAD_H
+#define _BIQUAD_H
 
 #include "dsp.h"
 #include "effect.h"

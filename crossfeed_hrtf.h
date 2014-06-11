@@ -1,5 +1,5 @@
-#ifndef _EFFECTS_CROSSFEED_HRTF_H
-#define _EFFECTS_CROSSFEED_HRTF_H
+#ifndef _CROSSFEED_HRTF_H
+#define _CROSSFEED_HRTF_H
 
 #include "dsp.h"
 #include "effect.h"

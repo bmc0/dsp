@@ -1,5 +1,5 @@
-#ifndef _CODECS_ALSA_H
-#define _CODECS_ALSA_H
+#ifndef _ALSA_H
+#define _ALSA_H
 
 #include "dsp.h"
 #include "codec.h"
