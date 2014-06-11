@@ -9,6 +9,7 @@
 #include "crossfeed.h"
 #include "crossfeed_hrtf.h"
 #include "remix.h"
+#include "delay.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
@@ -31,6 +32,7 @@ static struct effect_info effects[] = {
 	{ "crossfeed_hrtf",     "crossfeed_hrtf left_fir right_fir",    crossfeed_hrtf_effect_init },
 #endif
 	{ "remix",              "remix channel_selector|. ...",         remix_effect_init },
+	{ "delay",              "delay seconds",                        delay_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)
