@@ -14,8 +14,6 @@
 #define DEFAULT_CONFIG_LOCATION "/ladspa_dsp/config"
 #define DEFAULT_XDG_CONFIG_DIR "/.config"
 
-#define S(s) #s
-#define SX(s) S(s)
 #define MAX(a, b) ((a > b) ? a : b)
 
 struct ladspa_dsp {
@@ -23,8 +21,6 @@ struct ladspa_dsp {
 	size_t buf_len;
 	struct effects_chain chain;
 	double max_ratio;
-
-	/* ports */
 	LADSPA_Data **ports;
 };
 
