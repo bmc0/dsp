@@ -12,7 +12,11 @@ void biquad_init(struct biquad_state *state, double b0, double b1, double b2, do
 	state->c2 = b2 / a0;
 	state->c3 = a1 / a0;
 	state->c4 = a2 / a0;
+	biquad_reset(state);
+}
 
+void biquad_reset(struct biquad_state *state)
+{
 	state->x[0] = state->x[1] = 0.0;
 	state->y[0] = state->y[1] = 0.0;
 }
@@ -192,7 +196,10 @@ void biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample
 
 void biquad_effect_reset(struct effect *e)
 {
-	/* do nothing */
+	int i;
+	struct biquad_state *state = (struct biquad_state *) e->data;
+	for (i = 0; i < e->ostream.channels; ++i)
+		biquad_reset(&state[i]);
 }
 
 void biquad_effect_plot(struct effect *e, int i)

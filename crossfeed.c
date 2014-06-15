@@ -36,7 +36,11 @@ void crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 
 void crossfeed_effect_reset(struct effect *e)
 {
-	/* do nothing */
+	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
+	biquad_reset(&state->f0_c0);
+	biquad_reset(&state->f0_c1);
+	biquad_reset(&state->f1_c0);
+	biquad_reset(&state->f1_c1);
 }
 
 void crossfeed_effect_plot(struct effect *e, int i)

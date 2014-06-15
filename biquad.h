@@ -28,6 +28,7 @@ struct biquad_state {
 };
 
 void biquad_init(struct biquad_state *, double, double, double, double, double, double);
+void biquad_reset(struct biquad_state *);
 void biquad_init_using_type(struct biquad_state *, int, double, double, double, double, double);
 sample_t biquad(struct biquad_state *, sample_t);
 struct effect * biquad_effect_init(struct effect_info *, struct stream_info *, char *, int, char **);
