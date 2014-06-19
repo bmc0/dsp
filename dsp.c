@@ -479,6 +479,10 @@ int main(int argc, char *argv[])
 								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
 								cleanup_and_exit(1);
 							}
+							free(buf1);
+							free(buf2);
+							buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+							buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 							break;
 						case 'v':
 							verbose_progress = (verbose_progress) ? 0 : 1;
