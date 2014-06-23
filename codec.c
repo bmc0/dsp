@@ -5,6 +5,7 @@
 #include "codec.h"
 
 #include "sndfile.h"
+#include "ffmpeg.h"
 #include "alsa.h"
 #include "ao.h"
 #include "mp3.h"
@@ -76,6 +77,9 @@ struct codec_info codecs[] = {
 	{ "ogg",     ogg_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "mpc2k",   mpc2k_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "rf64",    rf64_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+#ifdef __HAVE_FFMPEG__
+	{ "ffmpeg",  NULL,      CODEC_MODE_READ,                  ffmpeg_codec_init,  ffmpeg_codec_print_encodings },
+#endif
 #ifdef __HAVE_ALSA__
 	{ "alsa",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
 #endif
@@ -90,6 +94,9 @@ struct codec_info codecs[] = {
 
 static const char *fallback_codecs[] = {
 	"sndfile",
+#ifdef __HAVE_FFMPEG__
+	"ffmpeg",
+#endif
 };
 
 static struct codec_info * get_codec_info_by_type(const char *type)

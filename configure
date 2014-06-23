@@ -3,6 +3,7 @@
 USAGE="Usage: $0 [option]
 
 Options:
+  --disable-ffmpeg
   --disable-fftw3
   --disable-alsa
   --disable-ao
@@ -12,6 +13,7 @@ Options:
 
 for i in "$@"; do
 	case "$i" in
+		--disable-ffmpeg)     CONFIG_DISABLE_FFMPEG=y ;;
 		--disable-fftw3)      CONFIG_DISABLE_FFTW3=y ;;
 		--disable-alsa)       CONFIG_DISABLE_ALSA=y ;;
 		--disable-ao)         CONFIG_DISABLE_AO=y ;;
@@ -45,6 +47,7 @@ check_pkg() {
 
 unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LDFLAGS
 
+check_pkg "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 check_pkg fftw3 "$CONFIG_DISABLE_FFTW3" crossfeed_hrtf.o -D__HAVE_FFTW3__
 check_pkg alsa  "$CONFIG_DISABLE_ALSA"  alsa.o           -D__HAVE_ALSA__
 check_pkg ao    "$CONFIG_DISABLE_AO"    ao.o             -D__HAVE_AO__
