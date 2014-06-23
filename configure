@@ -3,12 +3,12 @@
 USAGE="Usage: $0 [option]
 
 Options:
-	--disable-fftw3
-	--disable-alsa
-	--disable-ao
-	--disable-mad
-	--disable-ladspa_dsp
-	--help"
+  --disable-fftw3
+  --disable-alsa
+  --disable-ao
+  --disable-mad
+  --disable-ladspa_dsp
+  --help"
 
 for i in "$@"; do
 	case "$i" in
