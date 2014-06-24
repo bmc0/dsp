@@ -5,12 +5,13 @@
 #include <sys/types.h>
 
 enum {
-	LL_ERROR = 1,
+	LL_SILENT = 0,
+	LL_ERROR,
 	LL_NORMAL,
 	LL_VERBOSE,
 };
-#define LOG(l, ...) do { if (dsp_globals.loglevel >= l) fprintf(stderr, __VA_ARGS__); } while (0)
-#define LOGLEVEL(l) dsp_globals.loglevel >= l
+#define LOGLEVEL(l) (dsp_globals.loglevel >= l)
+#define LOG(l, ...) do { if (LOGLEVEL(l)) fprintf(stderr, __VA_ARGS__); } while (0)
 
 #define DEFAULT_FS            44100
 #define DEFAULT_CHANNELS      1

@@ -117,7 +117,9 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	AVCodec *codec = NULL;
 
 	if (!av_registered) {
-		if (!(LOGLEVEL(LL_VERBOSE)))
+		if (LOGLEVEL(LL_VERBOSE))
+			av_log_set_level(AV_LOG_VERBOSE);
+		else if (LOGLEVEL(LL_SILENT))
 			av_log_set_level(AV_LOG_QUIET);
 		av_register_all();
 		av_registered = 1;
