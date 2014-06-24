@@ -49,6 +49,7 @@ static const char *mp3_ext[]   = { ".mp3", NULL };
 #endif
 
 struct codec_info codecs[] = {
+	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
 	{ "sndfile", NULL,      CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "wav",     wav_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "aiff",    aiff_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
@@ -84,7 +85,6 @@ struct codec_info codecs[] = {
 #ifdef __HAVE_MAD__
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
 #endif
-	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
 	{ "pcm",     NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pcm_codec_init,     pcm_codec_print_encodings },
 };
 
