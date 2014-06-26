@@ -112,7 +112,7 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 		if (channels == -1)
 			channels = e->ostream.channels;
 		else if (channels != e->ostream.channels) {
-			LOG(LL_ERROR, "dsp: plot: error: number of channels cannot change: %s", e->name);
+			LOG(LL_ERROR, "dsp: plot: error: number of channels cannot change: %s\n", e->name);
 			return;
 		}
 		e = e->next;

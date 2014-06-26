@@ -53,7 +53,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG(LL_ERROR, "dsp: pcm: read failed: %s", strerror(errno));
+		LOG(LL_ERROR, "dsp: pcm: read failed: %s\n", strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -72,7 +72,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
 		n = write(state->fd, state->buf, n * c->channels * state->enc_info->bytes);
 		if (n == -1) {
-			LOG(LL_ERROR, "dsp: pcm: write failed: %s", strerror(errno));
+			LOG(LL_ERROR, "dsp: pcm: write failed: %s\n", strerror(errno));
 			state->pos += i;
 			return i;
 		}
