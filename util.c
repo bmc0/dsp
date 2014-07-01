@@ -47,13 +47,18 @@ int parse_selector(const char *s, char *b, int n)
 		if (*s >= '0' && *s <= '9') {
 			v = atoi(s);
 			if (v > n - 1 || v < 0) {
-				LOG(LL_ERROR, "dsp: parse_selector: value out of range: %d\n", v);
+				LOG(LL_ERROR, "dsp: parse_selector: error: value out of range: %d\n", v);
 				return 1;
 			}
-			if (dash)
-				end = atoi(s);
+			if (dash) {
+				if (v < start) {
+					LOG(LL_ERROR, "dsp: parse_selector: error: malformed range: %d-%d\n", (start == -1) ? 0 : start, v);
+					return 1;
+				}
+				end = v;
+			}
 			else
-				start = atoi(s);
+				start = v;
 			while (*s >= '0' && *s <= '9')
 				++s;
 		}
@@ -66,6 +71,10 @@ int parse_selector(const char *s, char *b, int n)
 			++s;
 		}
 		else if (*s == ',' || *s == '\0' ) {
+			if (start == -1 && end == -1 && !dash) {
+				LOG(LL_ERROR, "dsp: parse_selector: syntax error: ',' unexpected\n");
+				return 1;
+			}
 			set_range(b, n, start, end, dash);
 			start = end = -1;
 			dash = 0;
@@ -76,6 +85,10 @@ int parse_selector(const char *s, char *b, int n)
 			LOG(LL_ERROR, "dsp: parse_selector: syntax error: invalid character: %c\n", *s);
 			return 1;
 		}
+	}
+	if (start == -1 && end == -1 && !dash) {
+		LOG(LL_ERROR, "dsp: parse_selector: syntax error: ',' unexpected\n");
+		return 1;
 	}
 	set_range(b, n, start, end, dash);
 	return 0;
