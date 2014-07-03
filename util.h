@@ -3,7 +3,6 @@
 
 #include <string.h>
 #include "dsp.h"
-#include "effect.h"
 
 #define LENGTH(x) (sizeof(x) / sizeof(x[0]))
 #define CHECK_RANGE(cond, name) \
@@ -21,8 +20,6 @@
 double parse_freq(const char *);
 int parse_selector(const char *, char *, int);
 void print_selector(char *, int);
-int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);
-int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, char *, const char *, const char *);
 int gen_argv_from_string(char *, int *, char ***);
 
 #endif

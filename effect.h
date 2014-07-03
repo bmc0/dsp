@@ -32,6 +32,8 @@ struct effect_info * get_effect_info(const char *);
 struct effect * init_effect(struct effect_info *, struct stream_info *, char *, int, char **);
 void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
+int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);
+int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, char *, const char *, const char *);
 double get_effects_chain_max_ratio(struct effects_chain *);
 sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void reset_effects_chain(struct effects_chain *);
