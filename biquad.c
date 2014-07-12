@@ -394,7 +394,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		return NULL;
 	}
 
-	e = malloc(sizeof(struct effect));
+	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -406,7 +406,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->plot = biquad_effect_plot;
 	e->drain = biquad_effect_drain;
 	e->destroy = biquad_effect_destroy;
-	state = malloc(sizeof(struct biquad_state) * istream->channels);
+	state = calloc(istream->channels, sizeof(struct biquad_state));
 	if (type == BIQUAD_NONE) {
 		for (i = 0; i < istream->channels; ++i)
 			biquad_init(&state[i], b0, b1, b2, a0, a1, a2);

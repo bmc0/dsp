@@ -92,7 +92,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 		mult = atof(g);
 	else
 		mult = pow(10, atof(g) / 20);
-	e = malloc(sizeof(struct effect));
+	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -104,7 +104,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	e->plot = gain_effect_plot;
 	e->drain = gain_effect_drain;
 	e->destroy = gain_effect_destroy;
-	state = malloc(sizeof(struct gain_state));
+	state = calloc(1, sizeof(struct gain_state));
 	state->channel = channel;
 	state->mult = mult;
 	e->data = state;
