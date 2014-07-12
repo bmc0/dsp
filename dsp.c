@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
 			LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
 			cleanup_and_exit(1);
 		}
-		out_codec->frames = in_frames;
+		out_codec->frames = in_frames * (get_effects_chain_total_ratio(&chain) * stream.channels / input_channels);
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 

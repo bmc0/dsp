@@ -235,6 +235,17 @@ double get_effects_chain_max_ratio(struct effects_chain *chain)
 	return max_ratio;
 }
 
+double get_effects_chain_total_ratio(struct effects_chain *chain)
+{
+	struct effect *e = chain->head;
+	double ratio = 1.0;
+	while (e != NULL) {
+		ratio *= e->ratio;
+		e = e->next;
+	}
+	return ratio;
+}
+
 sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
