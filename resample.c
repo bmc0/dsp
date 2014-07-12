@@ -11,7 +11,7 @@
 #define MIN(a, b) ((a < b) ? a : b)
 
 /* Tunables */
-static double bw = 0.95;  /* transition band starts at out_rate * bw / 2 */
+static double bw = 0.95;
 
 struct resample_state {
 	struct {
@@ -28,9 +28,9 @@ struct resample_state {
 void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
-	ssize_t i, k, iframes = 0, oframes = 0, n_oframes = ceil((double) *frames * e->ratio);
+	ssize_t i, k, iframes = 0, oframes = 0, max_oframes = (double) *frames * e->worst_case_ratio;
 
-	while (iframes < *frames && oframes < n_oframes) {
+	while (iframes < *frames) {
 		while (state->in_buf_pos < state->in_len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i)
 				state->input[i][state->in_buf_pos] = ibuf[iframes * e->ostream.channels + i];
@@ -38,7 +38,7 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 			++state->in_buf_pos;
 		}
 
-		while (state->out_buf_pos < state->out_len && oframes < n_oframes && state->has_output) {
+		while (state->out_buf_pos < state->out_len && oframes < max_oframes && state->has_output) {
 			for (i = 0; i < e->ostream.channels; ++i)
 				obuf[oframes * e->ostream.channels + i] = state->output[i][state->out_buf_pos];
 			++oframes;
@@ -47,7 +47,6 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 
 		if (state->in_buf_pos == state->in_len && (!state->has_output || state->out_buf_pos == state->out_len)) {
 			for (i = 0; i < e->ostream.channels; ++i) {
-				memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
 				/* FFT(state->input[i]) -> state->tmp_fr */
 				fftw_execute(state->r2c_plan[i]);
 				/* convolve input with sinc filter */
@@ -66,7 +65,10 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 			}
 			state->in_buf_pos = state->out_buf_pos = 0;
 			if (state->has_output == 0) {
-				state->out_buf_pos = state->m / 2 * state->ratio.n / state->ratio.d; /* FIXME: this is probably not quite correct... */
+				if (state->in_len == state->sinc_len)
+					state->out_buf_pos = state->m / 2 * state->ratio.n / state->ratio.d; /* FIXME: this is probably not quite correct... */
+				else
+					state->out_buf_pos = state->m / 2;
 				state->has_output = 1;
 			}
 		}
@@ -130,6 +132,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	e->ostream.fs = rate;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->ratio = (double) rate / istream->fs;
+	e->worst_case_ratio = ceil((double) rate / istream->fs);
 	e->run = resample_effect_run;
 	e->reset = resample_effect_reset;
 	e->drain = resample_effect_drain;

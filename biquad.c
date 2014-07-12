@@ -400,7 +400,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
 	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
-	e->ratio = 1.0;
+	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = biquad_effect_run;
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;

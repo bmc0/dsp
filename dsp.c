@@ -386,8 +386,8 @@ int main(int argc, char *argv[])
 		else
 			interactive = 0;
 
-		buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)) + 1, sizeof(sample_t));
-		buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)) + 1, sizeof(sample_t));
+		buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+		buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 
 		if (interactive) {
 			setup_term();

@@ -79,7 +79,7 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
 	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
-	e->ratio = 1.0;
+	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = delay_effect_run;
 	e->reset = delay_effect_reset;
 	e->drain = delay_effect_drain;

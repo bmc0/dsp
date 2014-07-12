@@ -232,7 +232,7 @@ double get_effects_chain_max_ratio(struct effects_chain *chain)
 	struct effect *e = chain->head;
 	double ratio = 1.0, max_ratio = 1.0;
 	while (e != NULL) {
-		ratio *= e->ratio;
+		ratio *= e->worst_case_ratio;
 		max_ratio = (ratio > max_ratio) ? ratio : max_ratio;
 		e = e->next;
 	}
