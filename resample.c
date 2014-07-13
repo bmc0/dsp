@@ -76,6 +76,11 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 	*frames = oframes;
 }
 
+void resample_copy_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+{
+	memcpy(obuf, ibuf, *frames * e->ostream.channels * sizeof(sample_t));
+}
+
 void resample_effect_reset(struct effect *e)
 {
 	int i;
@@ -86,7 +91,17 @@ void resample_effect_reset(struct effect *e)
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 }
 
+void resample_copy_effect_reset(struct effect *e)
+{
+	/* do nothing */
+}
+
 void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+{
+	*frames = 0;
+}
+
+void resample_copy_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	*frames = 0;
 }
@@ -111,6 +126,11 @@ void resample_effect_destroy(struct effect *e)
 	free(state);
 }
 
+void resample_copy_effect_destroy(struct effect *e)
+{
+	/* do nothing */
+}
+
 struct effect * resample_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
 {
 	struct effect *e;
@@ -133,6 +153,16 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->ratio = (double) rate / istream->fs;
 	e->worst_case_ratio = ceil((double) rate / istream->fs);
+
+	if (rate == istream->fs) {
+		e->run = resample_copy_effect_run;
+		e->reset = resample_copy_effect_reset;
+		e->drain = resample_copy_effect_drain;
+		e->destroy = resample_copy_effect_destroy;
+		LOG(LL_VERBOSE, "dsp: %s: info: sample rates match; no proccessing will be done\n", argv[0]);
+		return e;
+	}
+
 	e->run = resample_effect_run;
 	e->reset = resample_effect_reset;
 	e->drain = resample_effect_drain;
