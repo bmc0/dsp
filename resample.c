@@ -17,12 +17,12 @@ struct resample_state {
 	struct {
 		int n, d;
 	} ratio;
-	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos;
+	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos, drain_pos, drain_frames;
 	fftw_complex *sinc_fr;
 	fftw_complex *tmp_fr;
 	sample_t **input, **output, **overlap;
 	fftw_plan *r2c_plan, *c2r_plan;
-	int has_output;
+	int has_output, is_draining;
 };
 
 void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -65,10 +65,7 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 			}
 			state->in_buf_pos = state->out_buf_pos = 0;
 			if (state->has_output == 0) {
-				if (state->in_len == state->sinc_len)
-					state->out_buf_pos = state->m / 2 * state->ratio.n / state->ratio.d; /* FIXME: this is probably not quite correct... */
-				else
-					state->out_buf_pos = state->m / 2;
+				state->out_buf_pos = (state->in_len == state->sinc_len) ? state->m / 2 * state->ratio.n / state->ratio.d : state->m / 2;
 				state->has_output = 1;
 			}
 		}
@@ -98,7 +95,27 @@ void resample_copy_effect_reset(struct effect *e)
 
 void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
-	*frames = -1;
+	struct resample_state *state = (struct resample_state *) e->data;
+	if (!state->has_output && state->in_buf_pos == 0)
+		*frames = -1;
+	else {
+		if (!state->is_draining) {
+			if (state->has_output) {
+				state->drain_frames += (state->in_len == state->sinc_len) ? state->m / 2 * state->ratio.n / state->ratio.d : state->m / 2;  /* filter delay */
+				state->drain_frames += state->out_len - state->out_buf_pos;  /* pending output frames */
+			}
+			state->drain_frames += state->in_buf_pos * state->ratio.n / state->ratio.d;  /* pending input frames */
+			state->is_draining = 1;
+		}
+		if (state->drain_pos < state->drain_frames) {
+			memset(obuf, 0, *frames * e->ostream.channels * sizeof(sample_t));
+			resample_effect_run(e, frames, obuf, obuf);
+			state->drain_pos += *frames;
+			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
+		}
+		else
+			*frames = -1;
+	}
 }
 
 void resample_copy_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
@@ -241,7 +258,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	fftw_destroy_plan(sinc_plan);
 	fftw_free(sinc);
 
-	/* convolve sinc function with itself (should hit about -150dB stopband attenuation) */
+	/* convolve sinc function with itself (should hit >150dB stopband attenuation) */
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
