@@ -317,11 +317,11 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
-	ssize_t dframes = 0;
+	ssize_t dframes = -1;
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
 	double ratio = 1.0;
 	struct effect *e = chain->head;
-	while (e != NULL && dframes == 0) {
+	while (e != NULL && dframes == -1) {
 		dframes = *frames * ratio;
 		e->drain(e, &dframes, ibuf);
 		ratio *= e->ratio;

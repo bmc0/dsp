@@ -60,7 +60,7 @@ void gain_effect_plot(struct effect *e, int i)
 
 void gain_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
-	*frames = 0;
+	*frames = -1;
 }
 
 void gain_effect_destroy(struct effect *e)

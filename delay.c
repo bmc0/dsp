@@ -39,7 +39,7 @@ void delay_effect_reset(struct effect *e)
 
 void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
-	*frames = 0;
+	*frames = -1;
 }
 
 void delay_effect_destroy(struct effect *e)

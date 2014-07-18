@@ -464,8 +464,9 @@ int main(int argc, char *argv[])
 							do {
 								w = dsp_globals.buf_frames;
 								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
-								write_to_output(w, obuf, do_dither);
-							} while (w > 0);
+								if (w > 0)
+									write_to_output(w, obuf, do_dither);
+							} while (w != -1);
 							destroy_effects_chain(&chain);
 							stream.fs = input_fs;
 							stream.channels = input_channels;
@@ -515,8 +516,9 @@ int main(int argc, char *argv[])
 		do {
 			w = dsp_globals.buf_frames;
 			obuf = drain_effects_chain(&chain, &w, buf1, buf2);
-			write_to_output(w, obuf, do_dither);
-		} while (w > 0);
+			if (w > 0)
+				write_to_output(w, obuf, do_dither);
+		} while (w != -1);
 	}
 	end_rw_loop:
 	cleanup_and_exit(0);
