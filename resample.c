@@ -11,7 +11,8 @@
 #define MIN(a, b) ((a < b) ? a : b)
 
 /* Tunables */
-static double bw = 0.95;
+static double bw = 0.95;   /* bandwidth */
+static double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
 
 struct resample_state {
 	struct {
@@ -205,10 +206,10 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	/* calulate params for windowed sinc function */
 	width = (low_rate - low_rate * bw) / 2;
 	fc = (low_rate - width) / high_rate;
-	m = round(6 / (width / high_rate));
+	m = round(m_fact / (width / high_rate));
 
 	/* determine array lengths */
-	state->m = (size_t) (m + 1) * 2 - 1;  /* final length after second pass */
+	state->m = (size_t) (m + 1) * 2 - 1;  /* final length after convolving sinc function with itself */
 	i = high_rate / gcd;
 	state->sinc_len = MAX(state->m, i);
 	if (state->sinc_len % i != 0)
@@ -250,15 +251,19 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 			sinc[i] = fc;
 		else
 			sinc[i] = sin(M_PI * fc * (i - m / 2)) / (M_PI * (i - m / 2));
-		/* apply blackman window */
-		sinc[i] *= 0.42 - 0.5 * cos(2 * M_PI * i / m) + 0.08 * cos(4 * M_PI * i / m);
+		/* apply Blackman window (~75dB stopband attenuation) */
+		/* sinc[i] *= 0.42 - 0.5 * cos(2 * M_PI * i / m) + 0.08 * cos(4 * M_PI * i / m); */
+		/* apply Nuttall window (continuous first derivative) (~112dB stopband attenuation) */
+		sinc[i] *= 0.355768 - 0.487396 * cos(2 * M_PI * i / m) + 0.144232 * cos(4 * M_PI * i / m) - 0.012604 * cos(6 * M_PI * i / m);
+		/* apply Blackman-Nuttall window (~114dB stopband attenuation) */
+		/* sinc[i] *= 0.3635819 - 0.4891775 * cos(2 * M_PI * i / m) + 0.1365995 * cos(4 * M_PI * i / m) - 0.0106411 * cos(6 * M_PI * i / m); */
 	}
 
 	fftw_execute(sinc_plan);
 	fftw_destroy_plan(sinc_plan);
 	fftw_free(sinc);
 
-	/* convolve sinc function with itself (should hit >150dB stopband attenuation) */
+	/* convolve sinc function with itself (doubles stopband attenuation) */
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
