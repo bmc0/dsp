@@ -13,7 +13,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 * libmad: for mp3 input support
 * alsa-lib: for alsa input/output support
-* fftw3: for crossfeed_hrtf effect
+* fftw3: for crossfeed_hrtf and resample effects
 * libao: for ao output support
 * LADSPA: for building the LADSPA frontend
 * ffmpeg (libavcodec, libavformat, libavutil, and libavresample): for ffmpeg input support.
