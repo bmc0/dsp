@@ -90,7 +90,7 @@ Apply effects from a file:
 
 ### LADSPA frontend (experimental):
 
-Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only crossfeed_hrtf).
+Currently, this frontend will not work correctly with effects that add latency between their input and output (currently crossfeed_hrtf and resample).
 
 #### Configuration:
 
