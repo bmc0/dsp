@@ -34,7 +34,7 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 	while (iframes < *frames) {
 		while (state->in_buf_pos < state->in_len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i)
-				state->input[i][state->in_buf_pos] = ibuf[iframes * e->ostream.channels + i];
+				state->input[i][state->in_buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 			++iframes;
 			++state->in_buf_pos;
 		}
@@ -109,8 +109,7 @@ void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
-			memset(obuf, 0, *frames * e->ostream.channels * sizeof(sample_t));
-			resample_effect_run(e, frames, obuf, obuf);
+			resample_effect_run(e, frames, NULL, obuf);
 			state->drain_pos += *frames;
 			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
 		}
