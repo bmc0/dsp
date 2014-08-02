@@ -15,6 +15,7 @@
 #include "remix.h"
 #include "delay.h"
 #include "resample.h"
+#include "fir.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
@@ -40,6 +41,7 @@ static struct effect_info effects[] = {
 	{ "delay",              "delay seconds",                        delay_effect_init },
 #ifdef __HAVE_FFTW3__
 	{ "resample",           "resample fs",                          resample_effect_init },
+	{ "fir",                "fir impulse_file",                     fir_effect_init },
 #endif
 };
 
