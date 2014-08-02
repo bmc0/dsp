@@ -13,7 +13,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 * libmad: for mp3 input support
 * alsa-lib: for alsa input/output support
-* fftw3: for crossfeed_hrtf and resample effects
+* fftw3: for resample and fir effects
 * libao: for ao output support
 * LADSPA: for building the LADSPA frontend
 * ffmpeg (libavcodec, libavformat, libavutil, and libavresample): for ffmpeg input support.
@@ -90,7 +90,7 @@ Apply effects from a file:
 
 ### LADSPA frontend (experimental):
 
-Currently, this frontend will not work correctly with effects that add latency between their input and output (currently crossfeed_hrtf and resample).
+Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only resample and fir).
 
 #### Configuration:
 

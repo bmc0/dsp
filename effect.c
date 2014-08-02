@@ -11,7 +11,6 @@
 #include "biquad.h"
 #include "gain.h"
 #include "crossfeed.h"
-#include "crossfeed_hrtf.h"
 #include "remix.h"
 #include "delay.h"
 #include "resample.h"
@@ -34,9 +33,6 @@ static struct effect_info effects[] = {
 	{ "gain",               "gain [channel] gain",                  gain_effect_init },
 	{ "mult",               "mult [channel] multiplier",            gain_effect_init },
 	{ "crossfeed",          "crossfeed f0[k] separation",           crossfeed_effect_init },
-#ifdef __HAVE_FFTW3__
-	{ "crossfeed_hrtf",     "crossfeed_hrtf left_fir right_fir",    crossfeed_hrtf_effect_init },
-#endif
 	{ "remix",              "remix channel_selector|. ...",         remix_effect_init },
 	{ "delay",              "delay seconds",                        delay_effect_init },
 #ifdef __HAVE_FFTW3__
