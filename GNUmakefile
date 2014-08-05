@@ -39,7 +39,7 @@ LADSPA_DSP_OBJ     := ${addprefix ${LADSPA_DSP_OBJDIR}/,${LADSPA_DSP_OBJ}}
 
 ladspa_dsp: ladspa_dsp.so
 
-config.mk:
+config.mk: configure
 	./configure
 
 ${DSP_OBJDIR} ${LADSPA_DSP_OBJDIR}:
