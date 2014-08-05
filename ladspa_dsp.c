@@ -45,8 +45,10 @@ LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long
 	d->ports = calloc(input_channels + output_channels, sizeof(LADSPA_Data *));
 	stream.fs = fs;
 	stream.channels = input_channels;
+	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
 	if (build_effects_chain(chain_argc, chain_argv, &d->chain, &stream, NULL, NULL))
 		goto fail;
+	LOG(LL_VERBOSE, "ladspa_dsp: info: end effects chain\n");
 	if (stream.channels != output_channels) {
 		LOG(LL_ERROR, "ladspa_dsp: error: output channels mismatch\n");
 		goto fail;
@@ -125,6 +127,18 @@ void _init()
 	int i, k, fd;
 	char *env, *config_file, *contents = NULL, *key, *value, *next;
 	off_t file_size;
+
+	env = getenv("LADSPA_DSP_LOGLEVEL");
+	if (env != NULL) {
+		if (strcmp(env, "VERBOSE") == 0)
+			dsp_globals.loglevel = LL_VERBOSE;
+		else if (strcmp(env, "NORMAL") == 0)
+			dsp_globals.loglevel = LL_NORMAL;
+		else if (strcmp(env, "SILENT") == 0)
+			dsp_globals.loglevel = LL_SILENT;
+		else
+			LOG(LL_ERROR, "ladspa_dsp: warning: unrecognized loglevel: %s\n", env);
+	}
 
 	env = getenv("LADSPA_DSP_CONFIG");
 	if (env == NULL) {

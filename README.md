@@ -22,7 +22,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 	$ make
 
-Run `./configure [options]` manually if you want to build with non-default options. Run `./configure --help` to see all availiable options.
+Run `./configure [options]` manually if you want to build with non-default options. Run `./configure --help` to see all available options.
 
 ### Usage:
 
@@ -108,6 +108,8 @@ Example configuration:
 	input_channels=2
 	output_channels=2
 	effects_chain=gain -4.0 lowshelf 90 0.7 +4.0 @/path/to/eq_file
+
+The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the `LADSPA_DSP_LOGLEVEL` environment variable.
 
 #### Usage example: Route alsa audio through ladspa_dsp:
 
