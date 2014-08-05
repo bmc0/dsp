@@ -31,7 +31,7 @@ ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
 	n = snd_pcm_readi(state->dev, (char *) buf, frames);
 	if (n < 0) {
 		if (n == -EPIPE)
-			LOG(LL_ERROR, "dsp: alsa: snd_pcm_readi: warning: overrun occurred\n");
+			LOG(LL_VERBOSE, "dsp: alsa: snd_pcm_readi: warning: overrun occurred\n");
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
 			LOG(LL_ERROR, "dsp: alsa: snd_pcm_readi: error: read failed\n");
@@ -56,7 +56,7 @@ ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
 		n = snd_pcm_writei(state->dev, state->buf, n);
 		if (n < 0) {
 			if (n == -EPIPE)
-				LOG(LL_ERROR, "dsp: alsa: snd_pcm_readi: warning: underrun occurred\n");
+				LOG(LL_VERBOSE, "dsp: alsa: snd_pcm_readi: warning: underrun occurred\n");
 			n = snd_pcm_recover(state->dev, n, 1);
 			if (n < 0) {
 				LOG(LL_ERROR, "dsp: alsa: snd_pcm_writei: error: write failed\n");
