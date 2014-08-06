@@ -137,7 +137,7 @@ static void print_usage(void)
 	print_all_effects();
 }
 
-static int parse_io_params(int argc, char *argv[], int *mode, char **path, char **type, char **enc, int *endian, int *fs, int *channels)
+static int parse_codec_params(int argc, char *argv[], int *mode, char **path, char **type, char **enc, int *endian, int *fs, int *channels)
 {
 	int opt;
 	*path = *type = NULL;
@@ -312,7 +312,7 @@ int main(int argc, char *argv[])
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
 	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':' && argv[optind][0] != '@') {
-		if (parse_io_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.fs, &params.channels))
+		if (parse_codec_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.fs, &params.channels))
 			cleanup_and_exit(1);
 		if (params.mode == CODEC_MODE_WRITE)
 			out_params = params;
@@ -461,12 +461,14 @@ int main(int argc, char *argv[])
 							if (show_progress)
 								fputs("\033[1K\r", stderr);
 							LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
-							do {
-								w = dsp_globals.buf_frames;
-								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
-								if (w > 0)
-									write_to_output(w, obuf, do_dither);
-							} while (w != -1);
+							if (!pause) {
+								do {
+									w = dsp_globals.buf_frames;
+									obuf = drain_effects_chain(&chain, &w, buf1, buf2);
+									if (w > 0)
+										write_to_output(w, obuf, do_dither);
+								} while (w != -1);
+							}
 							destroy_effects_chain(&chain);
 							stream.fs = input_fs;
 							stream.channels = input_channels;
