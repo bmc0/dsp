@@ -255,5 +255,5 @@ struct codec * mp3_codec_init(const char *type, int mode, const char *path, cons
 
 void mp3_codec_print_encodings(const char *type)
 {
-	fprintf(stderr, " mad_f");
+	fprintf(stdout, " mad_f");
 }

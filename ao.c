@@ -160,5 +160,5 @@ void ao_codec_print_encodings(const char *type)
 {
 	int i;
 	for (i = 0; i < LENGTH(encodings); ++i)
-		fprintf(stderr, " %s", encodings[i].name);
+		fprintf(stdout, " %s", encodings[i].name);
 }

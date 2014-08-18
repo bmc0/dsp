@@ -218,5 +218,5 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 
 void ffmpeg_codec_print_encodings(const char *type)
 {
-	fprintf(stderr, " <autodetected>");
+	fprintf(stdout, " <autodetected>");
 }

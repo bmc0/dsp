@@ -237,7 +237,7 @@ void sndfile_codec_print_encodings(const char *type)
 	if (info.format == -1)
 		return;
 	else if (info.format == 0)
-		fprintf(stderr, " <autodetected>");
+		fprintf(stdout, " <autodetected>");
 	else {
 		info.format |= SF_ENDIAN_FILE;
 		info.samplerate = DEFAULT_FS;
@@ -246,7 +246,7 @@ void sndfile_codec_print_encodings(const char *type)
 			info.format &= ~SF_FORMAT_SUBMASK;
 			info.format |= encodings[i].sf_enc;
 			if (sf_format_check(&info))
-				fprintf(stderr, " %s", encodings[i].name);
+				fprintf(stdout, " %s", encodings[i].name);
 		}
 	}
 }

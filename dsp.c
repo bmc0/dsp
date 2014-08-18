@@ -51,10 +51,7 @@ static const char usage[] =
 	"\n"
 	"Default output:\n"
 	"  type: "DEFAULT_OUTPUT_TYPE"\n"
-	"  path: "DEFAULT_OUTPUT_PATH"\n"
-	"\n"
-	"Selector syntax:\n"
-	"  [[start][-[end]][,...]]\n";
+	"  path: "DEFAULT_OUTPUT_PATH"\n";
 
 static const char interactive_help[] =
 	"Keys:\n"
@@ -131,9 +128,9 @@ static int input_pending(void)
 
 static void print_usage(void)
 {
-	fprintf(stderr, "%s\n", usage);
+	fprintf(stdout, "%s\n", usage);
 	print_all_codecs();
-	fputc('\n', stderr);
+	fputc('\n', stdout);
 	print_all_effects();
 }
 

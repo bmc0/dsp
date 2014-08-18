@@ -63,5 +63,5 @@ struct codec * null_codec_init(const char *type, int mode, const char *path, con
 
 void null_codec_print_encodings(const char *type)
 {
-	fprintf(stderr, " sample_t");
+	fprintf(stdout, " sample_t");
 }
