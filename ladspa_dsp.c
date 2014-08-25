@@ -14,8 +14,6 @@
 #define DEFAULT_CONFIG_LOCATION "/ladspa_dsp/config"
 #define DEFAULT_XDG_CONFIG_DIR "/.config"
 
-#define MAX(a, b) ((a > b) ? a : b)
-
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
 	size_t buf_len;

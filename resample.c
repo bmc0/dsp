@@ -7,9 +7,6 @@
 #include "resample.h"
 #include "util.h"
 
-#define MAX(a, b) ((a > b) ? a : b)
-#define MIN(a, b) ((a < b) ? a : b)
-
 /* Tunables */
 static double bw = 0.95;   /* bandwidth */
 static double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
