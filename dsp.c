@@ -265,13 +265,14 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 	ssize_t delay = lround((double) out->delay(out) / out->fs * in->fs);
 	ssize_t p = (pos > delay) ? pos - delay : 0;
 	ssize_t rem = (in->frames > p) ? in->frames - p : 0;
-	fprintf(stderr, "\033[1K\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
+	fprintf(stderr, "\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 		(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 		TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
 	if (verbose_progress)
 		fprintf(stderr, "lat:%.2fms+%.2fms  ", (double) in->delay(in) / in->fs * 1000, (double) out->delay(out) / out->fs * 1000);
 	if (verbose_progress || dsp_globals.clip_count != 0)
 		fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
+	fprintf(stderr, "\033[K");
 }
 
 static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
