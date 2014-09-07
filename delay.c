@@ -16,7 +16,7 @@ void delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (i = 0; i < *frames; ++i) {
 		for (k = 0; k < e->istream.channels; ++k) {
-			if (GET_BIT(e->channel_selector, k) && state->len > 0) {
+			if (state->bufs[k] && state->len > 0) {
 				obuf[i * e->istream.channels + k] = state->bufs[k][state->p];
 				state->bufs[k][state->p] = ibuf[i * e->istream.channels + k];
 			}
@@ -32,7 +32,7 @@ void delay_effect_reset(struct effect *e)
 	int i;
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (i = 0; i < e->istream.channels; ++i)
-		if (GET_BIT(e->channel_selector, i) && state->len > 0)
+		if (state->bufs[i] && state->len > 0)
 			memset(state->bufs[i], 0, state->len * sizeof(sample_t));
 	state->p = 0;
 }
@@ -77,8 +77,6 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_BIT_ARRAY(istream->channels);
-	COPY_BIT_ARRAY(e->channel_selector, channel_selector, istream->channels);
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = delay_effect_run;
 	e->reset = delay_effect_reset;
