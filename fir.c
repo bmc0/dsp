@@ -167,14 +167,14 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 
 	state->len = c_filter->frames;
 	state->fr_len = state->len + 1;
-	state->tmp_fr = fftw_alloc_complex(state->fr_len);
+	state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->output = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->overlap = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->filter_fr = calloc(e->ostream.channels, sizeof(fftw_complex *));
 	state->r2c_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
 	state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-	filter = fftw_alloc_real(state->len * 2);
+	filter = fftw_malloc(state->len * 2 * sizeof(sample_t));
 	memset(filter, 0, state->len * 2 * sizeof(sample_t));
 	filter_plan = fftw_plan_dft_r2c_1d(state->len * 2, filter, state->tmp_fr, FFTW_ESTIMATE);
 	if (c_filter->channels == 1) {
@@ -188,14 +188,14 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 			LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
 	}
 	for (i = k = 0; i < e->ostream.channels; ++i) {
-		state->output[i] = fftw_alloc_real(state->len * 2);
+		state->output[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));
 		memset(state->output[i], 0, state->len * 2 * sizeof(sample_t));
 		if (GET_BIT(channel_selector, i)) {
-			state->input[i] = fftw_alloc_real(state->len * 2);
+			state->input[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));
 			memset(state->input[i], 0, state->len * 2 * sizeof(sample_t));
-			state->overlap[i] = fftw_alloc_real(state->len);
+			state->overlap[i] = fftw_malloc(state->len * sizeof(sample_t));
 			memset(state->overlap[i], 0, state->len * sizeof(sample_t));
-			state->filter_fr[i] = fftw_alloc_complex(state->fr_len);
+			state->filter_fr[i] = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 			state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->len * 2, state->input[i], state->tmp_fr, FFTW_ESTIMATE);
 			state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, state->output[i], FFTW_ESTIMATE);
 			if (c_filter->channels == 1)
