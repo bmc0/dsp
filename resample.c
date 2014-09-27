@@ -8,8 +8,8 @@
 #include "util.h"
 
 /* Tunables */
-static double bw = 0.95;   /* bandwidth */
-static double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
+static double bw = 0.95;  /* bandwidth */
+static const double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
 
 struct resample_state {
 	struct {
@@ -153,11 +153,17 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	sample_t *sinc, width, fc, m;
 	fftw_plan sinc_plan;
 
-	if (argc != 2) {
+	if (argc < 2 || argc > 3) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
-	rate = lround(parse_freq(argv[1]));
+	if (argc == 3) {
+		bw = atof(argv[1]);
+		rate = lround(parse_freq(argv[2]));
+	}
+	else
+		rate = lround(parse_freq(argv[1]));
+	CHECK_RANGE(bw > 0 && bw < 1, "bandwidth");
 	CHECK_RANGE(rate > 0, "rate");
 
 	e = calloc(1, sizeof(struct effect));
