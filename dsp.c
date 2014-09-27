@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
 				LOG(LL_ERROR, "dsp: error: all inputs must have the same number of channels\n");
 				cleanup_and_exit(1);
 			}
-			if (c->frames == -1)
+			if (c->frames == -1 || in_frames == -1)
 				in_frames = -1;
 			else
 				in_frames += c->frames;
@@ -375,7 +375,10 @@ int main(int argc, char *argv[])
 			LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
 			cleanup_and_exit(1);
 		}
-		out_codec->frames = in_frames * (get_effects_chain_total_ratio(&chain) * input_channels / stream.channels);
+		if (in_frames == -1)
+			out_codec->frames = -1;
+		else
+			out_codec->frames = in_frames * (get_effects_chain_total_ratio(&chain) * input_channels / stream.channels);
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 
