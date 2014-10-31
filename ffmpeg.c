@@ -133,11 +133,11 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
 	if ((err = avformat_open_input(&state->container, path, NULL, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to open file (error %d)\n", err);
+		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avformat_find_stream_info(state->container, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not find stream info (error %d)\n", err);
+		LOG(LL_ERROR, "dsp: ffmpeg: error: could not find stream info: %s\n", av_err2str(err));
 		goto fail;
 	}
 
@@ -152,7 +152,7 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	state->cc = state->container->streams[state->stream_index]->codec;
 	codec = avcodec_find_decoder(state->cc->codec_id);
 	if ((err = avcodec_open2(state->cc, codec, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open required decoder (error %d)\n", err);
+		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open required decoder: %s\n", av_err2str(err));
 		goto fail;
 	}
 	state->frame = av_frame_alloc();
@@ -170,7 +170,7 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	av_opt_set_int(state->avr, "in_sample_fmt", state->cc->sample_fmt, 0);
 	av_opt_set_int(state->avr, "out_sample_fmt", AV_SAMPLE_FMT_DBL, 0);
 	if ((err = avresample_open(state->avr)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open audio resample context (error %d)\n", err);
+		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open audio resample context: %s\n", av_err2str(err));
 		goto fail;
 	}
 	state->bytes = av_get_bytes_per_sample(state->cc->sample_fmt);
