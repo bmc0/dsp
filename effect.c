@@ -15,6 +15,7 @@
 #include "delay.h"
 #include "resample.h"
 #include "fir.h"
+#include "noise.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
@@ -39,6 +40,7 @@ static struct effect_info effects[] = {
 	{ "resample",           "resample [bandwidth] fs",              resample_effect_init },
 	{ "fir",                "fir impulse_file",                     fir_effect_init },
 #endif
+	{ "noise",              "noise level",                           noise_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)
