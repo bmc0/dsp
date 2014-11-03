@@ -11,22 +11,26 @@ struct gain_state {
 
 void gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t samples = *frames * e->ostream.channels, i;
+	ssize_t i, k, samples = *frames * e->ostream.channels;
 	struct gain_state *state = (struct gain_state *) e->data;
 	if (state->channel == -1) {
-		for (i = 0; i < samples; ++i) {
-			if (GET_BIT(e->channel_selector, i % e->ostream.channels))
-				obuf[i] = ibuf[i] * state->mult;
-			else
-				obuf[i] = ibuf[i];
+		for (i = 0; i < samples; i += e->ostream.channels) {
+			for (k = 0; k < e->ostream.channels; ++k) {
+				if (GET_BIT(e->channel_selector, k))
+					obuf[i + k] = ibuf[i + k] * state->mult;
+				else
+					obuf[i + k] = ibuf[i + k];
+			}
 		}
 	}
 	else {
-		for (i = 0; i < samples; ++i) {
-			if (i % e->ostream.channels == state->channel)
-				obuf[i] = ibuf[i] * state->mult;
-			else
-				obuf[i] = ibuf[i];
+		for (i = 0; i < samples; i += e->ostream.channels) {
+			for (k = 0; k < e->ostream.channels; ++k) {
+				if (k == state->channel)
+					obuf[i + k] = ibuf[i + k] * state->mult;
+				else
+					obuf[i + k] = ibuf[i + k];
+			}
 		}
 	}
 }
