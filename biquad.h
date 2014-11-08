@@ -23,7 +23,7 @@ enum {
 };
 
 struct biquad_state {
-	double c0, c1, c2, c3, c4;
+	sample_t c0, c1, c2, c3, c4;
 	sample_t x[2], y[2];
 };
 

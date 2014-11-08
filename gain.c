@@ -6,7 +6,7 @@
 
 struct gain_state {
 	int channel;
-	double mult;
+	sample_t mult;
 };
 
 void gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -79,7 +79,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	struct gain_state *state;
 	int channel = -1;
 	char *g;
-	double mult;
+	sample_t mult;
 
 	if (argc != 2 && argc != 3) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
