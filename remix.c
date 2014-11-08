@@ -57,7 +57,7 @@ struct effect * remix_effect_init(struct effect_info *ei, struct stream_info *is
 	state = calloc(1, sizeof(struct remix_state));
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
 	for (i = 0; i < out_channels; ++i) {
-		state->channel_selectors[i] = NEW_BIT_ARRAY(istream->channels);
+		state->channel_selectors[i] = NEW_SELECTOR(istream->channels);
 		if (strcmp(argv[i + 1], ".") != 0 && parse_selector(argv[i + 1], state->channel_selectors[i], istream->channels))
 			goto fail;
 	}

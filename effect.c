@@ -81,12 +81,12 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 	struct effect *e = NULL;
 
 	if (channel_selector == NULL) {
-		channel_selector = NEW_BIT_ARRAY(stream->channels);
-		SET_BIT_ARRAY(channel_selector, stream->channels);
+		channel_selector = NEW_SELECTOR(stream->channels);
+		SET_SELECTOR(channel_selector, stream->channels);
 	}
 	else {
-		tmp_channel_selector = NEW_BIT_ARRAY(stream->channels);
-		COPY_BIT_ARRAY(tmp_channel_selector, channel_selector, stream->channels);
+		tmp_channel_selector = NEW_SELECTOR(stream->channels);
+		COPY_SELECTOR(tmp_channel_selector, channel_selector, stream->channels);
 		channel_selector = tmp_channel_selector;
 	}
 
@@ -103,9 +103,9 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			if (build_effects_chain_from_file(chain, stream, channel_selector, dir, &argv[k][1]))
 				goto fail;
 			if (stream->channels != old_stream_channels) {
-				tmp_channel_selector = NEW_BIT_ARRAY(stream->channels);
+				tmp_channel_selector = NEW_SELECTOR(stream->channels);
 				if (last_selector_index == -1)
-					SET_BIT_ARRAY(tmp_channel_selector, stream->channels);
+					SET_SELECTOR(tmp_channel_selector, stream->channels);
 				else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, stream->channels)) {
 					free(tmp_channel_selector);
 					goto fail;
@@ -140,9 +140,9 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 		k = i;
 		i = k + 1;
 		if (e->ostream.channels != stream->channels) {
-			tmp_channel_selector = NEW_BIT_ARRAY(e->ostream.channels);
+			tmp_channel_selector = NEW_SELECTOR(e->ostream.channels);
 			if (last_selector_index == -1)
-				SET_BIT_ARRAY(tmp_channel_selector, e->ostream.channels);
+				SET_SELECTOR(tmp_channel_selector, e->ostream.channels);
 			else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels)) {
 				free(tmp_channel_selector);
 				goto fail;

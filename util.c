@@ -34,9 +34,9 @@ static void set_range(char *b, int n, int start, int end, int dash)
 int parse_selector(const char *s, char *b, int n)
 {
 	int v, start = -1, end = -1, dash = 0;
-	CLEAR_BIT_ARRAY(b, n);
+	CLEAR_SELECTOR(b, n);
 	if (s[0] == '\0' || (s[0] == '-' && s[1] == '\0')) {
-		SET_BIT_ARRAY(b, n);
+		SET_SELECTOR(b, n);
 		return 0;
 	}
 	while (*s != '\0') {
