@@ -398,10 +398,9 @@ int main(int argc, char *argv[])
 			k = 0;
 			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
 			LOG(LL_VERBOSE, "dsp: info: dither %s\n", (do_dither) ? "on" : "off" );
-			if (show_progress) {
-				print_io_info(in_codecs.head, "input");
+			print_io_info(in_codecs.head, "input");
+			if (show_progress)
 				print_progress(in_codecs.head, out_codec, pos, pause);
-			}
 			do {
 				while (interactive && (input_pending() || pause)) {
 					delay = lround((double) out_codec->delay(out_codec) / out_codec->fs * in_codecs.head->fs);
