@@ -176,12 +176,25 @@ int gen_argv_from_string(char *str, int *argc, char ***argv)
 	return 0;
 }
 
+long unsigned int pm_rand(void)
+{
+	static long unsigned int s = 1;
+	long unsigned int h, l;
+
+	l = 16807 * (s & 0xffff);
+	h = 16807 * (s >> 16);
+	l += (h & 0x7fff) << 16;
+	l += h >> 15;
+	l = (l & 0x7fffffff) + (l >> 31);
+	return (s = l);
+}
+
 sample_t tpdf_dither_sample(sample_t s, int prec)
 {
 	if (prec < 1 || prec > 32)
 		return s;
 	sample_t d = (unsigned long int) 1 << (prec - 1);
-	sample_t n1 = (sample_t) random() / RAND_MAX / d;
-	sample_t n2 = (sample_t) random() / RAND_MAX / d;
+	sample_t n1 = (sample_t) pm_rand() / PM_RAND_MAX / d;
+	sample_t n2 = (sample_t) pm_rand() / PM_RAND_MAX / d;
 	return s + n1 - n2;
 }

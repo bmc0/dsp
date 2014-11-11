@@ -27,11 +27,13 @@
 #define NEW_SELECTOR(n) calloc(n, sizeof(char))
 #define COPY_SELECTOR(dest, src, n) memcpy(dest, src, n)
 #endif
+#define PM_RAND_MAX 2147483647
 
 double parse_freq(const char *);
 int parse_selector(const char *, char *, int);
 void print_selector(char *, int);
 int gen_argv_from_string(char *, int *, char ***);
+long unsigned int pm_rand(void);
 sample_t tpdf_dither_sample(sample_t, int);
 
 #endif
