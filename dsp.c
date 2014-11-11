@@ -397,7 +397,8 @@ int main(int argc, char *argv[])
 			k = 0;
 			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
 			LOG(LL_VERBOSE, "dsp: info: dither %s\n", (do_dither) ? "on" : "off" );
-			print_io_info(in_codecs.head, "input");
+			if (LOGLEVEL(LL_NORMAL))
+				print_io_info(in_codecs.head, "input");
 			if (show_progress)
 				print_progress(in_codecs.head, out_codec, pos, pause);
 			do {
