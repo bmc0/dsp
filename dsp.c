@@ -8,7 +8,6 @@
 #include "dsp.h"
 #include "effect.h"
 #include "codec.h"
-#include "dither.h"
 #include "util.h"
 
 #define SELECT_FS(x) ((x == -1) ? (input_fs == -1) ? DEFAULT_FS : input_fs : x)

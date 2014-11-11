@@ -5,7 +5,6 @@ LADSPA_DSP_OBJDIR := ${OBJDIR}/ladspa_dsp
 DSP_OBJ := dsp.o \
 	effect.o \
 	codec.o \
-	dither.o \
 	sampleconv.o \
 	util.o \
 	biquad.o \

@@ -32,5 +32,6 @@ double parse_freq(const char *);
 int parse_selector(const char *, char *, int);
 void print_selector(char *, int);
 int gen_argv_from_string(char *, int *, char ***);
+sample_t tpdf_dither_sample(sample_t, int);
 
 #endif
