@@ -193,8 +193,9 @@ sample_t tpdf_dither_sample(sample_t s, int prec)
 {
 	if (prec < 1 || prec > 32)
 		return s;
-	sample_t d = (unsigned long int) 1 << (prec - 1);
-	sample_t n1 = (sample_t) pm_rand() / PM_RAND_MAX / d;
-	sample_t n2 = (sample_t) pm_rand() / PM_RAND_MAX / d;
+	unsigned long int d = (unsigned long int) 1 << (prec - 1);
+	sample_t m = 1 / ((sample_t) PM_RAND_MAX * d);
+	sample_t n1 = (sample_t) pm_rand() * m;
+	sample_t n2 = (sample_t) pm_rand() * m;
 	return s + n1 - n2;
 }

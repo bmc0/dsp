@@ -16,8 +16,8 @@ void noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 	for (i = 0; i < samples; i += e->ostream.channels) {
 		for (k = 0; k < e->ostream.channels; ++k) {
 			if (GET_BIT(e->channel_selector, k)) {
-				n1 = (sample_t) pm_rand() / PM_RAND_MAX * state->mult;
-				n2 = (sample_t) pm_rand() / PM_RAND_MAX * state->mult;
+				n1 = (sample_t) pm_rand() * state->mult;
+				n2 = (sample_t) pm_rand() * state->mult;
 				obuf[i + k] = ibuf[i + k] + n1 - n2;
 			}
 			else
@@ -64,7 +64,7 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 	e->drain = noise_effect_drain;
 	e->destroy = noise_effect_destroy;
 	state = calloc(1, sizeof(struct noise_state));
-	state->mult = pow(10, atof(argv[1]) / 20);
+	state->mult = pow(10, atof(argv[1]) / 20) / PM_RAND_MAX;
 	e->data = state;
 	return e;
 }
