@@ -90,8 +90,6 @@ Apply effects from a file:
 
 ### LADSPA frontend (experimental):
 
-Currently, this frontend will not work correctly with effects that add latency between their input and output (currently only resample and fir).
-
 #### Configuration:
 
 The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Whitespace is not ignored. Valid keys are:
@@ -153,6 +151,8 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 	}
 
 If mixing is desired, the `dmix` plugin can be used instead of `copy`.
+
+Note: The resample effect cannot be used with the LADSPA frontend.
 
 ### Bugs:
 

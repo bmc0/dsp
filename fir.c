@@ -24,15 +24,23 @@ void fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t 
 	while (iframes < *frames) {
 		while (state->buf_pos < state->len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i) {
+#ifdef __SYMMETRIC_IO__
+				obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->buf_pos] : 0;
+#else
 				if (state->has_output)
 					obuf[oframes * e->ostream.channels + i] = state->output[i][state->buf_pos];
+#endif
 				if (state->input[i])
 					state->input[i][state->buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 				else
 					state->output[i][state->buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 			}
+#ifdef __SYMMETRIC_IO__
+			++oframes;
+#else
 			if (state->has_output)
 				++oframes;
+#endif
 			++iframes;
 			++state->buf_pos;
 		}

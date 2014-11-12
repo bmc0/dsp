@@ -37,7 +37,9 @@ static struct effect_info effects[] = {
 	{ "remix",              "remix channel_selector|. ...",         remix_effect_init },
 	{ "delay",              "delay seconds",                        delay_effect_init },
 #ifdef __HAVE_FFTW3__
+#ifndef __SYMMETRIC_IO__
 	{ "resample",           "resample [bandwidth] fs",              resample_effect_init },
+#endif
 	{ "fir",                "fir impulse_file",                     fir_effect_init },
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },

@@ -34,28 +34,50 @@ for i in $DSP_BASE_PACKAGES; do
 done
 
 # usage: check_pkg package_name disable objects cflags
-check_pkg() {
+check_pkg_dsp() {
 	if [ "$2" != "y" ] && pkg-config --exists $1; then
 		echo "enabled $3 ($1)"
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS $3"
 		DSP_OPTIONAL_PACKAGES="$DSP_OPTIONAL_PACKAGES $1"
 		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS $4"
+		return 0
 	else
 		echo "disabled $3 ($1)"
+		return 1
+	fi
+}
+
+check_pkg_ladspa_dsp() {
+	if [ "$2" != "y" ] && pkg-config --exists $1; then
+		echo "[ladspa_dsp] enabled $3 ($1)"
+		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS $3"
+		LADSPA_DSP_OPTIONAL_PACKAGES="$LADSPA_DSP_OPTIONAL_PACKAGES $1"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS $4"
+		return 0
+	else
+		echo "[ladspa_dsp] disabled $3 ($1)"
+		return 1
 	fi
 }
 
 unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LDFLAGS
+unset LADSPA_DSP_OPTIONAL_OBJECTS LADSPA_DSP_OPTIONAL_PACKAGES LADSPA_DSP_EXTRA_CFLAGS LADSPA_DSP_EXTRA_LDFLAGS
 
-check_pkg "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
-check_pkg fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
-check_pkg alsa  "$CONFIG_DISABLE_ALSA"  alsa.o  -D__HAVE_ALSA__
-check_pkg ao    "$CONFIG_DISABLE_AO"    ao.o    -D__HAVE_AO__
-check_pkg mad   "$CONFIG_DISABLE_MAD"   mp3.o   -D__HAVE_MAD__
+check_pkg_dsp "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
+check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
+check_pkg_dsp alsa  "$CONFIG_DISABLE_ALSA"  alsa.o  -D__HAVE_ALSA__
+check_pkg_dsp ao    "$CONFIG_DISABLE_AO"    ao.o    -D__HAVE_AO__
+check_pkg_dsp mad   "$CONFIG_DISABLE_MAD"   mp3.o   -D__HAVE_MAD__
 
 if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	echo "enabled ladspa_dsp"
 	TARGETS="$TARGETS ladspa_dsp"
+	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__; then
+		LADSPA_DSP_OPTIONAL_PACKAGES="$LADSPA_DSP_OPTIONAL_PACKAGES sndfile"
+		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sndfile.o null.o pcm.o sampleconv.o"
+		check_pkg_ladspa_dsp "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
+		check_pkg_ladspa_dsp mad   "$CONFIG_DISABLE_MAD"   mp3.o   -D__HAVE_MAD__
+	fi
 else
 	echo "disabled ladspa_dsp"
 fi
@@ -63,4 +85,7 @@ fi
 echo "all: $TARGETS
 DSP_OBJ += $DSP_OPTIONAL_OBJECTS
 DSP_EXTRA_CFLAGS := $DSP_EXTRA_CFLAGS $(pkg-config --cflags $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)
-DSP_EXTRA_LDFLAGS := $DSP_EXTRA_LDFLAGS $(pkg-config --libs $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)" > config.mk
+DSP_EXTRA_LDFLAGS := $DSP_EXTRA_LDFLAGS $(pkg-config --libs $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)
+LADSPA_DSP_OBJ += $LADSPA_DSP_OPTIONAL_OBJECTS
+LADSPA_DSP_EXTRA_CFLAGS := $LADSPA_DSP_EXTRA_CFLAGS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --cflags $LADSPA_DSP_OPTIONAL_PACKAGES)
+LADSPA_DSP_EXTRA_LDFLAGS := $LADSPA_DSP_EXTRA_LDFLAGS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --libs $LADSPA_DSP_OPTIONAL_PACKAGES)" > config.mk
