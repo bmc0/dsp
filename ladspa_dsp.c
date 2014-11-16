@@ -79,7 +79,7 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 	ssize_t w = s;
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 
-	i = s * MAX(input_channels, output_channels);
+	i = s * MAXIMUM(input_channels, output_channels);
 	if (i > d->buf_len) {
 		d->buf_len = i;
 		d->buf1 = realloc(d->buf1, d->buf_len * d->max_ratio * sizeof(sample_t));

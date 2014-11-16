@@ -200,8 +200,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 		gcd = i;
 	} while (rem != 0);
 
-	high_rate = MAX(rate, istream->fs);
-	low_rate = MIN(rate, istream->fs);
+	high_rate = MAXIMUM(rate, istream->fs);
+	low_rate = MINIMUM(rate, istream->fs);
 	state->ratio.n = rate / gcd;
 	state->ratio.d = istream->fs / gcd;
 
@@ -213,7 +213,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	/* determine array lengths */
 	state->m = (size_t) (m + 1) * 2 - 1;  /* final length after convolving sinc function with itself */
 	i = high_rate / gcd;
-	state->sinc_len = MAX(state->m, i);
+	state->sinc_len = MAXIMUM(state->m, i);
 	if (state->sinc_len % i != 0)
 		state->sinc_len += i - state->sinc_len % i;
 	state->in_len = (i == state->ratio.d) ? state->sinc_len : state->ratio.d * state->sinc_len / state->ratio.n;

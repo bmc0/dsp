@@ -5,8 +5,8 @@
 #include "dsp.h"
 
 #define LENGTH(x) (sizeof(x) / sizeof(x[0]))
-#define MAX(a, b) ((a > b) ? a : b)
-#define MIN(a, b) ((a < b) ? a : b)
+#define MAXIMUM(a, b) ((a > b) ? a : b)
+#define MINIMUM(a, b) ((a < b) ? a : b)
 #define CHECK_RANGE(cond, name) \
 	if (!(cond)) { \
 		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \

@@ -61,13 +61,13 @@ void stats_effect_destroy(struct effect *e)
 		fprintf(stderr, " %12.8f", state[i].max);
 	fprintf(stderr, "\n%-18s", "Peak level (dBFS)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.4f", 20 * log10(MAX(fabs(state[i].min), fabs(state[i].max))));
+		fprintf(stderr, " %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max))));
 	fprintf(stderr, "\n%-18s", "RMS level (dBFS)");
 	for (i = 0; i < e->ostream.channels; ++i)
 		fprintf(stderr, " %12.4f", 20 * log10(sqrt(state[i].sum_sq / state[i].samples)));
 	fprintf(stderr, "\n%-18s", "Crest factor (dB)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.4f", 20 * log10(MAX(fabs(state[i].min), fabs(state[i].max)) / sqrt(state[i].sum_sq / state[i].samples)));
+		fprintf(stderr, " %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max)) / sqrt(state[i].sum_sq / state[i].samples)));
 	fprintf(stderr, "\n%-18s", "Peak count");
 	for (i = 0; i < e->ostream.channels; ++i)
 		fprintf(stderr, " %12zd", state[i].peak_count);
