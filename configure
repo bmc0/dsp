@@ -8,6 +8,7 @@ Options:
   --disable-alsa
   --disable-ao
   --disable-mad
+  --disable-pulse
   --disable-ladspa_dsp
   --help"
 
@@ -18,6 +19,7 @@ for i in "$@"; do
 		--disable-alsa)       CONFIG_DISABLE_ALSA=y ;;
 		--disable-ao)         CONFIG_DISABLE_AO=y ;;
 		--disable-mad)        CONFIG_DISABLE_MAD=y ;;
+		--disable-pulse)      CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp) CONFIG_DISABLE_LADSPA_DSP=y ;;
 		--help) echo "$USAGE"; exit 0 ;;
 		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;
@@ -68,6 +70,7 @@ check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
 check_pkg_dsp alsa  "$CONFIG_DISABLE_ALSA"  alsa.o  -D__HAVE_ALSA__
 check_pkg_dsp ao    "$CONFIG_DISABLE_AO"    ao.o    -D__HAVE_AO__
 check_pkg_dsp mad   "$CONFIG_DISABLE_MAD"   mp3.o   -D__HAVE_MAD__
+check_pkg_dsp libpulse-simple "$CONFIG_DISABLE_PULSE" pulse.o -D__HAVE_PULSE__
 
 if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	echo "enabled ladspa_dsp"

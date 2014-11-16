@@ -17,6 +17,7 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 * libao: for ao output support
 * LADSPA: for building the LADSPA frontend
 * ffmpeg (libavcodec, libavformat, libavutil, and libavresample): for ffmpeg input support.
+* libpulse: for PulseAudio input/ouput support
 
 #### Build:
 

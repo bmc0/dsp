@@ -11,6 +11,7 @@
 #include "mp3.h"
 #include "null.h"
 #include "pcm.h"
+#include "pulse.h"
 
 struct codec_info {
 	const char *type;
@@ -90,6 +91,9 @@ struct codec_info codecs[] = {
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },
 #endif
 	{ "pcm",     NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pcm_codec_init,     pcm_codec_print_encodings },
+#ifdef __HAVE_PULSE__
+	{ "pulse",   NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pulse_codec_init,   pulse_codec_print_encodings },
+#endif
 };
 
 static const char *fallback_codecs[] = {
