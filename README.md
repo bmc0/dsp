@@ -11,13 +11,13 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 
 #### Optional dependencies:
 
-* libmad: for mp3 input support
-* alsa-lib: for alsa input/output support
-* fftw3: for resample and fir effects
-* libao: for ao output support
-* LADSPA: for building the LADSPA frontend
-* ffmpeg (libavcodec, libavformat, libavutil, and libavresample): for ffmpeg input support.
-* libpulse: for PulseAudio input/ouput support
+* libmad: For mp3 input support.
+* alsa-lib: For alsa input/output support.
+* fftw3: For resample and fir effects.
+* libao: For ao output support.
+* LADSPA: For building the LADSPA frontend.
+* ffmpeg (libavcodec, libavformat, libavutil, and libavresample): For ffmpeg input support.
+* libpulse: For PulseAudio input/ouput support.
 
 #### Build:
 
@@ -31,7 +31,33 @@ Run `./configure [options]` manually if you want to build with non-default optio
 
 	dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...
 
-Run `dsp -h` for options, supported input/output types and supported effects.
+#### Global options:
+
+Flag | Description
+--- | ---
+`-h` | Show help text.
+`-b frames` | Set buffer size (must be specified before the first input).
+`-R ratio` | Set codec maximum buffer ratio (must be specified before the first input).
+`-I` | Disable interactive mode.
+`-q` | Disable progress display.
+`-s` | Silent mode.
+`-v` | Verbose mode.
+`-d` | Force dithering.
+`-D` | Disable dithering.
+`-p` | Plot effects chain instead of processing audio.
+`-V` | Enable verbose progress display.
+
+#### Input/output options:
+
+Flag | Description
+--- | ---
+`-o` | Output.
+`-t type` | Type.
+`-e encoding` | Encoding.
+`-B/L/N` | Big/little/native endian.
+`-r frequency[k]` | Sample rate.
+`-c channels` | Number of channels.
+`-n` | Equivalent to `-t null null`.
 
 #### Selector syntax:
 
@@ -45,6 +71,71 @@ Example | Description
 -4 | 0 through 4
 1,3 | 1 and 3
 1-4,7,9- | 1 through 4, 7, and 9 to n
+
+#### Supported input/output types:
+
+Type | Modes | Encodings
+--- | --- | ---
+null | rw | sample_t
+sndfile | r | autodetected
+wav | rw | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
+aiff | rw | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
+au | rw | s16 s8 s24 s32 float double mu-law a-law g721_32 g723_24 g723_40
+raw | rw | s16 s8 u8 s24 s32 float double mu-law a-law gsm6.10 vox_adpcm dwvw_12 dwvw_16 dwvw_24
+paf | rw | s16 s8 s24
+svx | rw | s16 s8
+nist | rw | s16 s8 s24 s32 mu-law a-law
+voc | rw | s16 u8 mu-law a-law
+ircam | rw | s16 s32 float mu-law a-law
+w64 | rw | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10
+mat4 | rw | s16 s32 float double
+mat5 | rw | s16 u8 s32 float double
+pvf | rw | s16 s8 s32
+xi | rw | dpcm_8 dpcm_16
+htk | rw | s16
+sds | rw | s16 s8 s24
+avr | rw | s16 s8 u8
+wavex | rw | s16 u8 s24 s32 float double mu-law a-law
+sd2 | rw | s16 s8 s24
+flac | rw | s16 s8 s24
+caf | rw | s16 s8 s24 s32 float double mu-law a-law
+wve | rw | a-law
+ogg | rw | vorbis
+mpc2k | rw | s16
+rf64 | rw | s16 u8 s24 s32 float double mu-law a-law
+ffmpeg | r | autodetected
+alsa | rw | s16 u8 s8 s24 s24_3 s32 float double
+ao | w | s16 u8 s32
+mp3 | r | mad_f
+pcm | rw | s16 u8 s8 s24 s24_3 s32 float double
+pulse | rw | s16 u8 s24 s24_3 s32 float
+
+#### Effects:
+
+Usage | Description
+--- | ---
+`lowpass_1 f0[k]` | Single-pole lowpass filter.
+`highpass_1 f0[k]` | Single-pole highpass filter.
+`lowpass f0[k] q` | Double-pole lowpass filter.
+`highpass f0[k] q` | Double-pole highpass filter.
+`bandpass_skirt f0[k] q` | Double-pole bandpass filter with constant skirt gain.
+`bandpass_peak f0[k] q` | Double-pole bandpass filter with constant peak gain.
+`notch f0[k] q` | Double-pole notch filter.
+`allpass f0[k] q` | Double-pole allpass filter.
+`eq f0[k] q gain` | Double-pole peaking filter.
+`lowshelf f0[k] q gain` | Double-pole lowshelf filter.
+`highshelf f0[k] q gain` | Double-pole highshelf filter.
+`linkwitz_transform fz[k] qz fp[k] qp` | Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+`biquad b0 b1 b2 a0 a1 a2` | Biquad filter.
+`gain [channel] gain` | Gain adjustment. Ignores the channel selector when the `channel` argument is given.
+`mult [channel] multiplier` | Multiplies each sample by `multiplier`. Ignores the channel selector when the `channel` argument is given.
+`crossfeed f0[k] separation` | Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b crossfeed. Ignores the channel selector. Input must be 2 channels.
+`remix channel_selector|. ...` | Select and mix input channels into output channels. Each channel selector specifies the input channels to be mixed to produce each output channel. `.` selects no input channels. For example, `remix 0,1 2,3` mixes input channels 0 and 1 into output channel 0, and input channels 2 and 3 into output channel 1. `remix -` mixes all input channels into a single output channel.
+`delay seconds` | Delay line.
+`resample [bandwidth] fs` | Sinc resampler. Provides over 220dB SNR. Ignores the channel selector.
+`fir impulse_file` | FFT convolution.
+`noise level` | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
+`stats` | Output the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel.
 
 #### Effects file paths:
 
