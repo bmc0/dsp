@@ -205,31 +205,29 @@ The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the `LADSPA_
 
 Put this in `~/.asoundrc`:
 
-	pcm.<dev>_sampleconv {
-		type plug
-		slave {
-			pcm "<dev>"
-			format S32
-			rate unchanged
-		}
-	}
-	
-	pcm.ladspa_dsp {
-		type ladspa
-		slave.pcm "<dev>_sampleconv"
-		path "/ladspa/path"
-		plugins [{
-			label "ladspa_dsp"
-			policy none
-		}]
-	}
-	
 	pcm.dsp {
 		type plug
 		slave {
-			pcm "ladspa_dsp"
 			format FLOAT
 			rate unchanged
+			pcm {
+				type ladspa
+				channels 2
+				path "/ladspa/path"
+				playback_plugins [{
+					label "ladspa_dsp"
+					policy none
+				}]
+				slave.pcm {
+					type plug
+					slave {
+						pcm "<dev>"
+						format S24_3LE
+						rate unchanged
+						channels unchanged
+					}
+				}
+			}
 		}
 	}
 
