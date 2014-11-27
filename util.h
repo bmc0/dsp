@@ -7,10 +7,10 @@
 #define LENGTH(x) (sizeof(x) / sizeof(x[0]))
 #define MAXIMUM(a, b) ((a > b) ? a : b)
 #define MINIMUM(a, b) ((a < b) ? a : b)
-#define CHECK_RANGE(cond, name) \
+#define CHECK_RANGE(cond, name, action) \
 	if (!(cond)) { \
 		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \
-		return NULL; \
+		action; \
 	}
 #if 0
 #define GET_BIT(x, o) (((char *) x)[(int) (o) / 8] & (1 << ((int) (o) % 8)))

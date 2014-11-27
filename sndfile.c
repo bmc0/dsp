@@ -140,7 +140,8 @@ static const char * sndfile_get_type_name(int f)
 static int sndfile_get_sf_enc(const char *enc)
 {
 	int i;
-	if (enc == NULL) return encodings[0].sf_enc;
+	if (enc == NULL)
+		return encodings[0].sf_enc;
 	for (i = 0; i < LENGTH(encodings); ++i)
 		if (strcmp(enc, encodings[i].name) == 0)
 			return encodings[i].sf_enc;
@@ -167,10 +168,14 @@ static int sndfile_get_enc_prec(int f)
 static int sndfile_get_endian(int endian)
 {
 	switch (endian) {
-		case CODEC_ENDIAN_BIG:    return SF_ENDIAN_BIG;
-		case CODEC_ENDIAN_LITTLE: return SF_ENDIAN_LITTLE;
-		case CODEC_ENDIAN_NATIVE: return SF_ENDIAN_CPU;
-		default:                  return SF_ENDIAN_FILE;
+	case CODEC_ENDIAN_BIG:
+		return SF_ENDIAN_BIG;
+	case CODEC_ENDIAN_LITTLE:
+		return SF_ENDIAN_LITTLE;
+	case CODEC_ENDIAN_NATIVE:
+		return SF_ENDIAN_CPU;
+	default:
+		return SF_ENDIAN_FILE;
 	}
 }
 

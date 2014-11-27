@@ -77,8 +77,8 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 		LOG(LL_ERROR, "dsp: %s: error: channels != 2\n", argv[0]);
 		return NULL;
 	}
-	CHECK_RANGE(freq >= 0.0 && freq < (double) istream->fs / 2.0, "f0");
-	CHECK_RANGE(sep_db >= 0.0, "separation");
+	CHECK_RANGE(freq >= 0.0 && freq < (double) istream->fs / 2.0, "f0", return NULL);
+	CHECK_RANGE(sep_db >= 0.0, "separation", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;

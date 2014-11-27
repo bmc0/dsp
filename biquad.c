@@ -65,103 +65,103 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 		alpha = sin_w0 / (2.0 * q);
 
 		switch (type) {
-			case BIQUAD_LOWPASS_1:
-				a0 = 1.0;
-				a1 = -exp(-w0);
-				a2 = 0.0;
-				b0 = 1.0 + a1;
-				b1 = b2 = 0.0;
-				break;
-			case BIQUAD_HIGHPASS_1:
-				a0 = 1.0;
-				a1 = -exp(-w0);
-				a2 = 0.0;
-				b0 = (1.0 - a1) / 2.0;
-				b1 = -b0;
-				b2 = 0.0;
-				break;
-			case BIQUAD_LOWPASS:
-				b0 = (1.0 - cos_w0) / 2.0;
-				b1 = 1.0 - cos_w0;
-				b2 = b0;
-				a0 = 1.0 + alpha;
-				a1 = -2.0 * cos_w0;
-				a2 = 1.0 - alpha;
-				break;
-			case BIQUAD_HIGHPASS:
-				b0 = (1.0 + cos_w0) / 2.0;
-				b1 = -(1.0 + cos_w0);
-				b2 = b0;
-				a0 = 1.0 + alpha;
-				a1 = -2.0 * cos_w0;
-				a2 = 1.0 - alpha;
-				break;
-			case BIQUAD_BANDPASS_SKIRT:
-				b0 = sin_w0 / 2.0;
-				b1 = 0.0;
-				b2 = -b0;
-				a0 = 1.0 + alpha;
-				a1 = -2.0 * cos_w0;
-				a2 = 1.0 - alpha;
-				break;
-			case BIQUAD_BANDPASS_PEAK:
-				b0 = alpha;
-				b1 = 0.0;
-				b2 = -alpha;
-				a0 = 1.0 + alpha;
-				a1 = -2.0 * cos_w0;
-				a2 = 1.0 - alpha;
-				break;
-			case BIQUAD_NOTCH:
-				b0 = 1.0;
-				b1 = -2.0 * cos_w0;
-				b2 = 1.0;
-				a0 = 1.0 + alpha;
-				a1 = b1;
-				a2 = 1.0 - alpha;
-				break;
-			case BIQUAD_ALLPASS:
-				b0 = 1.0 - alpha;
-				b1 = -2.0 * cos_w0;
-				b2 = 1.0 + alpha;
-				a0 = b2;
-				a1 = b1;
-				a2 = b0;
-				break;
-			case BIQUAD_PEAK:
-				b0 = 1.0 + alpha * a;
-				b1 = -2.0 * cos_w0;
-				b2 = 1.0 - alpha * a;
-				a0 = 1.0 + alpha / a;
-				a1 = b1;
-				a2 = 1.0 - alpha / a;
-				break;
-			case BIQUAD_LOWSHELF:
-				c = 2.0 * sqrt(a) * alpha;
-				b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + c);
-				b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
-				b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - c);
-				a0 = (a + 1.0) + (a - 1.0) * cos_w0 + c;
-				a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
-				a2 = (a + 1.0) + (a - 1.0) * cos_w0 - c;
-				break;
-			case BIQUAD_HIGHSHELF:
-				c = 2.0 * sqrt(a) * alpha;
-				b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + c);
-				b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
-				b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - c);
-				a0 = (a + 1.0) - (a - 1.0) * cos_w0 + c;
-				a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
-				a2 = (a + 1.0) - (a - 1.0) * cos_w0 - c;
-				break;
-			default:
-				/* do nothing */
-				b0 = 1.0;
-				b1 = 0.0;
-				b2 = 0.0;
-				a0 = 1.0;
-				a1 = 0.0;
-				a2 = 0.0;
+		case BIQUAD_LOWPASS_1:
+			a0 = 1.0;
+			a1 = -exp(-w0);
+			a2 = 0.0;
+			b0 = 1.0 + a1;
+			b1 = b2 = 0.0;
+			break;
+		case BIQUAD_HIGHPASS_1:
+			a0 = 1.0;
+			a1 = -exp(-w0);
+			a2 = 0.0;
+			b0 = (1.0 - a1) / 2.0;
+			b1 = -b0;
+			b2 = 0.0;
+			break;
+		case BIQUAD_LOWPASS:
+			b0 = (1.0 - cos_w0) / 2.0;
+			b1 = 1.0 - cos_w0;
+			b2 = b0;
+			a0 = 1.0 + alpha;
+			a1 = -2.0 * cos_w0;
+			a2 = 1.0 - alpha;
+			break;
+		case BIQUAD_HIGHPASS:
+			b0 = (1.0 + cos_w0) / 2.0;
+			b1 = -(1.0 + cos_w0);
+			b2 = b0;
+			a0 = 1.0 + alpha;
+			a1 = -2.0 * cos_w0;
+			a2 = 1.0 - alpha;
+			break;
+		case BIQUAD_BANDPASS_SKIRT:
+			b0 = sin_w0 / 2.0;
+			b1 = 0.0;
+			b2 = -b0;
+			a0 = 1.0 + alpha;
+			a1 = -2.0 * cos_w0;
+			a2 = 1.0 - alpha;
+			break;
+		case BIQUAD_BANDPASS_PEAK:
+			b0 = alpha;
+			b1 = 0.0;
+			b2 = -alpha;
+			a0 = 1.0 + alpha;
+			a1 = -2.0 * cos_w0;
+			a2 = 1.0 - alpha;
+			break;
+		case BIQUAD_NOTCH:
+			b0 = 1.0;
+			b1 = -2.0 * cos_w0;
+			b2 = 1.0;
+			a0 = 1.0 + alpha;
+			a1 = b1;
+			a2 = 1.0 - alpha;
+			break;
+		case BIQUAD_ALLPASS:
+			b0 = 1.0 - alpha;
+			b1 = -2.0 * cos_w0;
+			b2 = 1.0 + alpha;
+			a0 = b2;
+			a1 = b1;
+			a2 = b0;
+			break;
+		case BIQUAD_PEAK:
+			b0 = 1.0 + alpha * a;
+			b1 = -2.0 * cos_w0;
+			b2 = 1.0 - alpha * a;
+			a0 = 1.0 + alpha / a;
+			a1 = b1;
+			a2 = 1.0 - alpha / a;
+			break;
+		case BIQUAD_LOWSHELF:
+			c = 2.0 * sqrt(a) * alpha;
+			b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + c);
+			b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
+			b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - c);
+			a0 = (a + 1.0) + (a - 1.0) * cos_w0 + c;
+			a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
+			a2 = (a + 1.0) + (a - 1.0) * cos_w0 - c;
+			break;
+		case BIQUAD_HIGHSHELF:
+			c = 2.0 * sqrt(a) * alpha;
+			b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + c);
+			b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
+			b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - c);
+			a0 = (a + 1.0) - (a - 1.0) * cos_w0 + c;
+			a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
+			a2 = (a + 1.0) - (a - 1.0) * cos_w0 - c;
+			break;
+		default:
+			/* do nothing */
+			b0 = 1.0;
+			b1 = 0.0;
+			b2 = 0.0;
+			a0 = 1.0;
+			a1 = 0.0;
+			a2 = 0.0;
 		}
 	}
 	biquad_init(b, b0, b1, b2, a0, a1, a2);
@@ -256,7 +256,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_LOWPASS_1;
 		arg0 = parse_freq(argv[1]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 	}
 	else if (strcmp(argv[0], "highpass_1") == 0) {
 		if (argc != 2) {
@@ -265,7 +265,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_HIGHPASS_1;
 		arg0 = parse_freq(argv[1]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 	}
 	else if (strcmp(argv[0], "lowpass") == 0) {
 		if (argc != 3) {
@@ -275,8 +275,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_LOWPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "highpass") == 0) {
 		if (argc != 3) {
@@ -286,8 +286,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_HIGHPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
 		if (argc != 3) {
@@ -297,8 +297,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_BANDPASS_SKIRT;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_peak") == 0) {
 		if (argc != 3) {
@@ -308,8 +308,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_BANDPASS_PEAK;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "notch") == 0) {
 		if (argc != 3) {
@@ -319,8 +319,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_NOTCH;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "allpass") == 0) {
 		if (argc != 3) {
@@ -330,8 +330,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		type = BIQUAD_ALLPASS;
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "eq") == 0) {
 		if (argc != 4) {
@@ -342,8 +342,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "lowshelf") == 0) {
 		if (argc != 4) {
@@ -354,8 +354,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "highshelf") == 0) {
 		if (argc != 4) {
@@ -366,8 +366,8 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		arg0 = parse_freq(argv[1]);
 		arg1 = atof(argv[2]);
 		arg2 = atof(argv[3]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0");
-		CHECK_RANGE(arg1 > 0.0, "q");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
 	}
 	else if (strcmp(argv[0], "linkwitz_transform") == 0) {
 		if (argc != 5) {
@@ -379,10 +379,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		arg1 = atof(argv[2]);
 		arg2 = parse_freq(argv[3]);
 		arg3 = atof(argv[4]);
-		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "fz");
-		CHECK_RANGE(arg1 > 0.0, "qz");
-		CHECK_RANGE(arg2 >= 0.0 && arg2 < (double) istream->fs / 2.0, "fp");
-		CHECK_RANGE(arg3 > 0.0, "qp");
+		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "fz", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "qz", return NULL);
+		CHECK_RANGE(arg2 >= 0.0 && arg2 < (double) istream->fs / 2.0, "fp", return NULL);
+		CHECK_RANGE(arg3 > 0.0, "qp", return NULL);
 	}
 	else if (strcmp(argv[0], "biquad") == 0) {
 		if (argc != 7) {

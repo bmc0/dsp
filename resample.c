@@ -163,8 +163,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	}
 	else
 		rate = lround(parse_freq(argv[1]));
-	CHECK_RANGE(bw > 0 && bw < 1, "bandwidth");
-	CHECK_RANGE(rate > 0, "rate");
+	CHECK_RANGE(bw > 0 && bw < 1, "bandwidth", return NULL);
+	CHECK_RANGE(rate > 0, "rate", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;

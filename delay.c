@@ -65,7 +65,7 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	}
 
 	d = atof(argv[1]);
-	CHECK_RANGE(d >= 0, "delay");
+	CHECK_RANGE(d >= 0, "delay", return NULL);
 	state = calloc(1, sizeof(struct delay_state));
 	state->len = lround(d * istream->fs);
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));

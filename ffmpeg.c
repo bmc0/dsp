@@ -183,12 +183,28 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	c->path = path;
 	c->fs = state->cc->sample_rate;
 	switch (state->cc->sample_fmt) {
-		case AV_SAMPLE_FMT_U8:  case AV_SAMPLE_FMT_U8P:  c->prec = 8; break;
-		case AV_SAMPLE_FMT_S16: case AV_SAMPLE_FMT_S16P: c->prec = 16; break;
-		case AV_SAMPLE_FMT_S32: case AV_SAMPLE_FMT_S32P: c->prec = 32; break;
-		case AV_SAMPLE_FMT_FLT: case AV_SAMPLE_FMT_FLTP: c->prec = 24; break;
-		case AV_SAMPLE_FMT_DBL: case AV_SAMPLE_FMT_DBLP: c->prec = 53; break;
-		default: c->prec = 16;
+	case AV_SAMPLE_FMT_U8:
+	case AV_SAMPLE_FMT_U8P:
+		c->prec = 8;
+		break;
+	case AV_SAMPLE_FMT_S16:
+	case AV_SAMPLE_FMT_S16P:
+		c->prec = 16;
+		break;
+	case AV_SAMPLE_FMT_S32:
+	case AV_SAMPLE_FMT_S32P:
+		c->prec = 32;
+		break;
+	case AV_SAMPLE_FMT_FLT:
+	case AV_SAMPLE_FMT_FLTP:
+		c->prec = 24;
+		break;
+	case AV_SAMPLE_FMT_DBL:
+	case AV_SAMPLE_FMT_DBLP:
+		c->prec = 53;
+		break;
+	default:
+		c->prec = 16;
 	}
 	c->channels = state->cc->channels;
 	time_base.num = state->container->streams[state->stream_index]->time_base.num;

@@ -144,96 +144,96 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 
 	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpVot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
-			case 'h':
-				print_usage();
-				cleanup_and_exit(0);
-			case 'b':
-				if (in_codecs.head == NULL) {
-					dsp_globals.buf_frames = atoi(optarg);
-					if (dsp_globals.buf_frames <= 0) {
-						LOG(LL_ERROR, "dsp: error: buffer size must be > 0\n");
-						return 1;
-					}
-				}
-				else
-					LOG(LL_ERROR, "dsp: warning: buffer size must be specified before the first input\n");
-				break;
-			case 'R':
-				if (in_codecs.head == NULL) {
-					dsp_globals.max_buf_ratio = atoi(optarg);
-					if (dsp_globals.max_buf_ratio <= 0) {
-						LOG(LL_ERROR, "dsp: error: buffer ratio must be > 0\n");
-						return 1;
-					}
-				}
-				else
-					LOG(LL_ERROR, "dsp: warning: buffer ratio must be specified before the first input\n");
-				break;
-			case 'I':
-				interactive = 0;
-				break;
-			case 'q':
-				show_progress = 0;
-				break;
-			case 's':
-				dsp_globals.loglevel = 0;
-				break;
-			case 'v':
-				dsp_globals.loglevel = LL_VERBOSE;
-				break;
-			case 'd':
-				force_dither = 1;
-				break;
-			case 'D':
-				force_dither = -1;
-				break;
-			case 'p':
-				plot = 1;
-				break;
-			case 'V':
-				verbose_progress = 1;
-				break;
-			case 'o':
-				*mode = CODEC_MODE_WRITE;
-				break;
-			case 't':
-				*type = optarg;
-				break;
-			case 'e':
-				*enc = optarg;
-				break;
-			case 'B':
-				*endian = CODEC_ENDIAN_BIG;
-				break;
-			case 'L':
-				*endian = CODEC_ENDIAN_LITTLE;
-				break;
-			case 'N':
-				*endian = CODEC_ENDIAN_NATIVE;
-				break;
-			case 'r':
-				*fs = parse_freq(optarg);
-				if (*fs <= 0) {
-					LOG(LL_ERROR, "dsp: error: sample rate must be > 0\n");
+		case 'h':
+			print_usage();
+			cleanup_and_exit(0);
+		case 'b':
+			if (in_codecs.head == NULL) {
+				dsp_globals.buf_frames = atoi(optarg);
+				if (dsp_globals.buf_frames <= 0) {
+					LOG(LL_ERROR, "dsp: error: buffer size must be > 0\n");
 					return 1;
 				}
-				break;
-			case 'c':
-				*channels = atoi(optarg);
-				if (*channels <= 0) {
-					LOG(LL_ERROR, "dsp: error: number of channels must be > 0\n");
+			}
+			else
+				LOG(LL_ERROR, "dsp: warning: buffer size must be specified before the first input\n");
+			break;
+		case 'R':
+			if (in_codecs.head == NULL) {
+				dsp_globals.max_buf_ratio = atoi(optarg);
+				if (dsp_globals.max_buf_ratio <= 0) {
+					LOG(LL_ERROR, "dsp: error: buffer ratio must be > 0\n");
 					return 1;
 				}
-				break;
-			case 'n':
-				*path = *type = "null";
-				return 0;
-			default:
-				if (opt == ':')
-					LOG(LL_ERROR, "dsp: error: expected argument to option '%c'\n", optopt);
-				else
-					LOG(LL_ERROR, "dsp: error: illegal option '%c'\n", optopt);
+			}
+			else
+				LOG(LL_ERROR, "dsp: warning: buffer ratio must be specified before the first input\n");
+			break;
+		case 'I':
+			interactive = 0;
+			break;
+		case 'q':
+			show_progress = 0;
+			break;
+		case 's':
+			dsp_globals.loglevel = 0;
+			break;
+		case 'v':
+			dsp_globals.loglevel = LL_VERBOSE;
+			break;
+		case 'd':
+			force_dither = 1;
+			break;
+		case 'D':
+			force_dither = -1;
+			break;
+		case 'p':
+			plot = 1;
+			break;
+		case 'V':
+			verbose_progress = 1;
+			break;
+		case 'o':
+			*mode = CODEC_MODE_WRITE;
+			break;
+		case 't':
+			*type = optarg;
+			break;
+		case 'e':
+			*enc = optarg;
+			break;
+		case 'B':
+			*endian = CODEC_ENDIAN_BIG;
+			break;
+		case 'L':
+			*endian = CODEC_ENDIAN_LITTLE;
+			break;
+		case 'N':
+			*endian = CODEC_ENDIAN_NATIVE;
+			break;
+		case 'r':
+			*fs = parse_freq(optarg);
+			if (*fs <= 0) {
+				LOG(LL_ERROR, "dsp: error: sample rate must be > 0\n");
 				return 1;
+			}
+			break;
+		case 'c':
+			*channels = atoi(optarg);
+			if (*channels <= 0) {
+				LOG(LL_ERROR, "dsp: error: number of channels must be > 0\n");
+				return 1;
+			}
+			break;
+		case 'n':
+			*path = *type = "null";
+			return 0;
+		default:
+			if (opt == ':')
+				LOG(LL_ERROR, "dsp: error: expected argument to option '%c'\n", optopt);
+			else
+				LOG(LL_ERROR, "dsp: error: illegal option '%c'\n", optopt);
+			return 1;
 		}
 	}
 	if (optind < argc)
@@ -405,96 +405,96 @@ int main(int argc, char *argv[])
 				while (interactive && (input_pending() || pause)) {
 					delay = lround((double) out_codec->delay(out_codec) / out_codec->fs * in_codecs.head->fs);
 					switch (getchar()) {
-						case 'h':
-							if (show_progress)
-								fputs("\033[1K\r", stderr);
-							fprintf(stderr, "\n%s\n", interactive_help);
-							break;
-						case ',':
-							seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 5 - delay);
-							if (seek >= 0) {
-								pos = seek;
-								out_codec->reset(out_codec);
-								reset_effects_chain(&chain);
-							}
-							break;
-						case '.':
-							seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 5 - delay);
-							if (seek >= 0) {
-								pos = seek;
-								out_codec->reset(out_codec);
-								reset_effects_chain(&chain);
-							}
-							break;
-						case '<':
-							seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 30 - delay);
-							if (seek >= 0) {
-								pos = seek;
-								out_codec->reset(out_codec);
-								reset_effects_chain(&chain);
-							}
-							break;
-						case '>':
-							seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 30 - delay);
-							if (seek >= 0) {
-								pos = seek;
-								out_codec->reset(out_codec);
-								reset_effects_chain(&chain);
-							}
-							break;
-						case 'r':
-							seek = in_codecs.head->seek(in_codecs.head, 0);
-							if (seek >= 0) {
-								pos = seek;
-								out_codec->reset(out_codec);
-								reset_effects_chain(&chain);
-							}
-							break;
-						case 'n':
+					case 'h':
+						if (show_progress)
+							fputs("\033[1K\r", stderr);
+						fprintf(stderr, "\n%s\n", interactive_help);
+						break;
+					case ',':
+						seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 5 - delay);
+						if (seek >= 0) {
+							pos = seek;
 							out_codec->reset(out_codec);
 							reset_effects_chain(&chain);
-							goto next_input;
-						case 'c':
-							out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
-							break;
-						case 'e':
-							if (show_progress)
-								fputs("\033[1K\r", stderr);
-							LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
-							if (!pause) {
-								do {
-									w = dsp_globals.buf_frames;
-									obuf = drain_effects_chain(&chain, &w, buf1, buf2);
-									if (w > 0)
-										write_to_output(w, obuf, do_dither);
-								} while (w != -1);
-							}
-							destroy_effects_chain(&chain);
-							stream.fs = input_fs;
-							stream.channels = input_channels;
-							if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
-								cleanup_and_exit(1);
-							if (out_codec->fs != stream.fs) {
-								LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
-								cleanup_and_exit(1);
-							}
-							if (out_codec->channels != stream.channels) {
-								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
-								cleanup_and_exit(1);
-							}
-							free(buf1);
-							free(buf2);
-							buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-							buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-							break;
-						case 'v':
-							verbose_progress = (verbose_progress) ? 0 : 1;
-							break;
-						case 'q':
+						}
+						break;
+					case '.':
+						seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 5 - delay);
+						if (seek >= 0) {
+							pos = seek;
 							out_codec->reset(out_codec);
-							if (show_progress)
-								fputs("\033[1K\r", stderr);
-							goto end_rw_loop;
+							reset_effects_chain(&chain);
+						}
+						break;
+					case '<':
+						seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 30 - delay);
+						if (seek >= 0) {
+							pos = seek;
+							out_codec->reset(out_codec);
+							reset_effects_chain(&chain);
+						}
+						break;
+					case '>':
+						seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 30 - delay);
+						if (seek >= 0) {
+							pos = seek;
+							out_codec->reset(out_codec);
+							reset_effects_chain(&chain);
+						}
+						break;
+					case 'r':
+						seek = in_codecs.head->seek(in_codecs.head, 0);
+						if (seek >= 0) {
+							pos = seek;
+							out_codec->reset(out_codec);
+							reset_effects_chain(&chain);
+						}
+						break;
+					case 'n':
+						out_codec->reset(out_codec);
+						reset_effects_chain(&chain);
+						goto next_input;
+					case 'c':
+						out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
+						break;
+					case 'e':
+						if (show_progress)
+							fputs("\033[1K\r", stderr);
+						LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
+						if (!pause) {
+							do {
+								w = dsp_globals.buf_frames;
+								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
+								if (w > 0)
+									write_to_output(w, obuf, do_dither);
+							} while (w != -1);
+						}
+						destroy_effects_chain(&chain);
+						stream.fs = input_fs;
+						stream.channels = input_channels;
+						if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+							cleanup_and_exit(1);
+						if (out_codec->fs != stream.fs) {
+							LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
+							cleanup_and_exit(1);
+						}
+						if (out_codec->channels != stream.channels) {
+							LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
+							cleanup_and_exit(1);
+						}
+						free(buf1);
+						free(buf2);
+						buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						break;
+					case 'v':
+						verbose_progress = (verbose_progress) ? 0 : 1;
+						break;
+					case 'q':
+						out_codec->reset(out_codec);
+						if (show_progress)
+							fputs("\033[1K\r", stderr);
+						goto end_rw_loop;
 					}
 					if (show_progress)
 						print_progress(in_codecs.head, out_codec, pos, pause);

@@ -170,13 +170,14 @@ void _init()
 		}
 		contents[file_size] = '\0';
 		key = contents;
-		for (i = 1; key[0] != '\0'; ++i) {
+		for (i = 1; *key != '\0'; ++i) {
 			next = isolate(key, '\n');
-			if (key[0] == '\n' || key[0] == '#');
-			else {
+			if (*key != '\n' && *key != '#') {
 				value = isolate(key, '=');
-				if (strcmp(key, "input_channels") == 0)       input_channels = atoi(value);
-				else if (strcmp(key, "output_channels") == 0) output_channels = atoi(value);
+				if (strcmp(key, "input_channels") == 0)
+					input_channels = atoi(value);
+				else if (strcmp(key, "output_channels") == 0)
+					output_channels = atoi(value);
 				else if (strcmp(key, "effects_chain") == 0) {
 					for (k = 0; k < chain_argc; ++k)
 						free(chain_argv[k]);
@@ -248,9 +249,9 @@ void _fini() {
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)
 {
 	switch(i) {
-		case 0:
-			return dsp_descriptor;
-		default:
-			return NULL;
+	case 0:
+		return dsp_descriptor;
+	default:
+		return NULL;
 	}
 }

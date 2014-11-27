@@ -87,7 +87,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	}
 	if (argc == 3) {
 		channel = atoi(argv[1]);
-		CHECK_RANGE(channel >= 0 && channel < istream->channels, "channel");
+		CHECK_RANGE(channel >= 0 && channel < istream->channels, "channel", return NULL);
 		g = argv[2];
 	}
 	else
