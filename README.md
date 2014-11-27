@@ -1,6 +1,8 @@
 ### About:
 
-Dsp is an audio processing program with an interactive mode. Dsp is capable of generating gnuplot commands to plot the amplitude vs frequency response of a given effects chain.
+Dsp is an audio processing program with an interactive mode. Dsp is capable
+of generating gnuplot commands to plot the amplitude vs frequency response of
+a given effects chain.
 
 ### Building:
 
@@ -16,131 +18,135 @@ Dsp is an audio processing program with an interactive mode. Dsp is capable of g
 * fftw3: For resample and fir effects.
 * libao: For ao output support.
 * LADSPA: For building the LADSPA frontend.
-* ffmpeg (libavcodec, libavformat, libavutil, and libavresample): For ffmpeg input support.
+* ffmpeg (libavcodec, libavformat, libavutil, and libavresample): For ffmpeg
+  input support.
 * libpulse: For PulseAudio input/ouput support.
 
 #### Build:
 
 	$ make
 
-Run `./configure [options]` manually if you want to build with non-default options. Run `./configure --help` to see all available options.
+Run `./configure [options]` manually if you want to build with non-default
+options. Run `./configure --help` to see all available options.
 
 ### Usage:
 
 #### Synopsis:
 
-	dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...
+	dsp [options] path ... [:channel_selector]
+		[@[~/]effects_file] [effect [args ...]] ...
 
 #### Global options:
 
-Flag | Description
---- | ---
-`-h` | Show help text.
+Flag        | Description
+----------- | --------------------------------------------------------------------------
+`-h`        | Show help text.
 `-b frames` | Set buffer size (must be specified before the first input).
-`-R ratio` | Set codec maximum buffer ratio (must be specified before the first input).
-`-I` | Disable interactive mode.
-`-q` | Disable progress display.
-`-s` | Silent mode.
-`-v` | Verbose mode.
-`-d` | Force dithering.
-`-D` | Disable dithering.
-`-p` | Plot effects chain instead of processing audio.
-`-V` | Enable verbose progress display.
+`-R ratio`  | Set codec maximum buffer ratio (must be specified before the first input).
+`-I`        | Disable interactive mode.
+`-q`        | Disable progress display.
+`-s`        | Silent mode.
+`-v`        | Verbose mode.
+`-d`        | Force dithering.
+`-D`        | Disable dithering.
+`-p`        | Plot effects chain instead of processing audio.
+`-V`        | Enable verbose progress display.
 
 #### Input/output options:
 
-Flag | Description
---- | ---
-`-o` | Output.
-`-t type` | Type.
-`-e encoding` | Encoding.
-`-B/L/N` | Big/little/native endian.
+Flag              | Description
+----------------- | -----------------------------
+`-o`              | Output.
+`-t type`         | Type.
+`-e encoding`     | Encoding.
+`-B/L/N`          | Big/little/native endian.
 `-r frequency[k]` | Sample rate.
-`-c channels` | Number of channels.
-`-n` | Equivalent to `-t null null`.
+`-c channels`     | Number of channels.
+`-n`              | Equivalent to `-t null null`.
 
 #### Selector syntax:
 
 	[[start][-[end]][,...]]
 
-Example | Description
---- | ---
-<empty> | all
-- | all
-2- | 2 to n
--4 | 0 through 4
-1,3 | 1 and 3
-1-4,7,9- | 1 through 4, 7, and 9 to n
+Example    | Description
+---------- | --------------------------
+`<empty>`  | all
+`-`        | all
+`2-`       | 2 to n
+`-4`       | 0 through 4
+`1,3`      | 1 and 3
+`1-4,7,9-` | 1 through 4, 7, and 9 to n
 
 #### Supported input/output types:
 
-Type | Modes | Encodings
---- | --- | ---
-null | rw | sample_t
-sndfile | r | autodetected
-wav | rw | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
-aiff | rw | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
-au | rw | s16 s8 s24 s32 float double mu-law a-law g721_32 g723_24 g723_40
-raw | rw | s16 s8 u8 s24 s32 float double mu-law a-law gsm6.10 vox_adpcm dwvw_12 dwvw_16 dwvw_24
-paf | rw | s16 s8 s24
-svx | rw | s16 s8
-nist | rw | s16 s8 s24 s32 mu-law a-law
-voc | rw | s16 u8 mu-law a-law
-ircam | rw | s16 s32 float mu-law a-law
-w64 | rw | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10
-mat4 | rw | s16 s32 float double
-mat5 | rw | s16 u8 s32 float double
-pvf | rw | s16 s8 s32
-xi | rw | dpcm_8 dpcm_16
-htk | rw | s16
-sds | rw | s16 s8 s24
-avr | rw | s16 s8 u8
-wavex | rw | s16 u8 s24 s32 float double mu-law a-law
-sd2 | rw | s16 s8 s24
-flac | rw | s16 s8 s24
-caf | rw | s16 s8 s24 s32 float double mu-law a-law
-wve | rw | a-law
-ogg | rw | vorbis
-mpc2k | rw | s16
-rf64 | rw | s16 u8 s24 s32 float double mu-law a-law
-ffmpeg | r | autodetected
-alsa | rw | s16 u8 s8 s24 s24_3 s32 float double
-ao | w | s16 u8 s32
-mp3 | r | mad_f
-pcm | rw | s16 u8 s8 s24 s24_3 s32 float double
-pulse | rw | s16 u8 s24 s24_3 s32 float
+Type    | Modes | Encodings
+------- | ----- | -------------------------------------------------------------------------------------
+null    | rw    | sample_t
+sndfile | r     | autodetected
+wav     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
+aiff    | rw    | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
+au      | rw    | s16 s8 s24 s32 float double mu-law a-law g721_32 g723_24 g723_40
+raw     | rw    | s16 s8 u8 s24 s32 float double mu-law a-law gsm6.10 vox_adpcm dwvw_12 dwvw_16 dwvw_24
+paf     | rw    | s16 s8 s24
+svx     | rw    | s16 s8
+nist    | rw    | s16 s8 s24 s32 mu-law a-law
+voc     | rw    | s16 u8 mu-law a-law
+ircam   | rw    | s16 s32 float mu-law a-law
+w64     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10
+mat4    | rw    | s16 s32 float double
+mat5    | rw    | s16 u8 s32 float double
+pvf     | rw    | s16 s8 s32
+xi      | rw    | dpcm_8 dpcm_16
+htk     | rw    | s16
+sds     | rw    | s16 s8 s24
+avr     | rw    | s16 s8 u8
+wavex   | rw    | s16 u8 s24 s32 float double mu-law a-law
+sd2     | rw    | s16 s8 s24
+flac    | rw    | s16 s8 s24
+caf     | rw    | s16 s8 s24 s32 float double mu-law a-law
+wve     | rw    | a-law
+ogg     | rw    | vorbis
+mpc2k   | rw    | s16
+rf64    | rw    | s16 u8 s24 s32 float double mu-law a-law
+ffmpeg  | r     | autodetected
+alsa    | rw    | s16 u8 s8 s24 s24_3 s32 float double
+ao      | w     | s16 u8 s32
+mp3     | r     | mad_f
+pcm     | rw    | s16 u8 s8 s24 s24_3 s32 float double
+pulse   | rw    | s16 u8 s24 s24_3 s32 float
 
 #### Effects:
 
-Usage | Description
---- | ---
-`lowpass_1 f0[k]` | Single-pole lowpass filter.
-`highpass_1 f0[k]` | Single-pole highpass filter.
-`lowpass f0[k] q` | Double-pole lowpass filter.
-`highpass f0[k] q` | Double-pole highpass filter.
-`bandpass_skirt f0[k] q` | Double-pole bandpass filter with constant skirt gain.
-`bandpass_peak f0[k] q` | Double-pole bandpass filter with constant peak gain.
-`notch f0[k] q` | Double-pole notch filter.
-`allpass f0[k] q` | Double-pole allpass filter.
-`eq f0[k] q gain` | Double-pole peaking filter.
-`lowshelf f0[k] q gain` | Double-pole lowshelf filter.
-`highshelf f0[k] q gain` | Double-pole highshelf filter.
+Usage                                  | Description
+-------------------------------------- | -----------
+`lowpass_1 f0[k]`                      | Single-pole lowpass filter.
+`highpass_1 f0[k]`                     | Single-pole highpass filter.
+`lowpass f0[k] q`                      | Double-pole lowpass filter.
+`highpass f0[k] q`                     | Double-pole highpass filter.
+`bandpass_skirt f0[k] q`               | Double-pole bandpass filter with constant skirt gain.
+`bandpass_peak f0[k] q`                | Double-pole bandpass filter with constant peak gain.
+`notch f0[k] q`                        | Double-pole notch filter.
+`allpass f0[k] q`                      | Double-pole allpass filter.
+`eq f0[k] q gain`                      | Double-pole peaking filter.
+`lowshelf f0[k] q gain`                | Double-pole lowshelf filter.
+`highshelf f0[k] q gain`               | Double-pole highshelf filter.
 `linkwitz_transform fz[k] qz fp[k] qp` | Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
-`biquad b0 b1 b2 a0 a1 a2` | Biquad filter.
-`gain [channel] gain` | Gain adjustment. Ignores the channel selector when the `channel` argument is given.
-`mult [channel] multiplier` | Multiplies each sample by `multiplier`. Ignores the channel selector when the `channel` argument is given.
-`crossfeed f0[k] separation` | Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b crossfeed. Ignores the channel selector. Input must be 2 channels.
-`remix channel_selector|. ...` | Select and mix input channels into output channels. Each channel selector specifies the input channels to be mixed to produce each output channel. `.` selects no input channels. For example, `remix 0,1 2,3` mixes input channels 0 and 1 into output channel 0, and input channels 2 and 3 into output channel 1. `remix -` mixes all input channels into a single output channel.
-`delay seconds` | Delay line.
-`resample [bandwidth] fs` | Sinc resampler. Provides over 220dB SNR. Ignores the channel selector.
-`fir impulse_file` | FFT convolution.
-`noise level` | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
-`stats` | Output the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel.
+`biquad b0 b1 b2 a0 a1 a2`             | Biquad filter.
+`gain [channel] gain`                  | Gain adjustment. Ignores the channel selector when the `channel` argument is given.
+`mult [channel] multiplier`            | Multiplies each sample by `multiplier`. Ignores the channel selector when the `channel` argument is given.
+`crossfeed f0[k] separation`           | Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b crossfeed. Ignores the channel selector. Input must be 2 channels.
+`remix channel_selector|. ...`         | Select and mix input channels into output channels. Each channel selector specifies the input channels to be mixed to produce each output channel. `.` selects no input channels. For example, `remix 0,1 2,3` mixes input channels 0 and 1 into output channel 0, and input channels 2 and 3 into output channel 1. `remix -` mixes all input channels into a single output channel.
+`delay seconds`                        | Delay line.
+`resample [bandwidth] fs`              | Sinc resampler. Provides over 220dB SNR. Ignores the channel selector.
+`fir impulse_file`                     | FFT convolution.
+`noise level`                          | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
+`stats`                                | Output the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel.
 
 #### Effects file paths:
 
 * On the command line, relative paths are relative to `$PWD`.
-* Within an effects file, relative paths are relative to the directory containing said effects file.
+* Within an effects file, relative paths are relative to the directory
+  containing said effects file.
 * The `~/` prefix will be expanded to the contents of `$HOME`.
 
 #### Effects file syntax:
@@ -156,11 +162,14 @@ Example:
 	eq 1k 1.0 +10.0 eq 3k 3.0 -4.0
 	lowshelf 90 0.7 +4.0
 
-Effects files inherit a copy of the current channel selector. In other words, if an effects chain is this:
+Effects files inherit a copy of the current channel selector. In other words,
+if an effects chain is this:
 
 	:2,4 @eq_file.txt eq 2k 1.0 -2.0
 
-`eq_file.txt` will inherit the `2,4` selector, but any selector specified within `eq_file.txt` will not affect the `eq 2k 1.0 -2.0` effect that comes after it.
+`eq_file.txt` will inherit the `2,4` selector, but any selector specified
+within `eq_file.txt` will not affect the `eq 2k 1.0 -2.0` effect that comes
+after it.
 
 #### Examples:
 
@@ -170,11 +179,19 @@ Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
 
 Plot amplitude vs frequency for a complex effects chain:
 
-	dsp -pn gain -1.5 lowshelf 60 0.7 +7.8 eq 50 2.0 -2.7 eq 100 2.0 -3.9 eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0 lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8 eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6 highshelf 10000 0.7 -0.5 | gnuplot -p
+	dsp -pn gain -1.5 lowshelf 60 0.7 +7.8 eq 50 2.0 -2.7 eq 100 2.0 -3.9
+		eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0
+		lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8
+		eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6
+		highshelf 10000 0.7 -0.5 | gnuplot -p
 
-Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the left and right woofers, and channels 1 and 3 are the left and right tweeters, respectively:
+Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the
+left and right woofers, and channels 1 and 3 are the left and right tweeters,
+respectively:
 
-	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 0 1 1 :0,2 lowpass 2.2k 0.707 lowpass 2.2k 0.707 :1,3 highpass 2.2k 0.707 highpass 2.2k 0.707 :
+	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 0 1 1 :0,2
+		lowpass 2.2k 0.707 lowpass 2.2k 0.707 :1,3 highpass 2.2k 0.707
+		highpass 2.2k 0.707 :
 
 Apply effects from a file:
 
@@ -184,13 +201,16 @@ Apply effects from a file:
 
 #### Configuration:
 
-The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Leading whitespace is ignored. Valid keys are:
+The default configuration file is located at
+`$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the
+`LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format.
+Leading whitespace is ignored. Valid keys are:
 
-Key | Description
---- | ---
-input_channels | Number of input channels.
-output_channels | Number of output channels.
-effects_chain | Args to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
+Key               | Description
+----------------- | ------------------------------------------------------------------------------------------------------------------
+`input_channels`  | Number of input channels.
+`output_channels` | Number of output channels.
+`effects_chain`   | Args to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
 
 Example configuration:
 
@@ -199,7 +219,8 @@ Example configuration:
 	output_channels=2
 	effects_chain=gain -4.0 lowshelf 90 0.7 +4.0 @/path/to/eq_file
 
-The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the `LADSPA_DSP_LOGLEVEL` environment variable.
+The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
+`LADSPA_DSP_LOGLEVEL` environment variable.
 
 #### Usage example: Route alsa audio through ladspa_dsp:
 
@@ -231,7 +252,9 @@ Put this in `~/.asoundrc`:
 		}
 	}
 
-Replace `/ladspa/path` with the path to the directory containing `ladspa_dsp.so` and `<dev>` with the preferred output device (`hw:1`, for example).
+Replace `/ladspa/path` with the path to the directory containing
+`ladspa_dsp.so` and `<dev>` with the preferred output device (`hw:1`, for
+example).
 
 To make `dsp` the default device, append this to `~/.asoundrc`:
 
