@@ -171,6 +171,8 @@ void _init()
 		contents[file_size] = '\0';
 		key = contents;
 		for (i = 1; *key != '\0'; ++i) {
+			while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
+				++key;
 			next = isolate(key, '\n');
 			if (*key != '\n' && *key != '#') {
 				value = isolate(key, '=');

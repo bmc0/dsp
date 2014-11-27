@@ -184,7 +184,7 @@ Apply effects from a file:
 
 #### Configuration:
 
-The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Whitespace is not ignored. Valid keys are:
+The default configuration file is located at `$XDG_CONFIG_HOME/ladspa_dsp/config` (override by setting the `LADSPA_DSP_CONFIG` environment variable) and is a simple key-value format. Leading whitespace is ignored. Valid keys are:
 
 Key | Description
 --- | ---
