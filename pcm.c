@@ -132,7 +132,7 @@ struct codec * pcm_codec_init(const char *type, int mode, const char *path, cons
 	}
 	if (strcmp(path, "-") == 0)
 		fd = (mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
-	else if ((fd = open(path, (mode == CODEC_MODE_WRITE) ? O_WRONLY : O_RDONLY)) == -1) {
+	else if ((fd = open(path, (mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
 		LOG(LL_ERROR, "dsp: pcm: error: failed to open file: %s: %s\n", path, strerror(errno));
 		goto fail;
 	}
