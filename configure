@@ -65,7 +65,7 @@ check_pkg_ladspa_dsp() {
 unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LDFLAGS
 unset LADSPA_DSP_OPTIONAL_OBJECTS LADSPA_DSP_OPTIONAL_PACKAGES LADSPA_DSP_EXTRA_CFLAGS LADSPA_DSP_EXTRA_LDFLAGS
 
-check_pkg_dsp "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
+check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
 check_pkg_dsp alsa  "$CONFIG_DISABLE_ALSA"  alsa.o  -D__HAVE_ALSA__
 check_pkg_dsp ao    "$CONFIG_DISABLE_AO"    ao.o    -D__HAVE_AO__
@@ -78,7 +78,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__; then
 		LADSPA_DSP_OPTIONAL_PACKAGES="$LADSPA_DSP_OPTIONAL_PACKAGES sndfile"
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sndfile.o null.o pcm.o sampleconv.o"
-		check_pkg_ladspa_dsp "libavcodec libavformat libavutil libavresample" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
+		check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 		check_pkg_ladspa_dsp mad   "$CONFIG_DISABLE_MAD"   mp3.o   -D__HAVE_MAD__
 	fi
 else

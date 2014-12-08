@@ -18,8 +18,7 @@ a given effects chain.
 * fftw3: For resample and fir effects.
 * libao: For ao output support.
 * LADSPA: For building the LADSPA frontend.
-* ffmpeg (libavcodec, libavformat, libavutil, and libavresample): For ffmpeg
-  input support.
+* ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
 * libpulse: For PulseAudio input/ouput support.
 
 #### Build:
