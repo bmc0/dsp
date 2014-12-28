@@ -90,7 +90,7 @@ int parse_selector(const char *s, char *b, int n)
 	return 0;
 }
 
-void print_selector(char *b, int n)
+void print_selector(const char *b, int n)
 {
 	int i, c, l = 0, f = 1, range_start = -1;
 	for (i = 0; i < n; ++i) {
@@ -133,9 +133,10 @@ static void strip_char(char *str, char c, int is_esc)
 	str[i] = '\0';
 }
 
-int gen_argv_from_string(char *str, int *argc, char ***argv)
+int gen_argv_from_string(const char *str, int *argc, char ***argv)
 {
 	int i = 0, k = 0, n = 1, esc = 0, end = 0;
+	char *tmp;
 
 	*argc = 0;
 	*argv = NULL;
@@ -158,10 +159,10 @@ int gen_argv_from_string(char *str, int *argc, char ***argv)
 			else if (str[k] == '\0')
 				end = 1;
 			if (i != k) {
-				str[k] = '\0';
+				tmp = strndup(&str[i], k - i);
+				strip_char(tmp, '\\', 1);
 				*argv = realloc(*argv, (*argc + 1) * sizeof(char *));
-				strip_char(&str[i], '\\', 1);
-				(*argv)[(*argc)++] = strdup(&str[i]);
+				(*argv)[(*argc)++] = tmp;
 				i = k;
 			}
 			++i;
