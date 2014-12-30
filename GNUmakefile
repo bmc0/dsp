@@ -65,6 +65,6 @@ clean:
 
 distclean: clean
 	rm -f config.mk
-	rm -fd ${DSP_OBJDIR} ${LADSPA_DSP_OBJDIR} ${OBJDIR}
+	rm -rf ${OBJDIR}
 
 .PHONY: all ladspa_dsp clean distclean
