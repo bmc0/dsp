@@ -4,7 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <signal.h>
-#include <sys/termios.h>
+#include <termios.h>
 #include "dsp.h"
 #include "effect.h"
 #include "codec.h"
