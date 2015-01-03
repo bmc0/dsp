@@ -17,6 +17,7 @@
 #include "fir.h"
 #include "noise.h"
 #include "stats.h"
+#include "compress.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
@@ -44,6 +45,7 @@ static struct effect_info effects[] = {
 	{ "fir",                "fir impulse_file",                     fir_effect_init },
 #endif
 	{ "noise",              "noise level",                          noise_effect_init },
+	{ "compress",           "compress thresh ratio attack release", compress_effect_init },
 	{ "stats",              "stats",                                stats_effect_init },
 };
 

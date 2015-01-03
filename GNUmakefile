@@ -13,6 +13,7 @@ DSP_OBJ := dsp.o \
 	remix.o \
 	delay.o \
 	noise.o \
+	compress.o \
 	stats.o \
 	sndfile.o \
 	null.o \
@@ -26,6 +27,7 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	remix.o \
 	delay.o \
 	noise.o \
+	compress.o \
 	stats.o
 
 BASE_CFLAGS        := -Os -Wall -std=gnu99
