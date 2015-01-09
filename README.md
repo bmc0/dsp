@@ -139,6 +139,7 @@ Usage                                  | Description
 `resample [bandwidth] fs`              | Sinc resampler. Provides over 220dB SNR. Ignores the channel selector.
 `fir impulse_file`                     | FFT convolution.
 `noise level`                          | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
+`compress thresh ratio attack release` | Compress or expand the dynamic range. This effect peak-sensing and input channels are linked. If the ratio is in (1,inf), the dynamic range will be compressed. If the ratio is in (0,1), the dynamic range will be expanded. Attack refers to decreases in gain and decay refers to increases in gain.
 `stats`                                | Output the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel.
 
 #### Effects file paths:
