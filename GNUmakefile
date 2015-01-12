@@ -65,6 +65,12 @@ dsp: ${DSP_OBJ}
 ladspa_dsp.so: ${LADSPA_DSP_OBJ}
 	${CC} -o $@ ${LADSPA_DSP_LDFLAGS} ${LADSPA_DSP_OBJ} ${LADSPA_DSP_LIBS}
 
+install_dsp: dsp
+	install -Dm755 dsp ${DESTDIR}${PREFIX}${BINDIR}/dsp
+
+install_ladspa_dsp: ladspa_dsp.so
+	install -Dm755 ladspa_dsp.so ${DESTDIR}${PREFIX}${LIBDIR}/ladspa/ladspa_dsp.so
+
 clean:
 	rm -f dsp ladspa_dsp.so ${DSP_OBJ} ${LADSPA_DSP_OBJ}
 
@@ -72,4 +78,4 @@ distclean: clean
 	rm -f config.mk
 	rm -rf ${OBJDIR}
 
-.PHONY: all ladspa_dsp clean distclean
+.PHONY: all install ladspa_dsp install_dsp install_ladspa_dsp clean distclean

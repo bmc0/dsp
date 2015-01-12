@@ -28,6 +28,10 @@ a given effects chain.
 Run `./configure [options]` manually if you want to build with non-default
 options. Run `./configure --help` to see all available options.
 
+#### Install:
+
+	$ make install
+
 ### Usage:
 
 #### Synopsis:

@@ -1,5 +1,9 @@
 #!/bin/sh
 
+PREFIX=/usr
+BINDIR=/bin
+LIBDIR=/lib
+
 USAGE="Usage: $0 [option]
 
 Options:
@@ -10,6 +14,9 @@ Options:
   --disable-mad
   --disable-pulse
   --disable-ladspa_dsp
+  --prefix=path (default: $PREFIX)
+  --bindir=path (default: $BINDIR)
+  --libdir=path (default: $LIBDIR)
   --help"
 
 for i in "$@"; do
@@ -21,12 +28,16 @@ for i in "$@"; do
 		--disable-mad)        CONFIG_DISABLE_MAD=y ;;
 		--disable-pulse)      CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp) CONFIG_DISABLE_LADSPA_DSP=y ;;
+		--prefix=*)           PREFIX="${i#--prefix=}" ;;
+		--bindir=*)           BINDIR="${i#--bindir=}" ;;
+		--libdir=*)           LIBDIR="${i#--libdir=}" ;;
 		--help) echo "$USAGE"; exit 0 ;;
 		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;
 	esac
 done
 
 TARGETS="dsp"
+INSTALL_TARGETS="install_dsp"
 DSP_BASE_PACKAGES="sndfile"
 for i in $DSP_BASE_PACKAGES; do
 	if ! pkg-config --exists $i; then
@@ -75,6 +86,7 @@ check_pkg_dsp libpulse-simple "$CONFIG_DISABLE_PULSE" pulse.o -D__HAVE_PULSE__
 if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	echo "enabled ladspa_dsp"
 	TARGETS="$TARGETS ladspa_dsp"
+	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__; then
 		LADSPA_DSP_OPTIONAL_PACKAGES="$LADSPA_DSP_OPTIONAL_PACKAGES sndfile"
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sndfile.o null.o pcm.o sampleconv.o"
@@ -86,6 +98,11 @@ else
 fi
 
 echo "all: $TARGETS
+install: $INSTALL_TARGETS
+
+PREFIX := $PREFIX
+BINDIR := $BINDIR
+LIBDIR := $LIBDIR
 DSP_OBJ += $DSP_OPTIONAL_OBJECTS
 DSP_EXTRA_CFLAGS := $DSP_EXTRA_CFLAGS $(pkg-config --cflags $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)
 DSP_EXTRA_LIBS := $DSP_EXTRA_LIBS $(pkg-config --libs $DSP_BASE_PACKAGES $DSP_OPTIONAL_PACKAGES)
