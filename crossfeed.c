@@ -96,10 +96,10 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	state->direct_gain = sep / (1 + sep);
 	state->cross_gain = 1 / (1 + sep);
 
-	biquad_init_using_type(&state->f0_c0, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0);
-	biquad_init_using_type(&state->f0_c1, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0);
-	biquad_init_using_type(&state->f1_c0, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0);
-	biquad_init_using_type(&state->f1_c1, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0);
+	biquad_init_using_type(&state->f0_c0, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->f0_c1, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->f1_c0, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->f1_c1, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
 	e->data = state;
 
 	return e;

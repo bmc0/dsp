@@ -20,33 +20,33 @@
 #include "compress.h"
 
 static struct effect_info effects[] = {
-	{ "lowpass_1",          "lowpass_1 f0[k]",                      biquad_effect_init },
-	{ "highpass_1",         "highpass_1 f0[k]",                     biquad_effect_init },
-	{ "lowpass",            "lowpass f0[k] q",                      biquad_effect_init },
-	{ "highpass",           "highpass f0[k] q",                     biquad_effect_init },
-	{ "bandpass_skirt",     "bandpass_skirt f0[k] q",               biquad_effect_init },
-	{ "bandpass_peak",      "bandpass_peak f0[k] q",                biquad_effect_init },
-	{ "notch",              "notch f0[k] q",                        biquad_effect_init },
-	{ "allpass",            "allpass f0[k] q",                      biquad_effect_init },
-	{ "eq",                 "eq f0[k] q gain",                      biquad_effect_init },
-	{ "lowshelf",           "lowshelf f0[k] q gain",                biquad_effect_init },
-	{ "highshelf",          "highshelf f0[k] q gain",               biquad_effect_init },
-	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp", biquad_effect_init },
-	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",             biquad_effect_init },
-	{ "gain",               "gain [channel] gain",                  gain_effect_init },
-	{ "mult",               "mult [channel] multiplier",            gain_effect_init },
-	{ "crossfeed",          "crossfeed f0[k] separation",           crossfeed_effect_init },
-	{ "remix",              "remix channel_selector|. ...",         remix_effect_init },
-	{ "delay",              "delay seconds",                        delay_effect_init },
+	{ "lowpass_1",          "lowpass_1 f0[k]",                       biquad_effect_init },
+	{ "highpass_1",         "highpass_1 f0[k]",                      biquad_effect_init },
+	{ "lowpass",            "lowpass f0[k] width[q|o|h|k]",          biquad_effect_init },
+	{ "highpass",           "highpass f0[k] width[q|o|h|k]",         biquad_effect_init },
+	{ "bandpass_skirt",     "bandpass_skirt f0[k] width[q|o|h|k]",   biquad_effect_init },
+	{ "bandpass_peak",      "bandpass_peak f0[k] width[q|o|h|k]",    biquad_effect_init },
+	{ "notch",              "notch f0[k] width[q|o|h|k]",            biquad_effect_init },
+	{ "allpass",            "allpass f0[k] width[q|o|h|k]",          biquad_effect_init },
+	{ "eq",                 "eq f0[k] width[q|o|h|k] gain",          biquad_effect_init },
+	{ "lowshelf",           "lowshelf f0[k] width[q|s|o|h|k] gain",  biquad_effect_init },
+	{ "highshelf",          "highshelf f0[k] width[q|s|o|h|k] gain", biquad_effect_init },
+	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp",  biquad_effect_init },
+	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",              biquad_effect_init },
+	{ "gain",               "gain [channel] gain",                   gain_effect_init },
+	{ "mult",               "mult [channel] multiplier",             gain_effect_init },
+	{ "crossfeed",          "crossfeed f0[k] separation",            crossfeed_effect_init },
+	{ "remix",              "remix channel_selector|. ...",          remix_effect_init },
+	{ "delay",              "delay seconds",                         delay_effect_init },
 #ifdef __HAVE_FFTW3__
 #ifndef __SYMMETRIC_IO__
-	{ "resample",           "resample [bandwidth] fs",              resample_effect_init },
+	{ "resample",           "resample [bandwidth] fs",               resample_effect_init },
 #endif
-	{ "fir",                "fir impulse_file",                     fir_effect_init },
+	{ "fir",                "fir impulse_file",                      fir_effect_init },
 #endif
-	{ "noise",              "noise level",                          noise_effect_init },
-	{ "compress",           "compress thresh ratio attack release", compress_effect_init },
-	{ "stats",              "stats",                                stats_effect_init },
+	{ "noise",              "noise level",                           noise_effect_init },
+	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },
+	{ "stats",              "stats",                                 stats_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)

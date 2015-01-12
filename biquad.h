@@ -22,6 +22,13 @@ enum {
 	BIQUAD_LINKWITZ_TRANSFORM,
 };
 
+enum {
+	BIQUAD_WIDTH_Q = 1,
+	BIQUAD_WIDTH_SLOPE,
+	BIQUAD_WIDTH_BW_OCT,
+	BIQUAD_WIDTH_BW_HZ,
+};
+
 struct biquad_state {
 	sample_t c0, c1, c2, c3, c4;
 	sample_t x[2], y[2];
@@ -29,7 +36,7 @@ struct biquad_state {
 
 void biquad_init(struct biquad_state *, double, double, double, double, double, double);
 void biquad_reset(struct biquad_state *);
-void biquad_init_using_type(struct biquad_state *, int, double, double, double, double, double);
+void biquad_init_using_type(struct biquad_state *, int, double, double, double, double, double, int);
 sample_t biquad(struct biquad_state *, sample_t);
 struct effect * biquad_effect_init(struct effect_info *, struct stream_info *, char *, int, char **);
 

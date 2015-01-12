@@ -5,6 +5,37 @@
 #include "biquad.h"
 #include "util.h"
 
+#define CHECK_WIDTH_TYPE(cond, action) \
+	if (!(cond)) { \
+		LOG(LL_ERROR, "dsp: %s: error: invalid width type\n", argv[0]); \
+		action; \
+	}
+
+static void parse_width(const char *s, double *w, int *type)
+{
+	size_t len = strlen(s);
+	*type = BIQUAD_WIDTH_Q;
+	*w = atof(s);
+	if (len < 1)
+		return;
+	switch (s[len - 1]) {
+	case 'q':
+		*type = BIQUAD_WIDTH_Q;
+		break;
+	case 's':
+		*type = BIQUAD_WIDTH_SLOPE;
+		break;
+	case 'o':
+		*type = BIQUAD_WIDTH_BW_OCT;
+		break;
+	case 'k':
+		*w *= 1000;
+	case 'h':
+		*type = BIQUAD_WIDTH_BW_HZ;
+		break;
+	}
+}
+
 void biquad_init(struct biquad_state *state, double b0, double b1, double b2, double a0, double a1, double a2)
 {
 	state->c0 = b0 / a0;
@@ -21,10 +52,10 @@ void biquad_reset(struct biquad_state *state)
 	state->y[0] = state->y[1] = 0.0;
 }
 
-void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3)
+void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3, int width_type)
 {
 	double b0, b1, b2, a0, a1, a2;
-	double f0, q, gain, a, w0, sin_w0, cos_w0, alpha, c;
+	double f0, width, gain, a, w0, sin_w0, cos_w0, alpha, c;
 	double fz, qz, fp, qp, fc, d0i, d1i, d2i, c0i, c1i, c2i, gn, cci;
 
 	if (type == BIQUAD_LINKWITZ_TRANSFORM) {
@@ -55,14 +86,28 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 	}
 	else {
 		f0 = arg0;
-		q = arg1;
+		width = arg1;
 		gain = arg2;
 
 		a = pow(10.0, gain / 40.0);
 		w0 = 2 * M_PI * f0 / fs;
 		sin_w0 = sin(w0);
 		cos_w0 = cos(w0);
-		alpha = sin_w0 / (2.0 * q);
+
+		switch (width_type) {
+		case BIQUAD_WIDTH_SLOPE:
+			alpha = sin_w0 / 2.0 * sqrt((a + 1 / a) * (1 / width - 1) + 2);
+			break;
+		case BIQUAD_WIDTH_BW_OCT:
+			alpha = sin_w0 * sinh(log(2) / 2 * width * w0 / sin_w0);
+			break;
+		case BIQUAD_WIDTH_BW_HZ:
+			alpha = sin_w0 / (2 * f0 / width);
+			break;
+		case BIQUAD_WIDTH_Q:
+		default:
+			alpha = sin_w0 / (2.0 * width);
+		}
 
 		switch (type) {
 		case BIQUAD_LOWPASS_1:
@@ -243,7 +288,7 @@ void biquad_effect_destroy(struct effect *e)
 
 struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
 {
-	int i, type;
+	int i, type, width_type = BIQUAD_WIDTH_Q;
 	double arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
 	double b0 = 0, b1 = 0, b2 = 0, a0 = 0, a1 = 0, a2 = 0;
 	struct biquad_state **state;
@@ -274,9 +319,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_LOWPASS;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "highpass") == 0) {
 		if (argc != 3) {
@@ -285,9 +331,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_HIGHPASS;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
 		if (argc != 3) {
@@ -296,9 +343,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_BANDPASS_SKIRT;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_peak") == 0) {
 		if (argc != 3) {
@@ -307,9 +355,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_BANDPASS_PEAK;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "notch") == 0) {
 		if (argc != 3) {
@@ -318,9 +367,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_NOTCH;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "allpass") == 0) {
 		if (argc != 3) {
@@ -329,9 +379,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_ALLPASS;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "eq") == 0) {
 		if (argc != 4) {
@@ -340,10 +391,11 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_PEAK;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		arg2 = atof(argv[3]);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
 	}
 	else if (strcmp(argv[0], "lowshelf") == 0) {
 		if (argc != 4) {
@@ -352,10 +404,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_LOWSHELF;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		arg2 = atof(argv[3]);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
 	}
 	else if (strcmp(argv[0], "highshelf") == 0) {
 		if (argc != 4) {
@@ -364,10 +416,10 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 		type = BIQUAD_HIGHSHELF;
 		arg0 = parse_freq(argv[1]);
-		arg1 = atof(argv[2]);
+		parse_width(argv[2], &arg1, &width_type);
 		arg2 = atof(argv[3]);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "q", return NULL);
+		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
 	}
 	else if (strcmp(argv[0], "linkwitz_transform") == 0) {
 		if (argc != 5) {
@@ -425,7 +477,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		for (i = 0; i < istream->channels; ++i) {
 			if (GET_BIT(channel_selector, i)) {
 				state[i] = calloc(1, sizeof(struct biquad_state));
-				biquad_init_using_type(state[i], type, istream->fs, arg0, arg1, arg2, arg3);
+				biquad_init_using_type(state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
 			}
 		}
 	}
