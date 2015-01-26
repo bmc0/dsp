@@ -21,6 +21,7 @@ struct codec_info {
 	void (*print_encodings)(const char *);
 };
 
+#ifdef __HAVE_SNDFILE__
 static const char *wav_ext[]   = { ".wav", NULL };
 static const char *aiff_ext[]  = { ".aif", ".aiff", ".aifc", NULL };
 static const char *au_ext[]    = { ".au", NULL };
@@ -46,12 +47,14 @@ static const char *wve_ext[]   = { ".wve", NULL };
 static const char *ogg_ext[]   = { ".ogg", ".oga", ".ogv", NULL };
 static const char *mpc2k_ext[] = { ".mpc2k", NULL };
 static const char *rf64_ext[]  = { ".wav", ".rf64", NULL };
+#endif
 #ifdef __HAVE_MAD__
 static const char *mp3_ext[]   = { ".mp3", NULL };
 #endif
 
 struct codec_info codecs[] = {
 	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
+#ifdef __HAVE_SNDFILE__
 	{ "sndfile", NULL,      CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "wav",     wav_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "aiff",    aiff_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
@@ -78,6 +81,7 @@ struct codec_info codecs[] = {
 	{ "ogg",     ogg_ext,   CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "mpc2k",   mpc2k_ext, CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
 	{ "rf64",    rf64_ext,  CODEC_MODE_READ|CODEC_MODE_WRITE, sndfile_codec_init, sndfile_codec_print_encodings },
+#endif
 #ifdef __HAVE_FFMPEG__
 	{ "ffmpeg",  NULL,      CODEC_MODE_READ,                  ffmpeg_codec_init,  ffmpeg_codec_print_encodings },
 #endif

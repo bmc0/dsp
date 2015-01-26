@@ -9,17 +9,18 @@ a given effects chain.
 #### Dependencies:
 
 * GNU Make
-* libsndfile
+* pkg-config
 
 #### Optional dependencies:
 
-* libmad: For mp3 input support.
-* alsa-lib: For alsa input/output support.
 * fftw3: For resample and fir effects.
-* libao: For ao output support.
-* LADSPA: For building the LADSPA frontend.
+* libsndfile: For sndfile input/output support.
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
-* libpulse: For PulseAudio input/ouput support.
+* alsa-lib: For alsa input/output support.
+* libao: For ao output support.
+* libmad: For mp3 input support.
+* libpulse-simple: For PulseAudio input/ouput support.
+* LADSPA: For building the LADSPA frontend.
 
 #### Build:
 

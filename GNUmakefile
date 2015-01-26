@@ -15,7 +15,6 @@ DSP_OBJ := dsp.o \
 	noise.o \
 	compress.o \
 	stats.o \
-	sndfile.o \
 	null.o \
 	pcm.o
 LADSPA_DSP_OBJ := ladspa_dsp.o \
