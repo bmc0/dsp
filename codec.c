@@ -100,10 +100,24 @@ struct codec_info codecs[] = {
 #endif
 };
 
-static const char *fallback_codecs[] = {
+static const char *fallback_input_codecs[] = {
+#ifdef __HAVE_FFMPEG__
 	"sndfile",
+#endif
 #ifdef __HAVE_FFMPEG__
 	"ffmpeg",
+#endif
+};
+
+static const char *fallback_output_codecs[] = {
+#ifdef __HAVE_PULSE__
+	"pulse",
+#endif
+#ifdef __HAVE_ALSA__
+	"alsa",
+#endif
+#ifdef __HAVE_AO__
+	"ao",
 #endif
 };
 
@@ -136,8 +150,6 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 	struct codec *c;
 	const char *ext;
 	ext = strrchr(path, '.');
-	if (type == NULL && (ext == NULL || get_codec_info_by_ext(ext) == NULL) && mode == CODEC_MODE_WRITE)
-		type = DEFAULT_OUTPUT_TYPE;
 	if (type != NULL) {
 		info = get_codec_info_by_type(type);
 		if (info == NULL) {
@@ -155,10 +167,21 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
-	for (i = 0; i < LENGTH(fallback_codecs); ++i) {
-		info = get_codec_info_by_type(fallback_codecs[i]);
-		if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
-			return c;
+	if (mode == CODEC_MODE_WRITE) {
+		if (LENGTH(fallback_output_codecs) == 0)
+			LOG(LL_ERROR, "dsp: error: no fallback output(s) available and no output given\n");
+		for (i = 0; i < LENGTH(fallback_output_codecs); ++i) {
+			info = get_codec_info_by_type(fallback_output_codecs[i]);
+			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
+				return c;
+		}
+	}
+	else {
+		for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
+			info = get_codec_info_by_type(fallback_input_codecs[i]);
+			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
+				return c;
+		}
 	}
 	return NULL;
 }

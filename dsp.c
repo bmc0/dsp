@@ -46,11 +46,7 @@ static const char usage[] =
 	"  -B/L/N           big/little/native endian\n"
 	"  -r frequency[k]  sample rate\n"
 	"  -c channels      number of channels\n"
-	"  -n               equivalent to '-t null null'\n"
-	"\n"
-	"Default output:\n"
-	"  type: "DEFAULT_OUTPUT_TYPE"\n"
-	"  path: "DEFAULT_OUTPUT_PATH"\n";
+	"  -n               equivalent to '-t null null'\n";
 
 static const char interactive_help[] =
 	"Keys:\n"
@@ -300,7 +296,7 @@ int main(int argc, char *argv[])
 	struct {
 		char *path, *type, *enc;
 		int endian, fs, channels, mode;
-	} params, out_params = { NULL, NULL, NULL, 0, -1, -1, 0 };
+	} params, out_params = { NULL, NULL, NULL, 0, -1, -1, CODEC_MODE_WRITE };
 
 	signal(SIGINT, terminate);
 	signal(SIGTERM, terminate);
@@ -358,12 +354,9 @@ int main(int argc, char *argv[])
 	if (plot)
 		plot_effects_chain(&chain, input_fs);
 	else {
-		if (out_params.path == NULL)
-			out_codec = init_codec(DEFAULT_OUTPUT_TYPE, CODEC_MODE_WRITE, DEFAULT_OUTPUT_PATH, NULL, CODEC_ENDIAN_DEFAULT, stream.fs, stream.channels);
-		else
-			out_codec = init_codec(out_params.type, out_params.mode, out_params.path, out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs, (out_params.channels == -1) ? stream.channels : out_params.channels);
+		out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path, out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs, (out_params.channels == -1) ? stream.channels : out_params.channels);
 		if (out_codec == NULL) {
-			LOG(LL_ERROR, "dsp: error: failed to open output: %s\n", (out_params.path == NULL) ? DEFAULT_OUTPUT_PATH : out_params.path);
+			LOG(LL_ERROR, "dsp: error: failed to open output\n");
 			cleanup_and_exit(1);
 		}
 		if (out_codec->fs != stream.fs) {
