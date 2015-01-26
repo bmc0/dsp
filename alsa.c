@@ -143,7 +143,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	struct alsa_enc_info *enc_info;
 
 	if ((err = snd_pcm_open(&dev, (path == NULL) ? "default" : path, (mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
-		LOG(LL_ERROR, "dsp: alsa: error: failed to open device: %s\n", snd_strerror(err));
+		LOG(LL_OPEN_ERROR, "dsp: alsa: error: failed to open device: %s\n", snd_strerror(err));
 		goto fail;
 	}
 	if ((enc_info = alsa_get_enc_info(enc)) == NULL) {

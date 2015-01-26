@@ -191,7 +191,7 @@ struct codec * mp3_codec_init(const char *type, int mode, const char *path, cons
 
 	state = calloc(1, sizeof(struct mp3_state));
 	if ((state->fd = open(path, O_RDONLY)) == -1) {
-		LOG(LL_ERROR, "dsp: mp3: error: failed to open file: %s: %s\n", path, strerror(errno));
+		LOG(LL_OPEN_ERROR, "dsp: mp3: error: failed to open file: %s: %s\n", path, strerror(errno));
 		goto fail;
 	}
 	state->buf = calloc(MP3_BUF_SIZE, 1);

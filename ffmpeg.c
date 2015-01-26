@@ -198,7 +198,7 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
 	if ((err = avformat_open_input(&state->container, path, NULL, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
+		LOG(LL_OPEN_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avformat_find_stream_info(state->container, NULL)) < 0) {

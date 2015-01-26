@@ -7,6 +7,7 @@
 enum {
 	LL_SILENT = 0,
 	LL_ERROR,
+	LL_OPEN_ERROR,
 	LL_NORMAL,
 	LL_VERBOSE,
 };

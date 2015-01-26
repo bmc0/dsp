@@ -103,7 +103,7 @@ struct codec * ao_codec_init(const char *type, int mode, const char *path, const
 	if (ao_open_count == 0)
 		ao_initialize();
 	if ((driver = ao_default_driver_id()) == -1) {
-		LOG(LL_ERROR, "dsp: ao: error: failed get default driver id\n");
+		LOG(LL_OPEN_ERROR, "dsp: ao: error: failed get default driver id\n");
 		goto fail;
 	}
 	if ((enc_info = ao_get_enc_info(enc)) == NULL) {
@@ -116,7 +116,7 @@ struct codec * ao_codec_init(const char *type, int mode, const char *path, const
 	format.byte_format = AO_FMT_NATIVE;
 	format.matrix = NULL;
 	if ((dev = ao_open_live(driver, &format, NULL)) == NULL) {
-		LOG(LL_ERROR, "dsp: ao: error: could not open device\n");
+		LOG(LL_OPEN_ERROR, "dsp: ao: error: could not open device\n");
 		goto fail;
 	}
 

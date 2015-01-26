@@ -121,7 +121,7 @@ struct codec * pulse_codec_init(const char *type, int mode, const char *path, co
 	ss.rate = fs;
 	s = pa_simple_new(NULL, "dsp", (mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD, (strcmp(path, "default") == 0) ? NULL : path, "dsp", &ss, NULL, NULL, &err);
 	if (s == NULL) {
-		LOG(LL_ERROR, "dsp: pulse: failed to open device: %s\n", pa_strerror(err));
+		LOG(LL_OPEN_ERROR, "dsp: pulse: failed to open device: %s\n", pa_strerror(err));
 		return NULL;
 	}
 

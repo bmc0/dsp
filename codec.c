@@ -145,9 +145,9 @@ static struct codec_info * get_codec_info_by_ext(const char *ext)
 
 struct codec * init_codec(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
 {
-	int i;
+	int i, old_loglevel;
 	struct codec_info *info;
-	struct codec *c;
+	struct codec *c = NULL;
 	const char *ext;
 	ext = strrchr(path, '.');
 	if (type != NULL) {
@@ -167,23 +167,27 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
+	c = NULL;
+	if ((old_loglevel = dsp_globals.loglevel) == LL_NORMAL)
+		dsp_globals.loglevel = LL_ERROR;
 	if (mode == CODEC_MODE_WRITE) {
 		if (LENGTH(fallback_output_codecs) == 0)
 			LOG(LL_ERROR, "dsp: error: no fallback output(s) available and no output given\n");
 		for (i = 0; i < LENGTH(fallback_output_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_output_codecs[i]);
 			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
-				return c;
+				break;
 		}
 	}
 	else {
 		for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_input_codecs[i]);
 			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
-				return c;
+				break;
 		}
 	}
-	return NULL;
+	dsp_globals.loglevel = old_loglevel;
+	return c;
 }
 
 void destroy_codec(struct codec *c)

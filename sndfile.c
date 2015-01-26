@@ -196,7 +196,7 @@ struct codec * sndfile_codec_init(const char *type, int mode, const char *path, 
 	}
 	f = sf_open(path, (mode == CODEC_MODE_WRITE) ? SFM_WRITE : SFM_READ, info);
 	if (f == NULL) {
-		LOG(LL_ERROR, "dsp: sndfile: error: failed to open file: %s: %s\n", path, sf_strerror(NULL));
+		LOG(LL_OPEN_ERROR, "dsp: sndfile: error: failed to open file: %s: %s\n", path, sf_strerror(NULL));
 		goto fail;
 	}
 
