@@ -17,7 +17,8 @@
 #define TIME_FMT_ARGS(frames, fs) (frames != -1) ? frames / fs / 3600 : 0, (frames != -1) ? (frames / fs / 60) % 60 : 0, (frames != -1) ? fmod((double) frames / fs, 60.0) : 0
 
 static struct termios term_attrs;
-static int input_fs = -1, input_channels = -1, interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
+static int input_fs = -1, input_channels = -1, interactive = -1, show_progress = 1,
+	plot = 0, term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -286,10 +287,27 @@ static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
 	}
 }
 
+static ssize_t do_seek(struct codec *in, struct codec *out, ssize_t pos, ssize_t delay, ssize_t offset, int whence)
+{
+	ssize_t s;
+	if (whence == SEEK_SET)
+		s = offset;
+	else if (whence == SEEK_END)
+		s = in->frames + offset;
+	else
+		s = pos + offset - delay;
+	if ((s = in->seek(in, s)) >= 0) {
+		out->reset(out);
+		reset_effects_chain(&chain);
+		return s;
+	}
+	return pos;
+}
+
 int main(int argc, char *argv[])
 {
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
-	ssize_t r, w, delay, in_frames = 0, seek, pos = 0;
+	ssize_t r, w, delay, in_frames = 0, pos = 0;
 	struct codec *c = NULL;
 	struct stream_info stream;
 
@@ -354,7 +372,9 @@ int main(int argc, char *argv[])
 	if (plot)
 		plot_effects_chain(&chain, input_fs);
 	else {
-		out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path, out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs, (out_params.channels == -1) ? stream.channels : out_params.channels);
+		out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
+			out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
+			(out_params.channels == -1) ? stream.channels : out_params.channels);
 		if (out_codec == NULL) {
 			LOG(LL_ERROR, "dsp: error: failed to open output\n");
 			cleanup_and_exit(1);
@@ -404,44 +424,19 @@ int main(int argc, char *argv[])
 						fprintf(stderr, "\n%s\n", interactive_help);
 						break;
 					case ',':
-						seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 5 - delay);
-						if (seek >= 0) {
-							pos = seek;
-							out_codec->reset(out_codec);
-							reset_effects_chain(&chain);
-						}
+						pos = do_seek(in_codecs.head, out_codec, pos, delay, lround(in_codecs.head->fs * -5), SEEK_CUR);
 						break;
 					case '.':
-						seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 5 - delay);
-						if (seek >= 0) {
-							pos = seek;
-							out_codec->reset(out_codec);
-							reset_effects_chain(&chain);
-						}
+						pos = do_seek(in_codecs.head, out_codec, pos, delay, lround(in_codecs.head->fs * 5), SEEK_CUR);
 						break;
 					case '<':
-						seek = in_codecs.head->seek(in_codecs.head, pos - input_fs * 30 - delay);
-						if (seek >= 0) {
-							pos = seek;
-							out_codec->reset(out_codec);
-							reset_effects_chain(&chain);
-						}
+						pos = do_seek(in_codecs.head, out_codec, pos, delay, lround(in_codecs.head->fs * -30), SEEK_CUR);
 						break;
 					case '>':
-						seek = in_codecs.head->seek(in_codecs.head, pos + input_fs * 30 - delay);
-						if (seek >= 0) {
-							pos = seek;
-							out_codec->reset(out_codec);
-							reset_effects_chain(&chain);
-						}
+						pos = do_seek(in_codecs.head, out_codec, pos, delay, lround(in_codecs.head->fs * 30), SEEK_CUR);
 						break;
 					case 'r':
-						seek = in_codecs.head->seek(in_codecs.head, 0);
-						if (seek >= 0) {
-							pos = seek;
-							out_codec->reset(out_codec);
-							reset_effects_chain(&chain);
-						}
+						pos = do_seek(in_codecs.head, out_codec, pos, delay, 0, SEEK_SET);
 						break;
 					case 'n':
 						out_codec->reset(out_codec);
