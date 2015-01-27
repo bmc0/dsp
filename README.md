@@ -55,6 +55,7 @@ Flag        | Description
 `-D`        | Disable dithering.
 `-p`        | Plot effects chain instead of processing audio.
 `-V`        | Enable verbose progress display.
+`-S`        | Use "sequence" input combining mode.
 
 #### Input/output options:
 
@@ -80,6 +81,21 @@ Example    | Description
 `-4`       | 0 through 4
 `1,3`      | 1 and 3
 `1-4,7,9-` | 1 through 4, 7, and 9 to n
+
+#### Input combining modes:
+
+In concatenate mode (the default), the inputs are concatenated in the order
+given and sent to the output. All inputs must have the same sample rate and
+number of channels.
+
+In sequence mode, the inputs are sent serially to the output like concatenate
+mode, but the inputs do not need to have the same sample rate or number of
+channels. The effects chain and/or output will be rebuilt/reopened when
+required. Note that if the output is a file, the file will be truncated if it
+is reopened. This mode is most useful when the output is an audio device, but
+can also be used to concatenate inputs with different sample rates and/or
+numbers of channels into a single output file when used with the `resample`
+and/or `remix` effects.
 
 #### Supported input/output types:
 

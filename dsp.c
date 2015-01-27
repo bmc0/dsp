@@ -10,15 +10,20 @@
 #include "codec.h"
 #include "util.h"
 
-#define SELECT_FS(x) ((x == -1) ? (input_fs == -1) ? DEFAULT_FS : input_fs : x)
-#define SELECT_CHANNELS(x) ((x == -1) ? (input_channels == -1) ? DEFAULT_CHANNELS : input_channels : x)
+#define SELECT_FS(x) ((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : x)
+#define SELECT_CHANNELS(x) ((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : x)
 #define SHOULD_DITHER(in, out, has_effects) (force_dither != -1 && (force_dither == 1 || (out->prec < 24 && (has_effects || in->prec > out->prec))))
 #define TIME_FMT "%.2zd:%.2zd:%05.2lf"
 #define TIME_FMT_ARGS(frames, fs) (frames != -1) ? frames / fs / 3600 : 0, (frames != -1) ? (frames / fs / 60) % 60 : 0, (frames != -1) ? fmod((double) frames / fs, 60.0) : 0
 
+enum {
+	INPUT_MODE_CONCAT,
+	INPUT_MODE_SEQUENCE,
+};
+
 static struct termios term_attrs;
-static int input_fs = -1, input_channels = -1, interactive = -1, show_progress = 1,
-	plot = 0, term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
+static int interactive = -1, show_progress = 1, plot = 0, input_mode = INPUT_MODE_CONCAT,
+	term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -39,6 +44,7 @@ static const char usage[] =
 	"  -D         disable dithering\n"
 	"  -p         plot effects chain instead of processing audio\n"
 	"  -V         enable verbose progress display\n"
+	"  -S         run in sequence mode\n"
 	"\n"
 	"Input/output options:\n"
 	"  -o               output\n"
@@ -139,7 +145,7 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 	*channels = *fs = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpVot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpVSot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_usage();
@@ -189,6 +195,9 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 			break;
 		case 'V':
 			verbose_progress = 1;
+			break;
+		case 'S':
+			input_mode = INPUT_MODE_SEQUENCE;
 			break;
 		case 'o':
 			*mode = CODEC_MODE_WRITE;
@@ -307,7 +316,8 @@ static ssize_t do_seek(struct codec *in, struct codec *out, ssize_t pos, ssize_t
 int main(int argc, char *argv[])
 {
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
-	ssize_t r, w, delay, in_frames = 0, pos = 0;
+	ssize_t r, w, delay, pos = 0;
+	double in_time = 0;
 	struct codec *c = NULL;
 	struct stream_info stream;
 
@@ -335,22 +345,20 @@ int main(int argc, char *argv[])
 			}
 			if (LOGLEVEL(LL_VERBOSE))
 				print_io_info(c, "input");
-			if (input_fs == -1)
-				input_fs = c->fs;
-			else if (c->fs != input_fs) {
-				LOG(LL_ERROR, "dsp: error: all inputs must have the same sample rate\n");
-				cleanup_and_exit(1);
+			if (input_mode != INPUT_MODE_SEQUENCE) {
+				if (in_codecs.head != NULL && c->fs != in_codecs.head->fs) {
+					LOG(LL_ERROR, "dsp: error: all inputs must have the same sample rate in concatenate mode\n");
+					cleanup_and_exit(1);
+				}
+				if (in_codecs.head != NULL && c->channels != in_codecs.head->channels) {
+					LOG(LL_ERROR, "dsp: error: all inputs must have the same number of channels in concatenate mode\n");
+					cleanup_and_exit(1);
+				}
 			}
-			if (input_channels == -1)
-				input_channels = c->channels;
-			else if (c->channels != input_channels) {
-				LOG(LL_ERROR, "dsp: error: all inputs must have the same number of channels\n");
-				cleanup_and_exit(1);
-			}
-			if (c->frames == -1 || in_frames == -1)
-				in_frames = -1;
+			if (c->frames == -1 || in_time == -1)
+				in_time = -1;
 			else
-				in_frames += c->frames;
+				in_time += (double) c->frames / c->fs;
 			append_codec(&in_codecs, c);
 		}
 	}
@@ -364,13 +372,13 @@ int main(int argc, char *argv[])
 
 	effect_start = optind;
 	effect_argc = argc - optind;
-	stream.fs = input_fs;
-	stream.channels = input_channels;
+	stream.fs = in_codecs.head->fs;
+	stream.channels = in_codecs.head->channels;
 	if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 		cleanup_and_exit(1);
 
 	if (plot)
-		plot_effects_chain(&chain, input_fs);
+		plot_effects_chain(&chain, in_codecs.head->fs);
 	else {
 		out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
 			out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
@@ -387,10 +395,13 @@ int main(int argc, char *argv[])
 			LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
 			cleanup_and_exit(1);
 		}
-		if (in_frames == -1)
+		if (in_time == -1)
 			out_codec->frames = -1;
 		else
-			out_codec->frames = in_frames * (get_effects_chain_total_ratio(&chain) * input_channels / stream.channels);
+			out_codec->frames = in_time * stream.fs
+				* get_effects_chain_total_ratio(&chain)
+				* in_codecs.head->channels / stream.channels  /* compensate for ratio due to number of channels */
+				* in_codecs.head->fs / stream.fs;             /* compensate for ratio due to sample rate */
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 
@@ -399,8 +410,8 @@ int main(int argc, char *argv[])
 		else
 			interactive = 0;
 
-		buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-		buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+		buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+		buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 
 		if (interactive) {
 			setup_term();
@@ -458,22 +469,46 @@ int main(int argc, char *argv[])
 							} while (w != -1);
 						}
 						destroy_effects_chain(&chain);
-						stream.fs = input_fs;
-						stream.channels = input_channels;
+						stream.fs = in_codecs.head->fs;
+						stream.channels = in_codecs.head->channels;
 						if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 							cleanup_and_exit(1);
-						if (out_codec->fs != stream.fs) {
-							LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
-							cleanup_and_exit(1);
+						if (input_mode != INPUT_MODE_SEQUENCE) {
+							if (out_codec->fs != stream.fs) {
+								LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
+							if (out_codec->channels != stream.channels) {
+								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
 						}
-						if (out_codec->channels != stream.channels) {
-							LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
-							cleanup_and_exit(1);
+						else if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) {
+							LOG(LL_NORMAL, "dsp: info: output sample rate or channels changed; reopening output\n");
+							destroy_codec(out_codec);
+							out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
+								out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
+								(out_params.channels == -1) ? stream.channels : out_params.channels);
+							if (out_codec == NULL) {
+								LOG(LL_ERROR, "dsp: error: failed to open output\n");
+								cleanup_and_exit(1);
+							}
+							if (out_codec->fs != stream.fs) {
+								LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
+							if (out_codec->channels != stream.channels) {
+								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
+								cleanup_and_exit(1);
+							}
+							out_codec->frames = -1;
+							if (LOGLEVEL(LL_NORMAL))
+								print_io_info(out_codec, "output");
 						}
 						free(buf1);
 						free(buf2);
-						buf1 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-						buf2 = calloc(ceil(dsp_globals.buf_frames * input_channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 						break;
 					case 'v':
 						verbose_progress = (verbose_progress) ? 0 : 1;
@@ -499,9 +534,53 @@ int main(int argc, char *argv[])
 			} while (r > 0);
 			next_input:
 			pos = 0;
+			stream.fs = in_codecs.head->fs;
+			stream.channels = in_codecs.head->channels;
 			destroy_codec_list_head(&in_codecs);
 			if (show_progress)
 				fputs("\033[1K\r", stderr);
+			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
+				LOG(LL_NORMAL, "dsp: info: input sample rate or channels changed; rebuilding effects chain\n");
+				if (!pause) {
+					do {
+						w = dsp_globals.buf_frames;
+						obuf = drain_effects_chain(&chain, &w, buf1, buf2);
+						if (w > 0)
+							write_to_output(w, obuf, do_dither);
+					} while (w != -1);
+				}
+				destroy_effects_chain(&chain);
+				stream.fs = in_codecs.head->fs;
+				stream.channels = in_codecs.head->channels;
+				if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+					cleanup_and_exit(1);
+				if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) {
+					LOG(LL_NORMAL, "dsp: info: output sample rate or channels changed; reopening output\n");
+					destroy_codec(out_codec);
+					out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
+						out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
+						(out_params.channels == -1) ? stream.channels : out_params.channels);
+					if (out_codec == NULL) {
+						LOG(LL_ERROR, "dsp: error: failed to open output\n");
+						cleanup_and_exit(1);
+					}
+					if (out_codec->fs != stream.fs) {
+						LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
+						cleanup_and_exit(1);
+					}
+					if (out_codec->channels != stream.channels) {
+						LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
+						cleanup_and_exit(1);
+					}
+					out_codec->frames = -1;
+					if (LOGLEVEL(LL_NORMAL))
+						print_io_info(out_codec, "output");
+				}
+				free(buf1);
+				free(buf2);
+				buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+				buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+			}
 		}
 		do {
 			w = dsp_globals.buf_frames;
