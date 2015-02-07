@@ -19,7 +19,16 @@ Options:
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
   --libdir=path (default: $LIBDIR)
+  --no-config
   --help"
+
+for i in "$@"; do
+	case "$i" in
+		--no-config) NO_CONFIG=y ;;
+	esac
+done
+
+[ "$NO_CONFIG" != "y" -a -f ./.config ] && . ./.config
 
 for i in "$@"; do
 	case "$i" in
