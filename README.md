@@ -47,6 +47,7 @@ Flag        | Description
 `-h`        | Show help text.
 `-b frames` | Set buffer size (must be specified before the first input).
 `-R ratio`  | Set codec maximum buffer ratio (must be specified before the first input).
+`-i`        | Force interactive mode.
 `-I`        | Disable interactive mode.
 `-q`        | Disable progress display.
 `-s`        | Silent mode.

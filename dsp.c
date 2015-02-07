@@ -36,6 +36,7 @@ static const char usage[] =
 	"  -h         show this help\n"
 	"  -b frames  set buffer size (must be specified before the first input)\n"
 	"  -R ratio   set codec maximum buffer ratio (must be specified before the first input)\n"
+	"  -i         force interactive mode\n"
 	"  -I         disable interactive mode\n"
 	"  -q         disable progress display\n"
 	"  -s         silent mode\n"
@@ -145,7 +146,7 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 	*channels = *fs = -1;
 	*mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hb:R:IqsvdDpVSot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:R:iIqsvdDpVSot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_usage();
@@ -171,6 +172,9 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 			}
 			else
 				LOG(LL_ERROR, "dsp: warning: buffer ratio must be specified before the first input\n");
+			break;
+		case 'i':
+			interactive = 1;
 			break;
 		case 'I':
 			interactive = 0;
@@ -405,10 +409,12 @@ int main(int argc, char *argv[])
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 
-		if (interactive == -1 && out_codec->interactive)
-			interactive = 1;
-		else
-			interactive = 0;
+		if (interactive == -1) {
+			if (out_codec->interactive)
+				interactive = 1;
+			else
+				interactive = 0;
+		}
 
 		buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 		buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
