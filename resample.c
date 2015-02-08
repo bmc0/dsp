@@ -8,14 +8,14 @@
 #include "util.h"
 
 /* Tunables */
-static double bw = 0.95;  /* bandwidth */
+static double bw = 0.95;  /* default bandwidth */
 static const double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
 
 struct resample_state {
 	struct {
 		int n, d;
 	} ratio;
-	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos, drain_pos, drain_frames;
+	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos, drain_pos, drain_frames, out_delay;
 	fftw_complex *sinc_fr;
 	fftw_complex *tmp_fr;
 	sample_t **input, **output, **overlap;
@@ -63,7 +63,7 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 			}
 			state->in_buf_pos = state->out_buf_pos = 0;
 			if (state->has_output == 0) {
-				state->out_buf_pos = (state->in_len == state->sinc_len) ? state->m / 2 * state->ratio.n / state->ratio.d : state->m / 2;
+				state->out_buf_pos = state->out_delay;
 				state->has_output = 1;
 			}
 		}
@@ -99,7 +99,7 @@ void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 	else {
 		if (!state->is_draining) {
 			if (state->has_output) {
-				state->drain_frames += (state->in_len == state->sinc_len) ? state->m / 2 * state->ratio.n / state->ratio.d : state->m / 2;  /* filter delay */
+				state->drain_frames += state->out_delay;  /* filter delay */
 				state->drain_frames += state->out_len - state->out_buf_pos;  /* pending output frames */
 			}
 			state->drain_frames += state->in_buf_pos * state->ratio.n / state->ratio.d;  /* pending input frames */
@@ -149,7 +149,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 {
 	struct effect *e;
 	struct resample_state *state;
-	int rate, high_rate, low_rate, gcd, rem, i;
+	int rate, max_rate, min_rate, max_factor, gcd, rem, i;
 	sample_t *sinc, width, fc, m;
 	fftw_plan sinc_plan;
 
@@ -200,26 +200,30 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 		gcd = i;
 	} while (rem != 0);
 
-	high_rate = MAXIMUM(rate, istream->fs);
-	low_rate = MINIMUM(rate, istream->fs);
+	max_rate = MAXIMUM(rate, istream->fs);
+	min_rate = MINIMUM(rate, istream->fs);
 	state->ratio.n = rate / gcd;
 	state->ratio.d = istream->fs / gcd;
+	max_factor = MAXIMUM(state->ratio.n, state->ratio.d);
 
 	/* calulate params for windowed sinc function */
-	width = (low_rate - low_rate * bw) / 2;
-	fc = (low_rate - width) / high_rate;
-	m = round(m_fact / (width / high_rate));
+	width = (min_rate - min_rate * bw) / 2;
+	fc = (min_rate - width) / max_rate;
+	m = round(m_fact / (width / max_rate));
 
 	/* determine array lengths */
-	state->m = (size_t) (m + 1) * 2 - 1;  /* final length after convolving sinc function with itself */
-	i = high_rate / gcd;
-	state->sinc_len = MAXIMUM(state->m, i);
-	if (state->sinc_len % i != 0)
-		state->sinc_len += i - state->sinc_len % i;
-	state->in_len = (i == state->ratio.d) ? state->sinc_len : state->ratio.d * state->sinc_len / state->ratio.n;
-	state->out_len = (i == state->ratio.n) ? state->sinc_len : state->ratio.n * state->sinc_len / state->ratio.d;
-	state->sinc_fr_len = state->sinc_len + 1;
-	state->tmp_fr_len = state->sinc_fr_len;
+	state->m = (size_t) (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
+	i = ceil((double) state->m / max_factor);  /* calculate multiplier */
+	state->sinc_len = max_factor * i;
+	state->in_len = state->ratio.d * i;
+	state->out_len = state->ratio.n * i;
+	state->tmp_fr_len = state->sinc_fr_len = state->sinc_len + 1;
+
+	/* calculate output delay */
+	if (rate == max_rate)
+		state->out_delay = state->m / 2;
+	else
+		state->out_delay = lround((double) state->m / 2 * state->ratio.n / state->ratio.d);
 
 	/* allocate arrays, construct fftw plans */
 	sinc = fftw_malloc(state->sinc_len * 2 * sizeof(sample_t));
@@ -269,7 +273,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
-	LOG(LL_VERBOSE, "dsp: %s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f m=%zd sinc_len=%zd in_len=%zd out_len=%zd\n", argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->sinc_len, state->in_len, state->out_len);
+	LOG(LL_VERBOSE, "dsp: %s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd\n", argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
 
 	return e;
 }
