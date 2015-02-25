@@ -402,10 +402,10 @@ int main(int argc, char *argv[])
 		if (in_time == -1)
 			out_codec->frames = -1;
 		else
-			out_codec->frames = in_time * stream.fs
+			out_codec->frames = lround(in_time * stream.fs
 				* get_effects_chain_total_ratio(&chain)
 				* in_codecs.head->channels / stream.channels  /* compensate for ratio due to number of channels */
-				* in_codecs.head->fs / stream.fs;             /* compensate for ratio due to sample rate */
+				* in_codecs.head->fs / stream.fs);            /* compensate for ratio due to sample rate */
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 
