@@ -46,7 +46,7 @@ static struct effect_info effects[] = {
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },
-	{ "stats",              "stats",                                 stats_effect_init },
+	{ "stats",              "stats [ref_level]",                     stats_effect_init },
 };
 
 struct effect_info * get_effect_info(const char *name)
