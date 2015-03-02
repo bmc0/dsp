@@ -436,6 +436,28 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		CHECK_RANGE(arg2 >= 0.0 && arg2 < (double) istream->fs / 2.0, "fp", return NULL);
 		CHECK_RANGE(arg3 > 0.0, "qp", return NULL);
 	}
+	else if (strcmp(argv[0], "deemph") == 0) {
+		if (argc != 1) {
+			LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+			return NULL;
+		}
+		type = BIQUAD_HIGHSHELF;
+		width_type = BIQUAD_WIDTH_SLOPE;
+		if (istream->fs == 44100) {
+			arg0 = 5283;
+			arg1 = 0.4845;
+			arg2 = -9.477;
+		}
+		else if (istream->fs == 48000) {
+			arg0 = 5356;
+			arg1 = 0.479;
+			arg2 = -9.62;
+		}
+		else {
+			LOG(LL_ERROR, "dsp: %s: error: sample rate must be 44100 or 48000\n", argv[0]);
+			return NULL;
+		}
+	}
 	else if (strcmp(argv[0], "biquad") == 0) {
 		if (argc != 7) {
 			LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
@@ -465,20 +487,13 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->drain = biquad_effect_drain;
 	e->destroy = biquad_effect_destroy;
 	state = calloc(istream->channels, sizeof(struct biquad_state *));
-	if (type == BIQUAD_NONE) {
-		for (i = 0; i < istream->channels; ++i) {
-			if (GET_BIT(channel_selector, i)) {
-				state[i] = calloc(1, sizeof(struct biquad_state));
+	for (i = 0; i < istream->channels; ++i) {
+		if (GET_BIT(channel_selector, i)) {
+			state[i] = calloc(1, sizeof(struct biquad_state));
+			if (type == BIQUAD_NONE)
 				biquad_init(state[i], b0, b1, b2, a0, a1, a2);
-			}
-		}
-	}
-	else {
-		for (i = 0; i < istream->channels; ++i) {
-			if (GET_BIT(channel_selector, i)) {
-				state[i] = calloc(1, sizeof(struct biquad_state));
+			else
 				biquad_init_using_type(state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
-			}
 		}
 	}
 	e->data = state;

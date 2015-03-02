@@ -32,6 +32,7 @@ static struct effect_info effects[] = {
 	{ "lowshelf",           "lowshelf f0[k] width[q|s|o|h|k] gain",  biquad_effect_init },
 	{ "highshelf",          "highshelf f0[k] width[q|s|o|h|k] gain", biquad_effect_init },
 	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp",  biquad_effect_init },
+	{ "deemph",             "deemph",                                biquad_effect_init },
 	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",              biquad_effect_init },
 	{ "gain",               "gain [channel] gain",                   gain_effect_init },
 	{ "mult",               "mult [channel] multiplier",             gain_effect_init },

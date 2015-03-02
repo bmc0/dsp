@@ -152,6 +152,7 @@ Usage                                   | Description
 `lowshelf f0[k] width[q|s|o|h|k] gain`  | Double-pole lowshelf filter.
 `highshelf f0[k] width[q|s|o|h|k] gain` | Double-pole highshelf filter.
 `linkwitz_transform fz[k] qz fp[k] qp`  | Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+`deemph`                                | Compact Disc de-emphasis filter.
 `biquad b0 b1 b2 a0 a1 a2`              | Biquad filter.
 `gain [channel] gain`                   | Gain adjustment. Ignores the channel selector when the `channel` argument is given.
 `mult [channel] multiplier`             | Multiplies each sample by `multiplier`. Ignores the channel selector when the `channel` argument is given.
