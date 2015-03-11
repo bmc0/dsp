@@ -16,8 +16,8 @@
 #include "resample.h"
 #include "fir.h"
 #include "noise.h"
-#include "stats.h"
 #include "compress.h"
+#include "stats.h"
 
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                       biquad_effect_init },

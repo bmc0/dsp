@@ -79,7 +79,6 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	struct gain_state *state;
 	int channel = -1;
 	char *g;
-	sample_t mult;
 
 	if (argc != 2 && argc != 3) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
@@ -92,10 +91,6 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	}
 	else
 		g = argv[1];
-	if (strcmp(argv[0], "mult") == 0)
-		mult = atof(g);
-	else
-		mult = pow(10, atof(g) / 20);
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
@@ -110,7 +105,10 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	e->destroy = gain_effect_destroy;
 	state = calloc(1, sizeof(struct gain_state));
 	state->channel = channel;
-	state->mult = mult;
+	if (strcmp(argv[0], "mult") == 0)
+		state->mult = atof(g);
+	else
+		state->mult = pow(10, atof(g) / 20);
 	e->data = state;
 	return e;
 }
