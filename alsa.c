@@ -131,10 +131,9 @@ static struct alsa_enc_info * alsa_get_enc_info(const char *enc)
 	return NULL;
 }
 
-struct codec * alsa_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * alsa_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int err;
-	unsigned int r;
 	snd_pcm_t *dev = NULL;
 	snd_pcm_hw_params_t *p = NULL;
 	struct codec *c = NULL;
@@ -142,7 +141,7 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	snd_pcm_uframes_t buf_frames;
 	struct alsa_enc_info *enc_info;
 
-	if ((err = snd_pcm_open(&dev, (path == NULL) ? "default" : path, (mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
+	if ((err = snd_pcm_open(&dev, path, (mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
 		LOG(LL_OPEN_ERROR, "dsp: alsa: error: failed to open device: %s\n", snd_strerror(err));
 		goto fail;
 	}
@@ -166,12 +165,10 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set format: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	r = (unsigned int) fs;
-	if ((err = snd_pcm_hw_params_set_rate(dev, p, r, 0)) < 0) {
+	if ((err = snd_pcm_hw_params_set_rate(dev, p, (unsigned int) fs, 0)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set rate: %s\n", snd_strerror(err));
 		goto fail;
 	}
-	fs = (int) r;
 	if ((err = snd_pcm_hw_params_set_channels(dev, p, channels)) < 0) {
 		LOG(LL_ERROR, "dsp: alsa: error: failed to set channels: %s\n", snd_strerror(err));
 		goto fail;
@@ -205,12 +202,12 @@ struct codec * alsa_codec_init(const char *type, int mode, const char *path, con
 	}
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = type;
 	c->enc = enc_info->name;
-	c->path = path;
 	c->fs = fs;
-	c->prec = enc_info->prec;
 	c->channels = channels;
+	c->prec = enc_info->prec;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
 	c->frames = -1;
 	c->read = alsa_read;

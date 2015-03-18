@@ -17,8 +17,8 @@ enum {
 
 struct codec {
 	struct codec *next;
-	const char *type, *path, *enc;
-	int fs, prec, channels, interactive;
+	const char *path, *type, *enc;
+	int fs, channels, prec, interactive;
 	ssize_t frames;
 	ssize_t (*read)(struct codec *, sample_t *, ssize_t);
 	ssize_t (*write)(struct codec *, sample_t *, ssize_t);
@@ -35,7 +35,8 @@ struct codec_list {
 	struct codec *tail;
 };
 
-struct codec * init_codec(const char *, int, const char *, const char *, int, int, int);
+/* args: path, type, encoding, fs, channels, endian, mode */
+struct codec * init_codec(const char *, const char *, const char *, int, int, int, int);
 void destroy_codec(struct codec *);
 void append_codec(struct codec_list *, struct codec *);
 void destroy_codec_list_head(struct codec_list *);

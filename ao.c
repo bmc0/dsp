@@ -91,7 +91,7 @@ void ao_destroy(struct codec *c)
 	free(state);
 }
 
-struct codec * ao_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * ao_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int driver;
 	struct ao_enc_info *enc_info;
@@ -129,12 +129,12 @@ struct codec * ao_codec_init(const char *type, int mode, const char *path, const
 	}
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = type;
 	c->enc = enc_info->name;
-	c->path = path;
 	c->fs = fs;
-	c->prec = enc_info->prec;
 	c->channels = channels;
+	c->prec = enc_info->prec;
 	c->interactive = 1;
 	c->frames = -1;
 	c->read = ao_read;

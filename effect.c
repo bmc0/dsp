@@ -188,11 +188,11 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 		snprintf(path, s, "%s/%s", dir, filename);
 	}
 	if ((fd = open(path, O_RDONLY)) == -1) {
-		LOG(LL_ERROR, "dsp: error: failed to open file: %s: %s\n", path, strerror(errno));
+		LOG(LL_ERROR, "dsp: error: failed to open effects file: %s: %s\n", path, strerror(errno));
 		goto fail;
 	}
 	if ((file_size = lseek(fd, 0, SEEK_END)) == -1) {
-		LOG(LL_ERROR, "dsp: error: failed to determine file size: %s: %s\n", path, strerror(errno));
+		LOG(LL_ERROR, "dsp: error: failed to determine effects file size: %s: %s\n", path, strerror(errno));
 		goto fail;
 	}
 	lseek(fd, 0, SEEK_SET);

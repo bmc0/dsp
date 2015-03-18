@@ -103,7 +103,7 @@ static struct pulse_enc_info * pulse_get_enc_info(const char *enc)
 	return NULL;
 }
 
-struct codec * pulse_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * pulse_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int err;
 	pa_simple *s;
@@ -119,7 +119,8 @@ struct codec * pulse_codec_init(const char *type, int mode, const char *path, co
 	ss.format = enc_info->fmt;
 	ss.channels = channels;
 	ss.rate = fs;
-	s = pa_simple_new(NULL, "dsp", (mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD, (strcmp(path, "default") == 0) ? NULL : path, "dsp", &ss, NULL, NULL, &err);
+	s = pa_simple_new(NULL, "dsp", (mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD,
+		(strcmp(path, "default") == 0) ? NULL : path, "dsp", &ss, NULL, NULL, &err);
 	if (s == NULL) {
 		LOG(LL_OPEN_ERROR, "dsp: pulse: failed to open device: %s\n", pa_strerror(err));
 		return NULL;
@@ -134,12 +135,12 @@ struct codec * pulse_codec_init(const char *type, int mode, const char *path, co
 	}
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = type;
 	c->enc = enc_info->name;
-	c->path = path;
 	c->fs = fs;
-	c->prec = enc_info->prec;
 	c->channels = channels;
+	c->prec = enc_info->prec;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
 	c->frames = -1;
 	c->read = pulse_read;

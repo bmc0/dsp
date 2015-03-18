@@ -114,7 +114,7 @@ void pcm_destroy(struct codec *c)
 	free(state);
 }
 
-struct codec * pcm_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * pcm_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int fd = -1;
 	off_t size;
@@ -146,13 +146,12 @@ struct codec * pcm_codec_init(const char *type, int mode, const char *path, cons
 	}
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = type;
 	c->enc = enc_info->name;
-	c->path = path;
 	c->fs = fs;
-	c->prec = enc_info->prec;
 	c->channels = channels;
-	c->interactive = (mode == CODEC_MODE_WRITE && fd == STDOUT_FILENO) ? 1 : 0;
+	c->prec = enc_info->prec;
 	size = lseek(fd, 0, SEEK_END);
 	c->frames = (size == -1) ? -1 : size / enc_info->bytes / channels;
 	lseek(fd, 0, SEEK_SET);

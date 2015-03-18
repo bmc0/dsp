@@ -183,7 +183,7 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 	return len;
 }
 
-struct codec * mp3_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * mp3_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	struct mp3_state *state = NULL;
 	struct codec *c = NULL;
@@ -224,12 +224,12 @@ struct codec * mp3_codec_init(const char *type, int mode, const char *path, cons
 	mad_synth_frame(&state->synth, &state->frame);
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = type;
 	c->enc = "mad_f";
-	c->path = path;
 	c->fs = state->frame.header.samplerate;
-	c->prec = 24;
 	c->channels = MAD_NCHANNELS(&state->frame.header);
+	c->prec = 24;
 	c->frames = nframes;
 	c->read = mp3_read;
 	c->write = mp3_write;

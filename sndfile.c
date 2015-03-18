@@ -179,7 +179,7 @@ static int sndfile_get_endian(int endian)
 	}
 }
 
-struct codec * sndfile_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * sndfile_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	SNDFILE *f = NULL;
 	SF_INFO *info = NULL;
@@ -209,12 +209,12 @@ struct codec * sndfile_codec_init(const char *type, int mode, const char *path, 
 	state->info = info;
 
 	c = calloc(1, sizeof(struct codec));
+	c->path = path;
 	c->type = sndfile_get_type_name(info->format);
 	c->enc = sndfile_get_enc_name(info->format);
-	c->path = path;
 	c->fs = info->samplerate;
-	c->prec = sndfile_get_enc_prec(info->format);
 	c->channels = info->channels;
+	c->prec = sndfile_get_enc_prec(info->format);
 	c->frames = info->frames;
 	c->read = sndfile_read;
 	c->write = sndfile_write;

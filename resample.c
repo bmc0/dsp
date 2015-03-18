@@ -273,7 +273,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
-	LOG(LL_VERBOSE, "dsp: %s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd\n", argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
+	LOG(LL_VERBOSE, "dsp: %s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd\n",
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
 
 	return e;
 }

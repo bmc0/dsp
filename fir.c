@@ -139,7 +139,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	for (i = n_channels = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
-	c_filter = init_codec(NULL, CODEC_MODE_READ, argv[1], NULL, CODEC_ENDIAN_DEFAULT, istream->fs, n_channels);
+	c_filter = init_codec(argv[1], NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
 		LOG(LL_ERROR, "dsp: %s: error: failed to open impulse file: %s\n", argv[0], argv[1]);
 		return NULL;

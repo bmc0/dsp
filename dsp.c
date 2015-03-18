@@ -10,11 +10,22 @@
 #include "codec.h"
 #include "util.h"
 
-#define SELECT_FS(x) ((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : x)
-#define SELECT_CHANNELS(x) ((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : x)
-#define SHOULD_DITHER(in, out, has_effects) (force_dither != -1 && (force_dither == 1 || (out->prec < 24 && (has_effects || in->prec > out->prec))))
+#define CHOOSE_INPUT_FS(x) \
+	((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : x)
+#define CHOOSE_INPUT_CHANNELS(x) \
+	((x == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : x)
+#define SHOULD_DITHER(in, out, has_effects) \
+	(force_dither != -1 && (force_dither == 1 || (out->prec < 24 && (has_effects || in->prec > out->prec))))
 #define TIME_FMT "%.2zd:%.2zd:%05.2lf"
-#define TIME_FMT_ARGS(frames, fs) (frames != -1) ? frames / fs / 3600 : 0, (frames != -1) ? (frames / fs / 60) % 60 : 0, (frames != -1) ? fmod((double) frames / fs, 60.0) : 0
+#define TIME_FMT_ARGS(frames, fs) \
+	(frames != -1) ? frames / fs / 3600 : 0, \
+	(frames != -1) ? (frames / fs / 60) % 60 : 0, \
+	(frames != -1) ? fmod((double) frames / fs, 60.0) : 0
+
+struct codec_params {
+	const char *path, *type, *enc;
+	int fs, channels, endian, mode;
+};
 
 enum {
 	INPUT_MODE_CONCAT,
@@ -103,7 +114,8 @@ static void cleanup_and_exit(int s)
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (dsp_globals.clip_count > 0)
-		LOG(LL_NORMAL, "dsp: warning: clipped %ld samples (%.2fdBFS peak)\n", dsp_globals.clip_count, log10(dsp_globals.peak) * 20);
+		LOG(LL_NORMAL, "dsp: warning: clipped %ld samples (%.2fdBFS peak)\n",
+			dsp_globals.clip_count, log10(dsp_globals.peak) * 20);
 	exit(s);
 }
 
@@ -137,14 +149,14 @@ static void print_usage(void)
 	print_all_effects();
 }
 
-static int parse_codec_params(int argc, char *argv[], int *mode, char **path, char **type, char **enc, int *endian, int *fs, int *channels)
+static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 {
 	int opt;
-	*path = *type = NULL;
-	*enc = NULL;
-	*endian = CODEC_ENDIAN_DEFAULT;
-	*channels = *fs = -1;
-	*mode = CODEC_MODE_READ;
+	/* reset codec_params */
+	p->path = p->type = p->enc = NULL;  /* path will always be set if return value is zero */
+	p->fs = p->channels = -1;
+	p->endian = CODEC_ENDIAN_DEFAULT;
+	p->mode = CODEC_MODE_READ;
 
 	while ((opt = getopt(argc, argv, "+:hb:R:iIqsvdDpVSot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
@@ -204,39 +216,39 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 			input_mode = INPUT_MODE_SEQUENCE;
 			break;
 		case 'o':
-			*mode = CODEC_MODE_WRITE;
+			p->mode = CODEC_MODE_WRITE;
 			break;
 		case 't':
-			*type = optarg;
+			p->type = optarg;
 			break;
 		case 'e':
-			*enc = optarg;
+			p->enc = optarg;
 			break;
 		case 'B':
-			*endian = CODEC_ENDIAN_BIG;
+			p->endian = CODEC_ENDIAN_BIG;
 			break;
 		case 'L':
-			*endian = CODEC_ENDIAN_LITTLE;
+			p->endian = CODEC_ENDIAN_LITTLE;
 			break;
 		case 'N':
-			*endian = CODEC_ENDIAN_NATIVE;
+			p->endian = CODEC_ENDIAN_NATIVE;
 			break;
 		case 'r':
-			*fs = parse_freq(optarg);
-			if (*fs <= 0) {
+			p->fs = parse_freq(optarg);
+			if (p->fs <= 0) {
 				LOG(LL_ERROR, "dsp: error: sample rate must be > 0\n");
 				return 1;
 			}
 			break;
 		case 'c':
-			*channels = atoi(optarg);
-			if (*channels <= 0) {
+			p->channels = atoi(optarg);
+			if (p->channels <= 0) {
 				LOG(LL_ERROR, "dsp: error: number of channels must be > 0\n");
 				return 1;
 			}
 			break;
 		case 'n':
-			*path = *type = "null";
+			p->path = p->type = "null";
 			return 0;
 		default:
 			if (opt == ':')
@@ -247,7 +259,7 @@ static int parse_codec_params(int argc, char *argv[], int *mode, char **path, ch
 		}
 	}
 	if (optind < argc)
-		*path = argv[optind++];
+		p->path = argv[optind++];
 	else {
 		LOG(LL_ERROR, "dsp: error: expected path\n");
 		return 1;
@@ -278,13 +290,14 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 		(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 		TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
 	if (verbose_progress)
-		fprintf(stderr, "lat:%.2fms+%.2fms  ", (double) in->delay(in) / in->fs * 1000, (double) out->delay(out) / out->fs * 1000);
+		fprintf(stderr, "lat:%.2fms+%.2fms  ",
+			(double) in->delay(in) / in->fs * 1000, (double) out->delay(out) / out->fs * 1000);
 	if (verbose_progress || dsp_globals.clip_count != 0)
 		fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
 	fprintf(stderr, "\033[K");
 }
 
-static void write_to_output(ssize_t frames, sample_t *buf, int do_dither)
+static void write_out(ssize_t frames, sample_t *buf, int do_dither)
 {
 	ssize_t i;
 	for (i = 0; i < frames * out_codec->channels; ++i) {
@@ -317,18 +330,36 @@ static ssize_t do_seek(struct codec *in, struct codec *out, ssize_t pos, ssize_t
 	return pos;
 }
 
+static struct codec * init_out_codec(struct codec_params *p, struct stream_info *stream, ssize_t frames)
+{
+	struct codec *c;
+	c = init_codec((p->path == NULL) ? "default" : p->path, p->type, p->enc,
+		(p->fs == -1) ? stream->fs : p->fs, (p->channels == -1) ? stream->channels : p->channels, p->endian, p->mode);
+	if (c == NULL) {
+		LOG(LL_ERROR, "dsp: error: failed to open output\n");
+		return NULL;
+	}
+	if (c->fs != stream->fs) {
+		LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", c->path);
+		return NULL;
+	}
+	if (c->channels != stream->channels) {
+		LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", c->path);
+		return NULL;
+	}
+	c->frames = frames;
+	return c;
+}
+
 int main(int argc, char *argv[])
 {
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
-	ssize_t r, w, delay, pos = 0;
+	ssize_t r, w, delay, pos = 0, out_frames;
 	double in_time = 0;
 	struct codec *c = NULL;
 	struct stream_info stream;
-
-	struct {
-		char *path, *type, *enc;
-		int endian, fs, channels, mode;
-	} params, out_params = { NULL, NULL, NULL, 0, -1, -1, CODEC_MODE_WRITE };
+	struct codec_params p,
+		out_p = { NULL, NULL, NULL, -1, -1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_WRITE };
 
 	signal(SIGINT, terminate);
 	signal(SIGTERM, terminate);
@@ -337,14 +368,15 @@ int main(int argc, char *argv[])
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
 	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':' && argv[optind][0] != '@') {
-		if (parse_codec_params(argc, argv, &params.mode, &params.path, &params.type, &params.enc, &params.endian, &params.fs, &params.channels))
+		if (parse_codec_params(argc, argv, &p))
 			cleanup_and_exit(1);
-		if (params.mode == CODEC_MODE_WRITE)
-			out_params = params;
+		if (p.mode == CODEC_MODE_WRITE)
+			out_p = p;
 		else {
-			c = init_codec(params.type, CODEC_MODE_READ, params.path, params.enc, params.endian, SELECT_FS(params.fs), SELECT_CHANNELS(params.channels));
+			c = init_codec(p.path, p.type, p.enc, CHOOSE_INPUT_FS(p.fs),
+				CHOOSE_INPUT_CHANNELS(p.channels), p.endian, p.mode);
 			if (c == NULL) {
-				LOG(LL_ERROR, "dsp: error: failed to open input: %s\n", params.path);
+				LOG(LL_ERROR, "dsp: error: failed to open input: %s\n", p.path);
 				cleanup_and_exit(1);
 			}
 			if (LOGLEVEL(LL_VERBOSE))
@@ -384,28 +416,15 @@ int main(int argc, char *argv[])
 	if (plot)
 		plot_effects_chain(&chain, in_codecs.head->fs);
 	else {
-		out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
-			out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
-			(out_params.channels == -1) ? stream.channels : out_params.channels);
-		if (out_codec == NULL) {
-			LOG(LL_ERROR, "dsp: error: failed to open output\n");
-			cleanup_and_exit(1);
-		}
-		if (out_codec->fs != stream.fs) {
-			LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
-			cleanup_and_exit(1);
-		}
-		if (out_codec->channels != stream.channels) {
-			LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
-			cleanup_and_exit(1);
-		}
 		if (in_time == -1)
-			out_codec->frames = -1;
+			out_frames = -1;
 		else
-			out_codec->frames = lround(in_time * stream.fs
+			out_frames = lround(in_time * stream.fs
 				* get_effects_chain_total_ratio(&chain)
 				* in_codecs.head->channels / stream.channels  /* compensate for ratio due to number of channels */
 				* in_codecs.head->fs / stream.fs);            /* compensate for ratio due to sample rate */
+		if ((out_codec = init_out_codec(&out_p, &stream, out_frames)) == NULL)
+			cleanup_and_exit(1);
 		if (LOGLEVEL(LL_NORMAL))
 			print_io_info(out_codec, "output");
 
@@ -471,7 +490,7 @@ int main(int argc, char *argv[])
 								w = dsp_globals.buf_frames;
 								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
 								if (w > 0)
-									write_to_output(w, obuf, do_dither);
+									write_out(w, obuf, do_dither);
 							} while (w != -1);
 						}
 						destroy_effects_chain(&chain);
@@ -490,24 +509,10 @@ int main(int argc, char *argv[])
 							}
 						}
 						else if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) {
-							LOG(LL_NORMAL, "dsp: info: output sample rate or channels changed; reopening output\n");
+							LOG(LL_NORMAL, "dsp: info: output sample rate and/or channels changed; reopening output\n");
 							destroy_codec(out_codec);
-							out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
-								out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
-								(out_params.channels == -1) ? stream.channels : out_params.channels);
-							if (out_codec == NULL) {
-								LOG(LL_ERROR, "dsp: error: failed to open output\n");
+							if ((out_codec = init_out_codec(&out_p, &stream, -1)) == NULL)
 								cleanup_and_exit(1);
-							}
-							if (out_codec->fs != stream.fs) {
-								LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
-								cleanup_and_exit(1);
-							}
-							if (out_codec->channels != stream.channels) {
-								LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
-								cleanup_and_exit(1);
-							}
-							out_codec->frames = -1;
 							if (LOGLEVEL(LL_NORMAL))
 								print_io_info(out_codec, "output");
 						}
@@ -515,6 +520,8 @@ int main(int argc, char *argv[])
 						free(buf2);
 						buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 						buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
+						LOG(LL_VERBOSE, "dsp: info: dither %s\n", (do_dither) ? "on" : "off" );
 						break;
 					case 'v':
 						verbose_progress = (verbose_progress) ? 0 : 1;
@@ -531,7 +538,7 @@ int main(int argc, char *argv[])
 				w = r = in_codecs.head->read(in_codecs.head, buf1, dsp_globals.buf_frames);
 				pos += r;
 				obuf = run_effects_chain(&chain, &w, buf1, buf2);
-				write_to_output(w, obuf, do_dither);
+				write_out(w, obuf, do_dither);
 				k += w;
 				if (show_progress && k >= out_codec->fs) {
 					print_progress(in_codecs.head, out_codec, pos, pause);
@@ -546,13 +553,13 @@ int main(int argc, char *argv[])
 			if (show_progress)
 				fputs("\033[1K\r", stderr);
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
-				LOG(LL_NORMAL, "dsp: info: input sample rate or channels changed; rebuilding effects chain\n");
+				LOG(LL_NORMAL, "dsp: info: input sample rate and/or channels changed; rebuilding effects chain\n");
 				if (!pause) {
 					do {
 						w = dsp_globals.buf_frames;
 						obuf = drain_effects_chain(&chain, &w, buf1, buf2);
 						if (w > 0)
-							write_to_output(w, obuf, do_dither);
+							write_out(w, obuf, do_dither);
 					} while (w != -1);
 				}
 				destroy_effects_chain(&chain);
@@ -561,24 +568,10 @@ int main(int argc, char *argv[])
 				if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
 					cleanup_and_exit(1);
 				if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) {
-					LOG(LL_NORMAL, "dsp: info: output sample rate or channels changed; reopening output\n");
+					LOG(LL_NORMAL, "dsp: info: output sample rate and/or channels changed; reopening output\n");
 					destroy_codec(out_codec);
-					out_codec = init_codec(out_params.type, out_params.mode, (out_params.path == NULL) ? "default" : out_params.path,
-						out_params.enc, out_params.endian, (out_params.fs == -1) ? stream.fs : out_params.fs,
-						(out_params.channels == -1) ? stream.channels : out_params.channels);
-					if (out_codec == NULL) {
-						LOG(LL_ERROR, "dsp: error: failed to open output\n");
+					if ((out_codec = init_out_codec(&out_p, &stream, -1)) == NULL)
 						cleanup_and_exit(1);
-					}
-					if (out_codec->fs != stream.fs) {
-						LOG(LL_ERROR, "dsp: error: sample rate mismatch: %s\n", out_codec->path);
-						cleanup_and_exit(1);
-					}
-					if (out_codec->channels != stream.channels) {
-						LOG(LL_ERROR, "dsp: error: channels mismatch: %s\n", out_codec->path);
-						cleanup_and_exit(1);
-					}
-					out_codec->frames = -1;
 					if (LOGLEVEL(LL_NORMAL))
 						print_io_info(out_codec, "output");
 				}
@@ -592,7 +585,7 @@ int main(int argc, char *argv[])
 			w = dsp_globals.buf_frames;
 			obuf = drain_effects_chain(&chain, &w, buf1, buf2);
 			if (w > 0)
-				write_to_output(w, obuf, do_dither);
+				write_out(w, obuf, do_dither);
 		} while (w != -1);
 	}
 	end_rw_loop:

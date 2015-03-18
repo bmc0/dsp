@@ -4,12 +4,12 @@
 #include "util.h"
 #include "codec.h"
 
+#include "null.h"
 #include "sndfile.h"
 #include "ffmpeg.h"
 #include "alsa.h"
 #include "ao.h"
 #include "mp3.h"
-#include "null.h"
 #include "pcm.h"
 #include "pulse.h"
 
@@ -17,7 +17,8 @@ struct codec_info {
 	const char *type;
 	const char **ext;  /* null terminated array of extension strings */
 	int modes;
-	struct codec * (*init)(const char *, int, const char *, const char *, int, int, int);
+	/* args: path, type, encoding, fs, channels, endian, mode */
+	struct codec * (*init)(const char *, const char *, const char *, int, int, int, int);
 	void (*print_encodings)(const char *);
 };
 
@@ -143,7 +144,7 @@ static struct codec_info * get_codec_info_by_ext(const char *ext)
 	return NULL;
 }
 
-struct codec * init_codec(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+struct codec * init_codec(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int i, old_loglevel;
 	struct codec_info *info;
@@ -157,13 +158,13 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 			return NULL;
 		}
 		if (info->modes & mode)
-			return info->init(info->type, mode, path, enc, endian, rate, channels);
+			return info->init(path, info->type, enc, fs, channels, endian, mode);
 		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
 	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
 		if (info->modes & mode)
-			return info->init(info->type, mode, path, enc, endian, rate, channels);
+			return info->init(path, info->type, enc, fs, channels, endian, mode);
 		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
@@ -175,14 +176,14 @@ struct codec * init_codec(const char *type, int mode, const char *path, const ch
 			LOG(LL_ERROR, "dsp: error: no fallback output(s) available and no output given\n");
 		for (i = 0; i < LENGTH(fallback_output_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_output_codecs[i]);
-			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
+			if (info != NULL && info->modes & mode && (c = info->init(path, info->type, enc, fs, channels, endian, mode)) != NULL)
 				break;
 		}
 	}
 	else {
 		for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_input_codecs[i]);
-			if (info != NULL && info->modes & mode && (c = info->init(info->type, mode, path, enc, endian, rate, channels)) != NULL)
+			if (info != NULL && info->modes & mode && (c = info->init(path, info->type, enc, fs, channels, endian, mode)) != NULL)
 				break;
 		}
 	}
@@ -226,7 +227,8 @@ void print_all_codecs(void)
 	int i;
 	fprintf(stdout, "Types:\n  Type:    Modes: Encodings:\n");
 	for (i = 0; i < LENGTH(codecs); ++i) {
-		fprintf(stdout, "  %-8s %c%c    ", codecs[i].type, (codecs[i].modes & CODEC_MODE_READ) ? 'r' : ' ', (codecs[i].modes & CODEC_MODE_WRITE) ? 'w' : ' ');
+		fprintf(stdout, "  %-8s %c%c    ", codecs[i].type,
+			(codecs[i].modes & CODEC_MODE_READ) ? 'r' : ' ', (codecs[i].modes & CODEC_MODE_WRITE) ? 'w' : ' ');
 		codecs[i].print_encodings(codecs[i].type);
 		fputc('\n', stdout);
 	}

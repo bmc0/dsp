@@ -117,9 +117,11 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 		else if (state->got_frame) {
 			avail = (avail > frames - buf_pos) ? frames - buf_pos : avail;
 			if (state->planar)
-				state->readp_func((char **) state->frame->extended_data, &buf[buf_pos * c->channels], c->channels, state->frame_pos, avail);
+				state->readp_func((char **) state->frame->extended_data, &buf[buf_pos * c->channels],
+					c->channels, state->frame_pos, avail);
 			else
-				state->read_func((char *) &state->frame->extended_data[0][state->frame_pos * state->bytes * c->channels], &buf[buf_pos * c->channels], avail * c->channels);
+				state->read_func((char *) &state->frame->extended_data[0][state->frame_pos * state->bytes * c->channels],
+					&buf[buf_pos * c->channels], avail * c->channels);
 			buf_pos += avail;
 			state->frame_pos += avail;
 		}
@@ -178,7 +180,7 @@ void ffmpeg_destroy(struct codec *c)
 	free((char *) c->type);
 }
 
-struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int rate, int channels)
+struct codec * ffmpeg_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	int i, err;
 	struct ffmpeg_state *state = NULL;
@@ -198,7 +200,8 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
 	if ((err = avformat_open_input(&state->container, path, NULL, NULL)) < 0) {
-		LOG(LL_OPEN_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n", (mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
+		LOG(LL_OPEN_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n",
+			(mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avformat_find_stream_info(state->container, NULL)) < 0) {
@@ -230,11 +233,12 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 
 	c = calloc(1, sizeof(struct codec));
 	i = strlen(codec->name) + 8;
+	c->path = path;
 	c->type = calloc(1, i);
 	snprintf((char *) c->type, i, "ffmpeg/%s", codec->name);
 	c->enc = av_get_sample_fmt_name(state->cc->sample_fmt);
-	c->path = path;
 	c->fs = state->cc->sample_rate;
+	c->channels = state->cc->channels;
 	switch (state->cc->sample_fmt) {
 	case AV_SAMPLE_FMT_U8:
 	case AV_SAMPLE_FMT_U8P:
@@ -270,7 +274,6 @@ struct codec * ffmpeg_codec_init(const char *type, int mode, const char *path, c
 		LOG(LL_ERROR, "dsp: ffmpeg: error: unhandled sample format\n");
 		goto fail;
 	}
-	c->channels = state->cc->channels;
 	time_base.num = state->container->streams[state->stream_index]->time_base.num;
 	time_base.den = state->container->streams[state->stream_index]->time_base.den;
 	c->frames = state->container->streams[state->stream_index]->duration * time_base.num * c->fs / time_base.den;

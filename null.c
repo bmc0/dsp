@@ -39,15 +39,15 @@ void null_destroy(struct codec *c)
 	/* nothing to clean up */
 }
 
-struct codec * null_codec_init(const char *type, int mode, const char *path, const char *enc, int endian, int fs, int channels)
+struct codec * null_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
 {
 	struct codec *c = calloc(1, sizeof(struct codec));
+	c->path = "null";
 	c->type = type;
 	c->enc = "sample_t";
-	c->path = "null";
 	c->fs = fs;
-	c->prec = 53;
 	c->channels = channels;
+	c->prec = 53;
 	c->frames = -1;
 	c->read = null_read;
 	c->write = null_write;
