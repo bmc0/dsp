@@ -86,9 +86,17 @@ ssize_t pcm_seek(struct codec *c, ssize_t pos)
 {
 	off_t o;
 	struct pcm_state *state = (struct pcm_state *) c->data;
-	o = lseek(state->fd, pos, SEEK_SET);
-	pos = (o == -1) ? pos : o;
-	return o;
+	if (c->frames == -1)
+		return -1;
+	if (pos < 0)
+		pos = 0;
+	else if (pos > c->frames)
+		pos = c->frames;
+	o = lseek(state->fd, pos * state->enc_info->bytes * c->channels, SEEK_SET);
+	if (o == -1)
+		return -1;
+	state->pos = o;
+	return o / state->enc_info->bytes / c->channels;
 }
 
 ssize_t pcm_delay(struct codec *c)
@@ -152,8 +160,11 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	c->fs = fs;
 	c->channels = channels;
 	c->prec = enc_info->prec;
-	size = lseek(fd, 0, SEEK_END);
-	c->frames = (size == -1) ? -1 : size / enc_info->bytes / channels;
+	c->frames = -1;
+	if (mode == CODEC_MODE_READ) {
+		size = lseek(fd, 0, SEEK_END);
+		c->frames = (size == -1) ? -1 : size / enc_info->bytes / channels;
+	}
 	lseek(fd, 0, SEEK_SET);
 	c->read = pcm_read;
 	c->write = pcm_write;
