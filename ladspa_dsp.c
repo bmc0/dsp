@@ -34,6 +34,69 @@ static int input_channels = 1;
 static int output_channels = 1;
 static int chain_argc = 0;
 static char **chain_argv = NULL;
+static char *config_file = NULL;
+
+LADSPA_Descriptor *dsp_descriptor = NULL;
+
+static char * isolate(char *s, char c)
+{
+	while (*s && *s != c) ++s;
+	*s = '\0';
+	return s + 1;
+}
+
+static void load_config(int is_reload)
+{
+	int i, k, fd;
+	char *contents = NULL, *key, *value, *next;
+	off_t file_size;
+
+	if (is_reload) {
+		for (i = 0; i < chain_argc; ++i)
+			free(chain_argv[i]);
+		free(chain_argv);
+		chain_argc = 0;
+	}
+	if ((fd = open(config_file, O_RDONLY)) == -1)
+		LOG(LL_ERROR, "ladspa_dsp: warning: failed to open config file: %s\n", config_file);
+	else {
+		if ((file_size = lseek(fd, 0, SEEK_END)) == -1) {
+			LOG(LL_ERROR, "ladspa_dsp: error: failed to determine file size: %s: %s\n", config_file, strerror(errno));
+			goto fail;
+		}
+		lseek(fd, 0, SEEK_SET);
+		contents = malloc(file_size + 1);
+		if (read(fd, contents, file_size) != file_size) {
+			LOG(LL_ERROR, "ladspa_dsp: error: short read: %s\n", config_file);
+			goto fail;
+		}
+		contents[file_size] = '\0';
+		key = contents;
+		for (i = 1; *key != '\0'; ++i) {
+			while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
+				++key;
+			next = isolate(key, '\n');
+			if (*key != '\n' && *key != '#') {
+				value = isolate(key, '=');
+				if (!is_reload && strcmp(key, "input_channels") == 0)
+					input_channels = atoi(value);
+				else if (!is_reload && strcmp(key, "output_channels") == 0)
+					output_channels = atoi(value);
+				else if (strcmp(key, "effects_chain") == 0) {
+					for (k = 0; k < chain_argc; ++k)
+						free(chain_argv[k]);
+					free(chain_argv);
+					gen_argv_from_string(value, &chain_argc, &chain_argv);
+				}
+				else LOG(LL_ERROR, "ladspa_dsp: warning: line %d: invalid option: %s\n", i, key);
+			}
+			key = next;
+		}
+		fail:
+		free(contents);
+		close(fd);
+	}
+}
 
 LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long fs)
 {
@@ -90,7 +153,7 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 	for (i = j = 0; i < s; i++)
 		for (k = 0; k < input_channels; ++k)
 			d->buf1[j++] = (sample_t) d->ports[k][i];
-	
+
 	obuf = run_effects_chain(&d->chain, &w, d->buf1, d->buf2);
 
 	for (i = j = 0; i < s; i++)
@@ -101,6 +164,7 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 void cleanup_dsp(LADSPA_Handle inst)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
+	LOG(LL_VERBOSE, "ladspa_dsp: info: cleaning up...\n");
 	free(d->buf1);
 	free(d->buf2);
 	destroy_effects_chain(&d->chain);
@@ -108,23 +172,13 @@ void cleanup_dsp(LADSPA_Handle inst)
 	free(d);
 }
 
-LADSPA_Descriptor *dsp_descriptor = NULL;
- 
-static char * isolate(char *s, char c)
-{
-	while (*s && *s != c) ++s;
-	*s = '\0';
-	return s + 1;
-}
-
 void _init()
 {
 	LADSPA_PortDescriptor *pd;
 	char **pn;
 	LADSPA_PortRangeHint *ph;
-	int i, k, fd;
-	char *env, *config_file, *contents = NULL, *key, *value, *next;
-	off_t file_size;
+	int i;
+	char *env;
 
 	env = getenv("LADSPA_DSP_LOGLEVEL");
 	if (env != NULL) {
@@ -155,46 +209,7 @@ void _init()
 	else
 		config_file = strdup(env);
 	LOG(LL_VERBOSE, "ladspa_dsp: info: config_file=%s\n", config_file);
-	if ((fd = open(config_file, O_RDONLY)) == -1)
-		LOG(LL_ERROR, "ladspa_dsp: warning: failed to open config file: %s\n", config_file);
-	else {
-		if ((file_size = lseek(fd, 0, SEEK_END)) == -1) {
-			LOG(LL_ERROR, "ladspa_dsp: error: failed to determine file size: %s: %s\n", config_file, strerror(errno));
-			goto fail;
-		}
-		lseek(fd, 0, SEEK_SET);
-		contents = malloc(file_size + 1);
-		if (read(fd, contents, file_size) != file_size) {
-			LOG(LL_ERROR, "ladspa_dsp: error: short read: %s\n", config_file);
-			goto fail;
-		}
-		contents[file_size] = '\0';
-		key = contents;
-		for (i = 1; *key != '\0'; ++i) {
-			while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
-				++key;
-			next = isolate(key, '\n');
-			if (*key != '\n' && *key != '#') {
-				value = isolate(key, '=');
-				if (strcmp(key, "input_channels") == 0)
-					input_channels = atoi(value);
-				else if (strcmp(key, "output_channels") == 0)
-					output_channels = atoi(value);
-				else if (strcmp(key, "effects_chain") == 0) {
-					for (k = 0; k < chain_argc; ++k)
-						free(chain_argv[k]);
-					free(chain_argv);
-					gen_argv_from_string(value, &chain_argc, &chain_argv);
-				}
-				else LOG(LL_ERROR, "ladspa_dsp: warning: line %d: invalid option: %s\n", i, key);
-			}
-			key = next;
-		}
-		fail:
-		free(contents);
-		close(fd);
-	}
-	free(config_file);
+	load_config(0);
 
 	dsp_descriptor = calloc(1, sizeof(LADSPA_Descriptor));
 	if (dsp_descriptor != NULL) {
@@ -246,6 +261,7 @@ void _fini() {
 	for (i = 0; i < chain_argc; ++i)
 		free(chain_argv[i]);
 	free(chain_argv);
+	free(config_file);
 }
 
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)
