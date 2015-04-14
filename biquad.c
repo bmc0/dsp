@@ -63,7 +63,7 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 		qz = arg1;
 		fp = arg2;
 		qp = arg3;
-		
+
 		fc = (fz + fp) / 2.0;
 
 		d0i = pow(2.0 * M_PI * fz, 2.0);
@@ -76,7 +76,7 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 		gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
 		cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
-		
+
 		b0 = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
 		b1 = 2 * (d0i - pow(gn, 2.0) * d2i) / cci;
 		b2 = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;

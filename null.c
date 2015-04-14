@@ -57,7 +57,7 @@ struct codec * null_codec_init(const char *path, const char *type, const char *e
 	c->pause = null_pause;
 	c->destroy = null_destroy;
 	c->data = NULL;
-	
+
 	return c;
 }
 
