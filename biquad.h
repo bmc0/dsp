@@ -31,7 +31,7 @@ enum {
 
 struct biquad_state {
 	sample_t c0, c1, c2, c3, c4;
-	sample_t x[2], y[2];
+	sample_t i0, i1, o0, o1;
 };
 
 void biquad_init(struct biquad_state *, double, double, double, double, double, double);

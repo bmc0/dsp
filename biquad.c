@@ -48,8 +48,8 @@ void biquad_init(struct biquad_state *state, double b0, double b1, double b2, do
 
 void biquad_reset(struct biquad_state *state)
 {
-	state->x[0] = state->x[1] = 0.0;
-	state->y[0] = state->y[1] = 0.0;
+	state->i0 = state->i1 = 0.0;
+	state->o0 = state->o1 = 0.0;
 }
 
 void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3, int width_type)
@@ -214,13 +214,13 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 sample_t biquad(struct biquad_state *state, sample_t s)
 {
-	sample_t r = (state->c0 * s) + (state->c1 * state->x[0]) + (state->c2 * state->x[1]) - (state->c3 * state->y[0]) - (state->c4 * state->y[1]);
+	sample_t r = (state->c0 * s) + (state->c1 * state->i0) + (state->c2 * state->i1) - (state->c3 * state->o0) - (state->c4 * state->o1);
 
-	state->x[1] = state->x[0];
-	state->x[0] = s;
+	state->i1 = state->i0;
+	state->i0 = s;
 
-	state->y[1] = state->y[0];
-	state->y[0] = r;
+	state->o1 = state->o0;
+	state->o0 = r;
 
 	return r;
 }
