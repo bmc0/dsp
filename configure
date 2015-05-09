@@ -44,6 +44,7 @@ for i in "$@"; do
 		--prefix=*)           PREFIX="${i#--prefix=}" ;;
 		--bindir=*)           BINDIR="${i#--bindir=}" ;;
 		--libdir=*)           LIBDIR="${i#--libdir=}" ;;
+		--no-config) ;;
 		--help) echo "$USAGE"; exit 0 ;;
 		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;
 	esac
