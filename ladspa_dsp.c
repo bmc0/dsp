@@ -1,8 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
 #include <ladspa.h>
@@ -11,8 +9,9 @@
 #include "effect.h"
 #include "util.h"
 
-#define DEFAULT_CONFIG_LOCATION "/ladspa_dsp/config"
+#define DEFAULT_CONFIG_PATH "/ladspa_dsp/config"
 #define DEFAULT_XDG_CONFIG_DIR "/.config"
+#define GLOBAL_CONFIG_PATH "/etc"DEFAULT_CONFIG_PATH
 
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
@@ -34,7 +33,6 @@ static int input_channels = 1;
 static int output_channels = 1;
 static int chain_argc = 0;
 static char **chain_argv = NULL;
-static char *config_file = NULL;
 
 LADSPA_Descriptor *dsp_descriptor = NULL;
 
@@ -45,11 +43,20 @@ static char * isolate(char *s, char c)
 	return s + 1;
 }
 
+static char * try_file(const char *path)
+{
+	char *c;
+	if ((c = get_file_contents(path)))
+		LOG(LL_VERBOSE, "ladspa_dsp: info: loaded config file: %s\n", path);
+	else
+		LOG(LL_VERBOSE, "ladspa_dsp: info: failed to load config file: %s: %s\n", path, strerror(errno));
+	return c;
+}
+
 static void load_config(int is_reload)
 {
-	int i, k, fd;
-	char *contents = NULL, *key, *value, *next;
-	off_t file_size;
+	int i, k;
+	char *path = NULL, *env, *c = NULL, *key, *value, *next;
 
 	if (is_reload) {
 		for (i = 0; i < chain_argc; ++i)
@@ -57,45 +64,61 @@ static void load_config(int is_reload)
 		free(chain_argv);
 		chain_argc = 0;
 	}
-	if ((fd = open(config_file, O_RDONLY)) == -1)
-		LOG(LL_ERROR, "ladspa_dsp: warning: failed to open config file: %s\n", config_file);
+
+	/* Use environment variable, if present */
+	if ((env = getenv("LADSPA_DSP_CONFIG")))
+		c = try_file(env);
 	else {
-		if ((file_size = lseek(fd, 0, SEEK_END)) == -1) {
-			LOG(LL_ERROR, "ladspa_dsp: error: failed to determine file size: %s: %s\n", config_file, strerror(errno));
-			goto fail;
+		/* Build local config path */
+		if ((env = getenv("XDG_CONFIG_HOME"))) {
+			i = strlen(env) + strlen(DEFAULT_CONFIG_PATH) + 1;
+			path = calloc(i, sizeof(char));
+			snprintf(path, i, "%s%s", env, DEFAULT_CONFIG_PATH);
 		}
-		lseek(fd, 0, SEEK_SET);
-		contents = malloc(file_size + 1);
-		if (read(fd, contents, file_size) != file_size) {
-			LOG(LL_ERROR, "ladspa_dsp: error: short read: %s\n", config_file);
-			goto fail;
+		else if ((env = getenv("HOME"))) {
+			i = strlen(env) + strlen(DEFAULT_XDG_CONFIG_DIR) + strlen(DEFAULT_CONFIG_PATH) + 1;
+			path = calloc(i, sizeof(char));
+			snprintf(path, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_PATH);
 		}
-		contents[file_size] = '\0';
-		key = contents;
-		for (i = 1; *key != '\0'; ++i) {
-			while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
-				++key;
-			next = isolate(key, '\n');
-			if (*key != '\n' && *key != '#') {
-				value = isolate(key, '=');
-				if (!is_reload && strcmp(key, "input_channels") == 0)
-					input_channels = atoi(value);
-				else if (!is_reload && strcmp(key, "output_channels") == 0)
-					output_channels = atoi(value);
-				else if (strcmp(key, "effects_chain") == 0) {
-					for (k = 0; k < chain_argc; ++k)
-						free(chain_argv[k]);
-					free(chain_argv);
-					gen_argv_from_string(value, &chain_argc, &chain_argv);
-				}
-				else LOG(LL_ERROR, "ladspa_dsp: warning: line %d: invalid option: %s\n", i, key);
-			}
-			key = next;
+
+		if (path) {
+			c = try_file(path);
+			free(path);
 		}
-		fail:
-		free(contents);
-		close(fd);
+		if (!c)
+			c = try_file(GLOBAL_CONFIG_PATH);
 	}
+
+	if (!c)  /* No config files were loaded */
+		goto fail;
+
+	key = c;
+	for (i = 1; *key != '\0'; ++i) {
+		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
+			++key;
+		next = isolate(key, '\n');
+		if (*key != '\n' && *key != '#') {
+			value = isolate(key, '=');
+			if (!is_reload && strcmp(key, "input_channels") == 0)
+				input_channels = atoi(value);
+			else if (!is_reload && strcmp(key, "output_channels") == 0)
+				output_channels = atoi(value);
+			else if (strcmp(key, "effects_chain") == 0) {
+				for (k = 0; k < chain_argc; ++k)
+					free(chain_argv[k]);
+				free(chain_argv);
+				gen_argv_from_string(value, &chain_argc, &chain_argv);
+			}
+			else
+				LOG(LL_ERROR, "ladspa_dsp: warning: line %d: invalid option: %s\n", i, key);
+		}
+		key = next;
+	}
+	free(c);
+	return;
+
+	fail:
+	LOG(LL_ERROR, "ladspa_dsp: warning: failed to load a config file; no processing will be done\n");
 }
 
 LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long fs)
@@ -192,23 +215,6 @@ void _init()
 			LOG(LL_ERROR, "ladspa_dsp: warning: unrecognized loglevel: %s\n", env);
 	}
 
-	env = getenv("LADSPA_DSP_CONFIG");
-	if (env == NULL) {
-		if ((env = getenv("XDG_CONFIG_HOME"))) {
-			i = strlen(env) + strlen(DEFAULT_CONFIG_LOCATION) + 1;
-			config_file = calloc(i, sizeof(char));
-			snprintf(config_file, i, "%s%s", env, DEFAULT_CONFIG_LOCATION);
-		}
-		else {
-			env = getenv("HOME");
-			i = strlen(env) + strlen(DEFAULT_XDG_CONFIG_DIR) + strlen(DEFAULT_CONFIG_LOCATION) + 1;
-			config_file = calloc(i, sizeof(char));
-			snprintf(config_file, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_LOCATION);
-		}
-	}
-	else
-		config_file = strdup(env);
-	LOG(LL_VERBOSE, "ladspa_dsp: info: config_file=%s\n", config_file);
 	load_config(0);
 
 	dsp_descriptor = calloc(1, sizeof(LADSPA_Descriptor));
@@ -261,7 +267,6 @@ void _fini() {
 	for (i = 0; i < chain_argc; ++i)
 		free(chain_argv[i]);
 	free(chain_argv);
-	free(config_file);
 }
 
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)

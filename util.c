@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "util.h"
 
 double parse_freq(const char *s)
@@ -199,4 +203,31 @@ sample_t tpdf_dither_sample(sample_t s, int prec)
 	sample_t n1 = (sample_t) pm_rand() * m;
 	sample_t n2 = (sample_t) pm_rand() * m;
 	return s + n1 - n2;
+}
+
+char * get_file_contents(const char *path)
+{
+	const size_t g = 512;
+	ssize_t s = g, p = 0, r;
+	int fd;
+	char *c;
+
+	if ((fd = open(path, O_RDONLY)) < 0)
+		return NULL;
+	c = calloc(s, sizeof(char));
+	while ((r = read(fd, &c[p], s - p)) > -1) {
+		p += r;
+		if (p >= s) {
+			s += g;
+			c = realloc(c, s * sizeof(char));
+		}
+		if (r == 0) {
+			c[p] = '\0';
+			close(fd);
+			return c;
+		}
+	}
+	free(c);
+	close(fd);
+	return NULL;
 }

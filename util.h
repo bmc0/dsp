@@ -35,5 +35,6 @@ void print_selector(const char *, int);
 int gen_argv_from_string(const char *, int *, char ***);
 long unsigned int pm_rand(void);
 sample_t tpdf_dither_sample(sample_t, int);
+char * get_file_contents(const char *);
 
 #endif

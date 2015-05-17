@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
 #include "effect.h"
 #include "util.h"
@@ -167,70 +164,54 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 	return 1;
 }
 
-int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir, const char *filename)
+int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir, const char *path)
 {
-	char **argv = NULL, *env, *tmp = NULL, *path = NULL, *contents = NULL;
-	size_t s;
-	off_t file_size;
-	int i, argc = 0, fd = -1;
+	char **argv = NULL, *env, *tmp = NULL, *d = NULL, *p = NULL, *c = NULL;
+	int i, argc = 0;
 
-	if (filename[0] != '\0' && filename[0] == '~' && filename[1] == '/') {
+	if (path[0] != '\0' && path[0] == '~' && path[1] == '/') {
 		env = getenv("HOME");
-		s = strlen(env) + strlen(&filename[1]) + 1;
-		path = calloc(s, sizeof(char));
-		snprintf(path, s, "%s%s", env, &filename[1]);
+		i = strlen(env) + strlen(&path[1]) + 1;
+		p = calloc(i, sizeof(char));
+		snprintf(p, i, "%s%s", env, &path[1]);
 	}
-	else if (dir == NULL || filename[0] == '/')
-		path = strdup(filename);
+	else if (dir == NULL || path[0] == '/')
+		p = strdup(path);
 	else {
-		s = strlen(dir) + 1 + strlen(filename) + 1;
-		path = calloc(s, sizeof(char));
-		snprintf(path, s, "%s/%s", dir, filename);
+		i = strlen(dir) + 1 + strlen(path) + 1;
+		p = calloc(i, sizeof(char));
+		snprintf(p, i, "%s/%s", dir, path);
 	}
-	if ((fd = open(path, O_RDONLY)) == -1) {
-		LOG(LL_ERROR, "dsp: error: failed to open effects file: %s: %s\n", path, strerror(errno));
+	if (!(c = get_file_contents(p))) {
+		LOG(LL_ERROR, "dsp: info: failed to load effects file: %s: %s\n", p, strerror(errno));
 		goto fail;
 	}
-	if ((file_size = lseek(fd, 0, SEEK_END)) == -1) {
-		LOG(LL_ERROR, "dsp: error: failed to determine effects file size: %s: %s\n", path, strerror(errno));
+	if (gen_argv_from_string(c, &argc, &argv))
 		goto fail;
-	}
-	lseek(fd, 0, SEEK_SET);
-	contents = malloc(file_size + 1);
-	if (read(fd, contents, file_size) != file_size) {
-		LOG(LL_ERROR, "dsp: error: short read: %s\n", path);
-		goto fail;
-	}
-	close(fd);
-	fd = -1;
-	contents[file_size] = '\0';
-	if (gen_argv_from_string(contents, &argc, &argv))
-		goto fail;
-	tmp = strrchr(path, '/');
+	d = strdup(p);
+	tmp = strrchr(d, '/');
 	if (tmp == NULL)
-		dir = ".";
-	else {
+		d = strdup(".");
+	else
 		*tmp = '\0';
-		dir = path;
-	}
-	if (build_effects_chain(argc, argv, chain, stream, channel_selector, dir))
+	LOG(LL_VERBOSE, "dsp: info: begin effects file: %s\n", p);
+	if (build_effects_chain(argc, argv, chain, stream, channel_selector, d))
 		goto fail;
-	free(path);
-	free(contents);
+	LOG(LL_VERBOSE, "dsp: info: end effects file: %s\n", p);
+	free(c);
+	free(p);
+	free(d);
 	for (i = 0; i < argc; ++i)
 		free(argv[i]);
 	free(argv);
-
 	return 0;
 
 	fail:
-	free(path);
-	free(contents);
+	free(c);
+	free(p);
 	for (i = 0; i < argc; ++i)
 		free(argv[i]);
 	free(argv);
-	if (fd != -1)
-		close(fd);
 	return 1;
 }
 
