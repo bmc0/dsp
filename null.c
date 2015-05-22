@@ -24,7 +24,7 @@ ssize_t null_delay(struct codec *c)
 	return 0;
 }
 
-void null_reset(struct codec *c)
+void null_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -53,7 +53,7 @@ struct codec * null_codec_init(const char *path, const char *type, const char *e
 	c->write = null_write;
 	c->seek = null_seek;
 	c->delay = null_delay;
-	c->reset = null_reset;
+	c->drop = null_drop;
 	c->pause = null_pause;
 	c->destroy = null_destroy;
 	c->data = NULL;

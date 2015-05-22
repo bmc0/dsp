@@ -277,7 +277,7 @@ static void terminate(int s)
 {
 	LOG(LL_NORMAL, "\ndsp: info: signal %d: terminating...\n", s);
 	if (out_codec != NULL)
-		out_codec->reset(out_codec);  /* reset so we don't sit around waiting for alsa to drain */
+		out_codec->drop(out_codec);
 	cleanup_and_exit(0);
 }
 
@@ -323,7 +323,7 @@ static ssize_t do_seek(struct codec *in, struct codec *out, ssize_t pos, ssize_t
 	else
 		s = pos + offset - delay;
 	if ((s = in->seek(in, s)) >= 0) {
-		out->reset(out);
+		out->drop(out);
 		reset_effects_chain(&chain);
 		return s;
 	}
@@ -475,7 +475,7 @@ int main(int argc, char *argv[])
 						pos = do_seek(in_codecs.head, out_codec, pos, delay, 0, SEEK_SET);
 						break;
 					case 'n':
-						out_codec->reset(out_codec);
+						out_codec->drop(out_codec);
 						reset_effects_chain(&chain);
 						goto next_input;
 					case 'c':
@@ -527,7 +527,7 @@ int main(int argc, char *argv[])
 						verbose_progress = (verbose_progress) ? 0 : 1;
 						break;
 					case 'q':
-						out_codec->reset(out_codec);
+						out_codec->drop(out_codec);
 						if (show_progress)
 							fputs("\033[1K\r", stderr);
 						goto end_rw_loop;

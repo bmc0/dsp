@@ -70,7 +70,7 @@ ssize_t ao_delay(struct codec *c)
 	return 0;
 }
 
-void ao_reset(struct codec *c)
+void ao_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -141,7 +141,7 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	c->write = ao_write;
 	c->seek = ao_seek;
 	c->delay = ao_delay;
-	c->reset = ao_reset;
+	c->drop = ao_drop;
 	c->pause = ao_pause;
 	c->destroy = ao_destroy;
 	c->data = state;

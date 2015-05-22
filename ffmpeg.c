@@ -160,7 +160,7 @@ ssize_t ffmpeg_delay(struct codec *c)
 	return 0;
 }
 
-void ffmpeg_reset(struct codec *c)
+void ffmpeg_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -281,7 +281,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	c->write = ffmpeg_write;
 	c->seek = ffmpeg_seek;
 	c->delay = ffmpeg_delay;
-	c->reset = ffmpeg_reset;
+	c->drop = ffmpeg_drop;
 	c->pause = ffmpeg_pause;
 	c->destroy = ffmpeg_destroy;
 	c->data = state;

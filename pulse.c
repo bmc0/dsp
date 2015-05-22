@@ -63,7 +63,7 @@ ssize_t pulse_delay(struct codec *c)
 	return pa_simple_get_latency(state->s, NULL) * c->fs / 1000000;
 }
 
-void pulse_reset(struct codec *c)
+void pulse_drop(struct codec *c)
 {
 	struct pulse_state *state = (struct pulse_state *) c->data;
 	pa_simple_flush(state->s, NULL);
@@ -147,7 +147,7 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	c->write = pulse_write;
 	c->seek = pulse_seek;
 	c->delay = pulse_delay;
-	c->reset = pulse_reset;
+	c->drop = pulse_drop;
 	c->pause = pulse_pause;
 	c->destroy = pulse_destroy;
 	c->data = state;

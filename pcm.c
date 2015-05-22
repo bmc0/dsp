@@ -104,7 +104,7 @@ ssize_t pcm_delay(struct codec *c)
 	return 0;
 }
 
-void pcm_reset(struct codec *c)
+void pcm_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -170,7 +170,7 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	c->write = pcm_write;
 	c->seek = pcm_seek;
 	c->delay = pcm_delay;
-	c->reset = pcm_reset;
+	c->drop = pcm_drop;
 	c->pause = pcm_pause;
 	c->destroy = pcm_destroy;
 	c->data = state;

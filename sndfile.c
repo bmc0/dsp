@@ -101,7 +101,7 @@ ssize_t sndfile_delay(struct codec *c)
 	return 0;
 }
 
-void sndfile_reset(struct codec *c)
+void sndfile_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -220,7 +220,7 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	c->write = sndfile_write;
 	c->seek = sndfile_seek;
 	c->delay = sndfile_delay;
-	c->reset = sndfile_reset;
+	c->drop = sndfile_drop;
 	c->pause = sndfile_pause;
 	c->destroy = sndfile_destroy;
 	c->data = state;

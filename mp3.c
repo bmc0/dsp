@@ -123,7 +123,7 @@ ssize_t mp3_delay(struct codec *c)
 	return 0;
 }
 
-void mp3_reset(struct codec *c)
+void mp3_drop(struct codec *c)
 {
 	/* do nothing */
 }
@@ -235,7 +235,7 @@ struct codec * mp3_codec_init(const char *path, const char *type, const char *en
 	c->write = mp3_write;
 	c->seek = mp3_seek;
 	c->delay = mp3_delay;
-	c->reset = mp3_reset;
+	c->drop = mp3_drop;
 	c->pause = mp3_pause;
 	c->destroy = mp3_destroy;
 	c->data = state;

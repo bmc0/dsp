@@ -84,7 +84,7 @@ ssize_t alsa_delay(struct codec *c)
 	return state->delay;
 }
 
-void alsa_reset(struct codec *c)
+void alsa_drop(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
 	snd_pcm_reset(state->dev);
@@ -214,7 +214,7 @@ struct codec * alsa_codec_init(const char *path, const char *type, const char *e
 	c->write = alsa_write;
 	c->seek = alsa_seek;
 	c->delay = alsa_delay;
-	c->reset = alsa_reset;
+	c->drop = alsa_drop;
 	c->pause = alsa_pause;
 	c->destroy = alsa_destroy;
 	c->data = state;

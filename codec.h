@@ -24,7 +24,7 @@ struct codec {
 	ssize_t (*write)(struct codec *, sample_t *, ssize_t);
 	ssize_t (*seek)(struct codec *, ssize_t);
 	ssize_t (*delay)(struct codec *);
-	void (*reset)(struct codec *);  /* drop pending frames */
+	void (*drop)(struct codec *);  /* drop pending frames */
 	void (*pause)(struct codec *, int);
 	void (*destroy)(struct codec *);
 	void *data;
