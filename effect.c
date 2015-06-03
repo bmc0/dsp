@@ -292,14 +292,17 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
 		e = e->next;
 	}
-	for (k = 0; k < channels; ++k) {
-		printf("Hsum%d(f)=", k);
-		for (j = 0; j < i; ++j)
-			printf("H%d_%d(f) + ", k, j);
-		if (k == 0)
-			printf("0\nplot [f=10:%d/2] [-30:20] Hsum%d(f) title 'Channel %d'\n", (max_fs == -1) ? input_fs : max_fs, k, k);
-		else
-			printf("0\nreplot Hsum%d(f) title 'Channel %d'\n", k, k);
+	if (channels > 0) {
+		for (k = 0; k < channels; ++k) {
+			printf("Hsum%d(f)=H%d_%d(f)", k, k, 0);
+			for (j = 1; j < i; ++j)
+				printf("+H%d_%d(f)", k, j);
+			putchar('\n');
+		}
+		printf("plot [f=10:%d/2] [-30:20] Hsum%d(f) title 'Channel %d'", (max_fs == -1) ? input_fs : max_fs, 0, 0);
+		for (k = 1; k < channels; ++k)
+			printf(", Hsum%d(f) title 'Channel %d'", k, k);
+		putchar('\n');
 	}
 }
 
