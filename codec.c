@@ -102,7 +102,7 @@ struct codec_info codecs[] = {
 };
 
 static const char *fallback_input_codecs[] = {
-#ifdef __HAVE_FFMPEG__
+#ifdef __HAVE_SNDFILE__
 	"sndfile",
 #endif
 #ifdef __HAVE_FFMPEG__
