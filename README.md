@@ -31,7 +31,7 @@ options. Run `./configure --help` to see all available options.
 
 #### Install:
 
-	$ make install
+	# make install
 
 ### Usage:
 
@@ -247,17 +247,17 @@ The config file is a simple key-value format. Leading whitespace is ignored.
 The valid keys are:
 
 Key               | Description
------------------ | ------------------------------------------------------------------------------------------------------------------
-`input_channels`  | Number of input channels.
-`output_channels` | Number of output channels.
-`effects_chain`   | Args to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
+----------------- | -----------------------------------------------------------------------------------------------------------------------
+`input_channels`  | Number of input channels. Default value is `1`. May be left unset unless you want individual control over each channel.
+`output_channels` | Number of output channels. Default value is `1`. Initialization will fail if this value is set incorrectly.
+`effects_chain`   | String to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
 
 Example configuration:
 
-	# Comment
-	input_channels=2
-	output_channels=2
-	effects_chain=gain -4.0 lowshelf 90 0.7 +4.0 @/path/to/eq_file
+	# This is a comment
+	input_channels=1
+	output_channels=1
+	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
 
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.
@@ -271,19 +271,17 @@ Put this in `~/.asoundrc`:
 		slave {
 			format FLOAT
 			rate unchanged
+			channels unchanged
 			pcm {
 				type ladspa
-				channels 2
-				path "/ladspa/path"
+				path "/usr/lib/ladspa"
 				playback_plugins [{
 					label "ladspa_dsp"
-					policy none
 				}]
 				slave.pcm {
 					type plug
 					slave {
-						pcm "<dev>"
-						format S24_3LE
+						pcm "<hw_device>"
 						rate unchanged
 						channels unchanged
 					}
@@ -292,9 +290,34 @@ Put this in `~/.asoundrc`:
 		}
 	}
 
-Replace `/ladspa/path` with the path to the directory containing
-`ladspa_dsp.so` and `<dev>` with the preferred output device (`hw:1`, for
-example).
+Replace `<hw_device>` with the preferred output device (`hw:0`, for example).
+
+If you need individual control over each channel, you need to set the number
+of (output) channels:
+
+	pcm.dsp {
+		type plug
+		slave {
+			format FLOAT
+			rate unchanged
+			pcm {
+				type ladspa
+				channels <channels>
+				path "/usr/lib/ladspa"
+				playback_plugins [{
+					label "ladspa_dsp"
+				}]
+				slave.pcm {
+					type plug
+					slave {
+						pcm "<hw_device>"
+						rate unchanged
+						channels unchanged
+					}
+				}
+			}
+		}
+	}
 
 To make `dsp` the default device, append this to `~/.asoundrc`:
 
@@ -303,9 +326,21 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 		slave.pcm "dsp"
 	}
 
-If mixing is desired, the `dmix` plugin can be used instead of `copy`.
+If mixing is desired, the `dmix` plugin can be used instead of `copy`:
 
-Note: The resample effect cannot be used with the LADSPA frontend.
+	pcm.!default {
+		type dmix
+		ipc_key 321456
+		ipc_key_add_uid true
+		slave {
+			pcm "dsp"
+			format <format>
+			channels 2
+			rate 44100
+		}
+	}
+
+**Note:** The resample effect cannot be used with the LADSPA frontend.
 
 ### Bugs:
 
