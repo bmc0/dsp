@@ -3,6 +3,7 @@
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
+#include <locale.h>
 #include <ladspa.h>
 
 #include "dsp.h"
@@ -31,6 +32,7 @@ struct dsp_globals dsp_globals = {
 
 static int input_channels = 1;
 static int output_channels = 1;
+static char *lc_n = NULL;
 static int chain_argc = 0;
 static char **chain_argv = NULL;
 
@@ -103,6 +105,10 @@ static void load_config(int is_reload)
 				input_channels = atoi(value);
 			else if (!is_reload && strcmp(key, "output_channels") == 0)
 				output_channels = atoi(value);
+			else if (strcmp(key, "LC_NUMERIC") == 0) {
+				free(lc_n);
+				lc_n = strdup(value);
+			}
 			else if (strcmp(key, "effects_chain") == 0) {
 				for (k = 0; k < chain_argc; ++k)
 					free(chain_argv[k]);
@@ -123,6 +129,7 @@ static void load_config(int is_reload)
 
 LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long fs)
 {
+	char *lc_n_old = NULL;
 	struct stream_info stream;
 	struct ladspa_dsp *d = calloc(1, sizeof(struct ladspa_dsp));
 
@@ -130,8 +137,15 @@ LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long
 	stream.fs = fs;
 	stream.channels = input_channels;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
-	if (build_effects_chain(chain_argc, chain_argv, &d->chain, &stream, NULL, NULL))
+	lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
+	setlocale(LC_NUMERIC, lc_n);
+	if (build_effects_chain(chain_argc, chain_argv, &d->chain, &stream, NULL, NULL)) {
+		setlocale(LC_NUMERIC, lc_n_old);
+		free(lc_n_old);
 		goto fail;
+	}
+	setlocale(LC_NUMERIC, lc_n_old);
+	free(lc_n_old);
 	LOG(LL_VERBOSE, "ladspa_dsp: info: end effects chain\n");
 	if (stream.channels != output_channels) {
 		LOG(LL_ERROR, "ladspa_dsp: error: output channels mismatch\n");
@@ -267,6 +281,7 @@ void _fini() {
 	for (i = 0; i < chain_argc; ++i)
 		free(chain_argv[i]);
 	free(chain_argv);
+	free(lc_n);
 }
 
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)

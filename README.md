@@ -250,6 +250,7 @@ Key               | Description
 ----------------- | -----------------------------------------------------------------------------------------------------------------------
 `input_channels`  | Number of input channels. Default value is `1`. May be left unset unless you want individual control over each channel.
 `output_channels` | Number of output channels. Default value is `1`. Initialization will fail if this value is set incorrectly.
+`LC_NUMERIC`      | Set `LC_NUMERIC` to this value while building the effects chain.
 `effects_chain`   | String to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
 
 Example configuration:
