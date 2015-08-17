@@ -40,7 +40,7 @@ static struct effect_info effects[] = {
 #ifndef __SYMMETRIC_IO__
 	{ "resample",           "resample [bandwidth] fs",               resample_effect_init },
 #endif
-	{ "fir",                "fir impulse_file",                      fir_effect_init },
+	{ "fir",                "fir [min_len [max_len]] impulse_file",  fir_effect_init },
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },

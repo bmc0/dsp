@@ -160,7 +160,7 @@ Usage                                   | Description
 `remix channel_selector|. ...`          | Select and mix input channels into output channels. Each channel selector specifies the input channels to be mixed to produce each output channel. `.` selects no input channels. For example, `remix 0,1 2,3` mixes input channels 0 and 1 into output channel 0, and input channels 2 and 3 into output channel 1. `remix -` mixes all input channels into a single output channel.
 `delay seconds`                         | Delay line.
 `resample [bandwidth] fs`               | Sinc resampler. Provides over 220dB SNR. Ignores the channel selector.
-`fir impulse_file`                      | FFT convolution.
+`fir [min_len [max_len]] impulse_file`  | Non-uniform partitioned FFT convolution. `min_len` is the minimum partition length and `max_len` is the maximum partition length. Lengths are rounded to the largest power of two that does not exceed the given value.
 `noise level`                           | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
 `compress thresh ratio attack release`  | Compress or expand the dynamic range. This effect peak-sensing and input channels are linked. If the ratio is in (1,inf), the dynamic range will be compressed. If the ratio is in (0,1), the dynamic range will be expanded. Attack refers to decreases in gain and decay refers to increases in gain.
 `stats [ref_level]`                     | Display the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel. If `ref_level` is given, peak and RMS levels relative to `ref_level` will be shown as well (dBr).
