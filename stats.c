@@ -5,7 +5,7 @@
 #include "util.h"
 
 struct stats_state {
-	ssize_t samples, peak_count;
+	ssize_t samples, peak_count, peak_frame;
 	sample_t sum, sum_sq, min, max, ref;
 };
 
@@ -28,6 +28,8 @@ void stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 			}
 			if (ibuf[i + k] == state[k].min || ibuf[i + k] == state[k].max)
 				++state[k].peak_count;
+			if (fabs(ibuf[i + k]) >= MAXIMUM(fabs(state[k].max), fabs(state[k].min)))
+				state[k].peak_frame = state[k].samples;
 			obuf[i + k] = ibuf[i + k];
 		}
 	}
@@ -88,6 +90,9 @@ void stats_effect_destroy(struct effect *e)
 	fprintf(stderr, "\n%-18s", "Peak count");
 	for (i = 0; i < e->ostream.channels; ++i)
 		fprintf(stderr, " %12zd", state[i].peak_count);
+	fprintf(stderr, "\n%-18s", "Peak sample");
+	for (i = 0; i < e->ostream.channels; ++i)
+		fprintf(stderr, " %12zd", state[i].peak_frame);
 	fprintf(stderr, "\n%-18s", "Samples");
 	for (i = 0; i < e->ostream.channels; ++i)
 		fprintf(stderr, " %12zd", state[i].samples);
