@@ -119,7 +119,7 @@ void fir_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (!state->is_draining) {
 			state->drain_frames = state->impulse_len;
 			if (state->part[0].has_output)
-				state->drain_frames += state->part[0].len - state->part[0].pos;
+				state->drain_frames += state->part[0].len;
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
