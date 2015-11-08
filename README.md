@@ -234,14 +234,19 @@ Apply effects from a file:
 
 #### Configuration:
 
-The default search paths for the configuration file are as follows:
+The default search paths for the configuration directory are as follows:
 
-* `$XDG_CONFIG_HOME/ladspa_dsp/config`
-* `$HOME/.config/ladspa_dsp/config` (if `$XDG_CONFIG_HOME` is not set)
-* `/etc/ladspa_dsp/config`
+* `$XDG_CONFIG_HOME/ladspa_dsp`
+* `$HOME/.config/ladspa_dsp` (if `$XDG_CONFIG_HOME` is not set)
+* `/etc/ladspa_dsp`
 
 To override the default search paths, set the `LADSPA_DSP_CONFIG` environment
 variable to the desired path.
+
+Each file in the configuration directory that is named either `config` or
+`config_<name>` (where `<name>` is any string) is loaded as a separate plugin
+type. The label is either `ladspa_dsp` (for `config`) or `ladspa_dsp:<name>`
+(for `config_<name>`).
 
 The config file is a simple key-value format. Leading whitespace is ignored.
 The valid keys are:

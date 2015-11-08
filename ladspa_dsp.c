@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <errno.h>
 #include <locale.h>
 #include <ladspa.h>
@@ -10,16 +12,22 @@
 #include "effect.h"
 #include "util.h"
 
-#define DEFAULT_CONFIG_PATH "/ladspa_dsp/config"
+#define DEFAULT_CONFIG_DIR "/ladspa_dsp"
 #define DEFAULT_XDG_CONFIG_DIR "/.config"
-#define GLOBAL_CONFIG_PATH "/etc"DEFAULT_CONFIG_PATH
+#define GLOBAL_CONFIG_DIR "/etc"DEFAULT_CONFIG_DIR
 
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
 	size_t buf_len;
+	int input_channels, output_channels;
 	struct effects_chain chain;
 	double max_ratio;
 	LADSPA_Data **ports;
+};
+
+struct ladspa_dsp_config {
+	int input_channels, output_channels, chain_argc;
+	char *name, *lc_n, **chain_argv;
 };
 
 struct dsp_globals dsp_globals = {
@@ -30,13 +38,9 @@ struct dsp_globals dsp_globals = {
 	DEFAULT_MAX_BUF_RATIO,  /* max_buf_ratio */
 };
 
-static int input_channels = 1;
-static int output_channels = 1;
-static char *lc_n = NULL;
-static int chain_argc = 0;
-static char **chain_argv = NULL;
-
-LADSPA_Descriptor *dsp_descriptor = NULL;
+static int n_configs = 0;
+struct ladspa_dsp_config *configs = NULL;
+static LADSPA_Descriptor *descriptors = NULL;
 
 static char * isolate(char *s, char c)
 {
@@ -45,55 +49,23 @@ static char * isolate(char *s, char c)
 	return s + 1;
 }
 
-static char * try_file(const char *path)
+static DIR * try_dir(const char *path)
 {
-	char *c;
-	if ((c = get_file_contents(path)))
-		LOG(LL_VERBOSE, "ladspa_dsp: info: loaded config file: %s\n", path);
-	else
-		LOG(LL_VERBOSE, "ladspa_dsp: info: failed to load config file: %s: %s\n", path, strerror(errno));
-	return c;
+	DIR *d;
+	if (!(d = opendir(path)))
+		LOG(LL_VERBOSE, "ladspa_dsp: info: failed to open config dir: %s: %s\n", path, strerror(errno));
+	return d;
 }
 
-static void load_config(int is_reload)
+static int read_config(const char *path, const char *name, struct ladspa_dsp_config *config)
 {
 	int i, k;
-	char *path = NULL, *env, *c = NULL, *key, *value, *next;
+	char *c, *key, *value, *next;
 
-	if (is_reload) {
-		for (i = 0; i < chain_argc; ++i)
-			free(chain_argv[i]);
-		free(chain_argv);
-		chain_argc = 0;
-	}
-
-	/* Use environment variable, if present */
-	if ((env = getenv("LADSPA_DSP_CONFIG")))
-		c = try_file(env);
-	else {
-		/* Build local config path */
-		if ((env = getenv("XDG_CONFIG_HOME"))) {
-			i = strlen(env) + strlen(DEFAULT_CONFIG_PATH) + 1;
-			path = calloc(i, sizeof(char));
-			snprintf(path, i, "%s%s", env, DEFAULT_CONFIG_PATH);
-		}
-		else if ((env = getenv("HOME"))) {
-			i = strlen(env) + strlen(DEFAULT_XDG_CONFIG_DIR) + strlen(DEFAULT_CONFIG_PATH) + 1;
-			path = calloc(i, sizeof(char));
-			snprintf(path, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_PATH);
-		}
-
-		if (path) {
-			c = try_file(path);
-			free(path);
-		}
-		if (!c)
-			c = try_file(GLOBAL_CONFIG_PATH);
-	}
-
-	if (!c)  /* No config files were loaded */
-		goto fail;
-
+	c = get_file_contents(path);
+	if (!c)
+		return 1;
+		
 	key = c;
 	for (i = 1; *key != '\0'; ++i) {
 		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
@@ -101,19 +73,19 @@ static void load_config(int is_reload)
 		next = isolate(key, '\n');
 		if (*key != '\n' && *key != '#') {
 			value = isolate(key, '=');
-			if (!is_reload && strcmp(key, "input_channels") == 0)
-				input_channels = atoi(value);
-			else if (!is_reload && strcmp(key, "output_channels") == 0)
-				output_channels = atoi(value);
+			if (strcmp(key, "input_channels") == 0)
+				config->input_channels = atoi(value);
+			else if (strcmp(key, "output_channels") == 0)
+				config->output_channels = atoi(value);
 			else if (strcmp(key, "LC_NUMERIC") == 0) {
-				free(lc_n);
-				lc_n = strdup(value);
+				free(config->lc_n);
+				config->lc_n = strdup(value);
 			}
 			else if (strcmp(key, "effects_chain") == 0) {
-				for (k = 0; k < chain_argc; ++k)
-					free(chain_argv[k]);
-				free(chain_argv);
-				gen_argv_from_string(value, &chain_argc, &chain_argv);
+				for (k = 0; k < config->chain_argc; ++k)
+					free(config->chain_argv[k]);
+				free(config->chain_argv);
+				gen_argv_from_string(value, &config->chain_argc, &config->chain_argv);
 			}
 			else
 				LOG(LL_ERROR, "ladspa_dsp: warning: line %d: invalid option: %s\n", i, key);
@@ -121,25 +93,86 @@ static void load_config(int is_reload)
 		key = next;
 	}
 	free(c);
-	return;
-
-	fail:
-	LOG(LL_ERROR, "ladspa_dsp: warning: failed to load a config file; no processing will be done\n");
+	free(config->name);
+	config->name = (name) ? strdup(name) : NULL;
+	return 0;
 }
 
-LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long fs)
+static void load_configs(void)
+{
+	int i;
+	DIR *d = NULL;
+	char *c_dir_path = NULL, *c_path, *env;
+	struct dirent *d_ent;
+
+	/* Use environment variable, if present */
+	if ((env = getenv("LADSPA_DSP_DIR"))) {
+		c_dir_path = strdup(env);
+		d = try_dir(c_dir_path);
+	}
+	else {
+		/* Build local config dir path */
+		if ((env = getenv("XDG_CONFIG_HOME"))) {
+			i = strlen(env) + strlen(DEFAULT_CONFIG_DIR) + 1;
+			c_dir_path = calloc(i, sizeof(char));
+			snprintf(c_dir_path, i, "%s%s", env, DEFAULT_CONFIG_DIR);
+		}
+		else if ((env = getenv("HOME"))) {
+			i = strlen(env) + strlen(DEFAULT_XDG_CONFIG_DIR) + strlen(DEFAULT_CONFIG_DIR) + 1;
+			c_dir_path = calloc(i, sizeof(char));
+			snprintf(c_dir_path, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_DIR);
+		}
+
+		if (c_dir_path)
+			d = try_dir(c_dir_path);
+		if (!d) {
+			free(c_dir_path);
+			c_dir_path = strdup(GLOBAL_CONFIG_DIR);
+			d = try_dir(c_dir_path);
+		}
+	}
+
+	if (d) {
+		LOG(LL_VERBOSE, "ladspa_dsp: info: selected config dir: %s\n", c_dir_path);
+		while((d_ent = readdir(d))) {
+			if (strcmp(d_ent->d_name, "config") == 0
+					|| (strncmp(d_ent->d_name, "config_", 7) == 0 && strlen(d_ent->d_name) > 7)) {
+				i = strlen(c_dir_path) + strlen(d_ent->d_name) + 2;
+				c_path = calloc(i, sizeof(char));
+				snprintf(c_path, i, "%s/%s", c_dir_path, d_ent->d_name);
+				configs = realloc(configs, (n_configs + 1) * sizeof(struct ladspa_dsp_config));
+				memset(&configs[n_configs], 0, sizeof(struct ladspa_dsp_config));
+				configs[n_configs].input_channels = configs[n_configs].output_channels = 1;
+				if (read_config(c_path, (strcmp(d_ent->d_name, "config") == 0) ? NULL : &d_ent->d_name[7], &configs[n_configs]))
+					LOG(LL_ERROR, "ladspa_dsp: warning: failed to read config file: %s: %s\n", c_path, strerror(errno));
+				else {
+					LOG(LL_VERBOSE, "ladspa_dsp: info: read config file: %s\n", c_path);
+					++n_configs;
+				}
+				free(c_path);
+			}
+		}
+	}
+	free(c_dir_path);
+}
+
+LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 {
 	char *lc_n_old = NULL;
 	struct stream_info stream;
+	struct ladspa_dsp_config *config = (struct ladspa_dsp_config *) desc->ImplementationData;
 	struct ladspa_dsp *d = calloc(1, sizeof(struct ladspa_dsp));
 
-	d->ports = calloc(input_channels + output_channels, sizeof(LADSPA_Data *));
+	LOG(LL_VERBOSE, "ladspa_dsp: info: using label: %s\n", desc->Label);
+	d->input_channels = config->input_channels;
+	d->output_channels = config->output_channels;
+	d->ports = calloc(d->input_channels + d->output_channels, sizeof(LADSPA_Data *));
 	stream.fs = fs;
-	stream.channels = input_channels;
+	stream.channels = d->input_channels;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
 	lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
-	setlocale(LC_NUMERIC, lc_n);
-	if (build_effects_chain(chain_argc, chain_argv, &d->chain, &stream, NULL, NULL)) {
+	setlocale(LC_NUMERIC, config->lc_n);
+	if (build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, NULL)) {
 		setlocale(LC_NUMERIC, lc_n_old);
 		free(lc_n_old);
 		goto fail;
@@ -147,7 +180,7 @@ LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long
 	setlocale(LC_NUMERIC, lc_n_old);
 	free(lc_n_old);
 	LOG(LL_VERBOSE, "ladspa_dsp: info: end effects chain\n");
-	if (stream.channels != output_channels) {
+	if (stream.channels != d->output_channels) {
 		LOG(LL_ERROR, "ladspa_dsp: error: output channels mismatch\n");
 		goto fail;
 	}
@@ -168,7 +201,7 @@ LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *Descriptor, unsigned long
 void connect_port_to_dsp(LADSPA_Handle inst, unsigned long port, LADSPA_Data *data)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
-	if (port < input_channels + output_channels)
+	if (port < d->input_channels + d->output_channels)
 		d->ports[port] = data;
 }
 
@@ -179,7 +212,7 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 	ssize_t w = s;
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 
-	i = s * MAXIMUM(input_channels, output_channels);
+	i = s * MAXIMUM(d->input_channels, d->output_channels);
 	if (i > d->buf_len) {
 		d->buf_len = i;
 		d->buf1 = realloc(d->buf1, d->buf_len * d->max_ratio * sizeof(sample_t));
@@ -188,13 +221,13 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 	}
 
 	for (i = j = 0; i < s; i++)
-		for (k = 0; k < input_channels; ++k)
+		for (k = 0; k < d->input_channels; ++k)
 			d->buf1[j++] = (sample_t) d->ports[k][i];
 
 	obuf = run_effects_chain(&d->chain, &w, d->buf1, d->buf2);
 
 	for (i = j = 0; i < s; i++)
-		for (k = input_channels; k < input_channels + output_channels; ++k)
+		for (k = d->input_channels; k < d->input_channels + d->output_channels; ++k)
 			d->ports[k][i] = (LADSPA_Data) obuf[j++];
 }
 
@@ -211,11 +244,10 @@ void cleanup_dsp(LADSPA_Handle inst)
 
 void _init()
 {
+	int i, k;
+	char **pn, *env, *tmp;
 	LADSPA_PortDescriptor *pd;
-	char **pn;
 	LADSPA_PortRangeHint *ph;
-	int i;
-	char *env;
 
 	env = getenv("LADSPA_DSP_LOGLEVEL");
 	if (env != NULL) {
@@ -229,67 +261,80 @@ void _init()
 			LOG(LL_ERROR, "ladspa_dsp: warning: unrecognized loglevel: %s\n", env);
 	}
 
-	load_config(0);
-
-	dsp_descriptor = calloc(1, sizeof(LADSPA_Descriptor));
-	if (dsp_descriptor != NULL) {
-		dsp_descriptor->UniqueID = 2378;
-		dsp_descriptor->Label = strdup("ladspa_dsp");
-		dsp_descriptor->Properties = 0;
-		dsp_descriptor->Name = strdup("ladspa_dsp");
-		dsp_descriptor->Maker = strdup("Michael Barbour");
-		dsp_descriptor->Copyright = strdup("ISC");
-		dsp_descriptor->PortCount = input_channels + output_channels;
-		pd = calloc(input_channels + output_channels, sizeof(LADSPA_PortDescriptor));
-		dsp_descriptor->PortDescriptors = pd;
-		for (i = 0; i < input_channels; ++i)
+	load_configs();
+	if (n_configs > 0)
+		descriptors = calloc(n_configs, sizeof(LADSPA_Descriptor));
+	else {
+		LOG(LL_ERROR, "ladspa_dsp: error: no config files found\n");
+		return;
+	}
+	for (k = 0; k < n_configs; ++k) {
+		descriptors[k].UniqueID = 2378 + k;
+		if (configs[k].name) {
+			i = strlen("ladspa_dsp") + strlen(configs[k].name) + 2;
+			tmp = calloc(i, sizeof(char));
+			snprintf(tmp, i, "%s:%s", "ladspa_dsp", configs[k].name);
+			descriptors[k].Label = tmp;
+		}
+		else
+			descriptors[k].Label = strdup("ladspa_dsp");
+		descriptors[k].Properties = 0;
+		descriptors[k].Name = descriptors[k].Label;
+		descriptors[k].Maker = strdup("Michael Barbour");
+		descriptors[k].Copyright = strdup("ISC");
+		descriptors[k].PortCount = configs[k].input_channels + configs[k].output_channels;
+		pd = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(LADSPA_PortDescriptor));
+		descriptors[k].PortDescriptors = pd;
+		for (i = 0; i < configs[k].input_channels; ++i)
 			pd[i] = LADSPA_PORT_INPUT | LADSPA_PORT_AUDIO;
-		for (i = input_channels; i < input_channels + output_channels; ++i)
+		for (i = configs[k].input_channels; i < configs[k].input_channels + configs[k].output_channels; ++i)
 			pd[i] = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO;
-		pn = calloc(input_channels + output_channels, sizeof(char *));
-		dsp_descriptor->PortNames = (const char **) pn;
-		for (i = 0; i < input_channels; ++i)
+		pn = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(char *));
+		descriptors[k].PortNames = (const char **) pn;
+		for (i = 0; i < configs[k].input_channels; ++i)
 			pn[i] = strdup("Input");
-		for (i = input_channels; i < input_channels + output_channels; ++i)
+		for (i = configs[k].input_channels; i < configs[k].input_channels + configs[k].output_channels; ++i)
 			pn[i] = strdup("Output");
-		ph = calloc(input_channels + output_channels, sizeof(LADSPA_PortRangeHint));
-		dsp_descriptor->PortRangeHints = ph;
-		for (i = 0; i < input_channels + output_channels; ++i)
+		ph = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(LADSPA_PortRangeHint));
+		descriptors[k].PortRangeHints = ph;
+		for (i = 0; i < configs[k].input_channels + configs[k].output_channels; ++i)
 			ph[i].HintDescriptor = 0;
-		dsp_descriptor->instantiate = instantiate_dsp;
-		dsp_descriptor->connect_port = connect_port_to_dsp;
-		dsp_descriptor->run = run_dsp;
-		dsp_descriptor->run_adding = NULL;
-		dsp_descriptor->set_run_adding_gain = NULL;
-		dsp_descriptor->deactivate = NULL;
-		dsp_descriptor->cleanup = cleanup_dsp;
+		descriptors[k].instantiate = instantiate_dsp;
+		descriptors[k].connect_port = connect_port_to_dsp;
+		descriptors[k].run = run_dsp;
+		descriptors[k].run_adding = NULL;
+		descriptors[k].set_run_adding_gain = NULL;
+		descriptors[k].deactivate = NULL;
+		descriptors[k].cleanup = cleanup_dsp;
+		descriptors[k].ImplementationData = &configs[k];
 	}
 }
 
 void _fini() {
-	int i;
-	free((char *) dsp_descriptor->Label);
-	free((char *) dsp_descriptor->Name);
-	free((char *) dsp_descriptor->Maker);
-	free((char *) dsp_descriptor->Copyright);
-	free((LADSPA_PortDescriptor *) dsp_descriptor->PortDescriptors);
-	for (i = 0; i < input_channels + output_channels; ++i)
-		free((char *) dsp_descriptor->PortNames[i]);
-	free((char **) dsp_descriptor->PortNames);
-	free((LADSPA_PortRangeHint *) dsp_descriptor->PortRangeHints);
-	free(dsp_descriptor);
-	for (i = 0; i < chain_argc; ++i)
-		free(chain_argv[i]);
-	free(chain_argv);
-	free(lc_n);
+	int i, k;
+	for (k = 0; k < n_configs; ++k) {
+		free((char *) descriptors[k].Label); /* note: dsp_descriptor->Name is the same data */
+		free((char *) descriptors[k].Maker);
+		free((char *) descriptors[k].Copyright);
+		free((LADSPA_PortDescriptor *) descriptors[k].PortDescriptors);
+		for (i = 0; i < configs[k].input_channels + configs[k].output_channels; ++i)
+			free((char *) descriptors[k].PortNames[i]);
+		free((char **) descriptors[k].PortNames);
+		free((LADSPA_PortRangeHint *) descriptors[k].PortRangeHints);
+		for (i = 0; i < configs[k].chain_argc; ++i)
+			free(configs[k].chain_argv[i]);
+		free(configs[k].chain_argv);
+		free(configs[k].lc_n);
+		free(configs[k].name);
+	}
+	free(descriptors);
+	free(configs);
 }
 
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)
 {
-	switch(i) {
-	case 0:
-		return dsp_descriptor;
-	default:
+	if (i < n_configs)
+		return &descriptors[i];
+	else
 		return NULL;
-	}
 }
