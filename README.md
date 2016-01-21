@@ -138,32 +138,71 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 
 #### Effects:
 
-Usage                                   | Description
---------------------------------------- | -----------
-`lowpass_1 f0[k]`                       | Single-pole lowpass filter.
-`highpass_1 f0[k]`                      | Single-pole highpass filter.
-`lowpass f0[k] width[q|o|h|k]`          | Double-pole lowpass filter.
-`highpass f0[k] width[q|o|h|k]`         | Double-pole highpass filter.
-`bandpass_skirt f0[k] width[q|o|h|k]`   | Double-pole bandpass filter with constant skirt gain.
-`bandpass_peak f0[k] width[q|o|h|k]`    | Double-pole bandpass filter with constant peak gain.
-`notch f0[k] width[q|o|h|k]`            | Double-pole notch filter.
-`allpass f0[k] width[q|o|h|k]`          | Double-pole allpass filter.
-`eq f0[k] width[q|o|h|k] gain`          | Double-pole peaking filter.
-`lowshelf f0[k] width[q|s|o|h|k] gain`  | Double-pole lowshelf filter.
-`highshelf f0[k] width[q|s|o|h|k] gain` | Double-pole highshelf filter.
-`linkwitz_transform fz[k] qz fp[k] qp`  | Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
-`deemph`                                | Compact Disc de-emphasis filter.
-`biquad b0 b1 b2 a0 a1 a2`              | Biquad filter.
-`gain [channel] gain`                   | Gain adjustment. Ignores the channel selector when the `channel` argument is given.
-`mult [channel] multiplier`             | Multiplies each sample by `multiplier`. Ignores the channel selector when the `channel` argument is given.
-`crossfeed f0[k] separation`            | Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b crossfeed. Ignores the channel selector. Input must be 2 channels.
-`remix channel_selector|. ...`          | Select and mix input channels into output channels. Each channel selector specifies the input channels to be mixed to produce each output channel. `.` selects no input channels. For example, `remix 0,1 2,3` mixes input channels 0 and 1 into output channel 0, and input channels 2 and 3 into output channel 1. `remix -` mixes all input channels into a single output channel.
-`delay seconds`                         | Delay line.
-`resample [bandwidth] fs`               | Sinc resampler. Ignores the channel selector.
-`fir [min_len [max_len]] impulse_file`  | Non-uniform partitioned FFT convolution. `min_len` is the minimum partition length and `max_len` is the maximum partition length. Lengths are rounded to the largest power of two that does not exceed the given value.
-`noise level`                           | Add TPDF noise. The `level` argument specifies the peak level of the noise (dBFS).
-`compress thresh ratio attack release`  | Compress or expand the dynamic range. This effect peak-sensing and input channels are linked. If the ratio is in (1,inf), the dynamic range will be compressed. If the ratio is in (0,1), the dynamic range will be expanded. Attack refers to decreases in gain and decay refers to increases in gain.
-`stats [ref_level]`                     | Display the DC offset, minimum, maximum, peak level (dBFS), RMS level (dBFS), crest factor (dB), peak count, number of samples, and length (s) for each channel. If `ref_level` is given, peak and RMS levels relative to `ref_level` will be shown as well (dBr).
+* `lowpass_1 f0[k]`  
+	Single-pole lowpass filter.
+* `highpass_1 f0[k]`  
+	Single-pole highpass filter.
+* `lowpass f0[k] width[q|o|h|k]`  
+	Double-pole lowpass filter.
+* `highpass f0[k] width[q|o|h|k]`  
+	Double-pole highpass filter.
+* `bandpass_skirt f0[k] width[q|o|h|k]`  
+	Double-pole bandpass filter with constant skirt gain.
+* `bandpass_peak f0[k] width[q|o|h|k]`  
+	Double-pole bandpass filter with constant peak gain.
+* `notch f0[k] width[q|o|h|k]`  
+	Double-pole notch filter.
+* `allpass f0[k] width[q|o|h|k]`  
+	Double-pole allpass filter.
+* `eq f0[k] width[q|o|h|k] gain`  
+	Double-pole peaking filter.
+* `lowshelf f0[k] width[q|s|o|h|k] gain`  
+	Double-pole lowshelf filter.
+* `highshelf f0[k] width[q|s|o|h|k] gain`  
+	Double-pole highshelf filter.
+* `linkwitz_transform fz[k] qz fp[k] qp`  
+	Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+* `deemph`  
+	Compact Disc de-emphasis filter.
+* `biquad b0 b1 b2 a0 a1 a2`  
+	Biquad filter.
+* `gain [channel] gain`  
+	Gain adjustment. Ignores the channel selector when the `channel` argument
+	is given.
+* `mult [channel] multiplier`  
+	Multiplies each sample by `multiplier`. Ignores the channel selector when
+	the `channel` argument is given.
+* `crossfeed f0[k] separation`  
+	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
+	crossfeed. Ignores the channel selector. Input must be 2 channels.
+* `remix channel_selector|. ...`  
+	Select and mix input channels into output channels. Each channel selector
+	specifies the input channels to be mixed to produce each output channel.
+	`.` selects no input channels. For example, `remix 0,1 2,3` mixes input
+	channels 0 and 1 into output channel 0, and input channels 2 and 3 into
+	output channel 1. `remix -` mixes all input channels into a single
+	output channel.
+* `delay seconds`  
+	Delay line.
+* `resample [bandwidth] fs`  
+	Sinc resampler. Ignores the channel selector.
+* `fir [min_len [max_len]] impulse_file`  
+	Non-uniform partitioned FFT convolution. `min_len` is the minimum partition
+	length and `max_len` is the maximum partition length. Lengths are rounded
+	to the largest power of two that does not exceed the given value.
+* `noise level`  
+	Add TPDF noise. The `level` argument specifies the peak level of the noise
+	(dBFS).
+* `compress thresh ratio attack release`  
+	Compress or expand the dynamic range. This effect peak-sensing and input
+	channels are linked. If the ratio is in (1,inf), the dynamic range will be
+	compressed. If the ratio is in (0,1), the dynamic range will be expanded.
+	Attack refers to decreases in gain and decay refers to increases in gain.
+* `stats [ref_level]`  
+	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
+	(dBFS), crest factor (dB), peak count, number of samples, and length (s)
+	for each channel. If `ref_level` is given, peak and RMS levels relative
+	to `ref_level` will be shown as well (dBr).
 
 #### Width suffixes:
 
@@ -251,12 +290,17 @@ type. The label is either `ladspa_dsp` (for `config`) or `ladspa_dsp:<name>`
 The config file is a simple key-value format. Leading whitespace is ignored.
 The valid keys are:
 
-Key               | Description
------------------ | -----------------------------------------------------------------------------------------------------------------------
-`input_channels`  | Number of input channels. Default value is `1`. May be left unset unless you want individual control over each channel.
-`output_channels` | Number of output channels. Default value is `1`. Initialization will fail if this value is set incorrectly.
-`LC_NUMERIC`      | Set `LC_NUMERIC` to the given value while building the effects chain.
-`effects_chain`   | String to build the effects chain. The format is the same as an effects file, but only a single line is interpreted.
+* `input_channels`  
+	Number of input channels. Default value is `1`. May be left unset unless
+	you want individual control over each channel.
+* `output_channels`  
+	Number of output channels. Default value is `1`. Initialization will fail
+	if this value is set incorrectly.
+* `LC_NUMERIC`  
+	Set `LC_NUMERIC` to the given value while building the effects chain.
+* `effects_chain`  
+	String to build the effects chain. The format is the same as an effects
+	file, but only a single line is interpreted.
 
 Example configuration:
 
