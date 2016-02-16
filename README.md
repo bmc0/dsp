@@ -376,20 +376,6 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 		slave.pcm "dsp"
 	}
 
-If mixing is desired, the `dmix` plugin can be used instead of `copy`:
-
-	pcm.!default {
-		type dmix
-		ipc_key 321456
-		ipc_key_add_uid true
-		slave {
-			pcm "dsp"
-			format <format>
-			channels 2
-			rate 44100
-		}
-	}
-
 **Note:** The resample effect cannot be used with the LADSPA frontend.
 
 ### Bugs:
