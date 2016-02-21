@@ -92,7 +92,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 		if (avail == 0) {
 			skip_frame:
 			if (state->packet.size <= 0) {
-				av_free_packet(&state->packet);
+				av_packet_unref(&state->packet);
 				if (av_read_frame(state->container, &state->packet) < 0) {
 					done = 1;
 					continue;
@@ -173,7 +173,7 @@ void ffmpeg_pause(struct codec *c, int p)
 void ffmpeg_destroy(struct codec *c)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
-	av_free_packet(&state->packet);
+	av_packet_unref(&state->packet);
 	av_frame_free(&state->frame);
 	avformat_close_input(&state->container);
 	free(state);
