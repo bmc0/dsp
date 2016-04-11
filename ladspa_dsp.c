@@ -152,6 +152,7 @@ static void load_configs(void)
 				free(c_path);
 			}
 		}
+		closedir(d);
 	}
 	free(c_dir_path);
 }
