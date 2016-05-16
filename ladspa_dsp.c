@@ -71,7 +71,7 @@ static int read_config(const char *path, const char *name, struct ladspa_dsp_con
 		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
 			++key;
 		next = isolate(key, '\n');
-		if (*key != '\n' && *key != '#') {
+		if (*key != '\0' && *key != '#') {
 			value = isolate(key, '=');
 			if (strcmp(key, "input_channels") == 0)
 				config->input_channels = atoi(value);
