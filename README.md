@@ -197,7 +197,7 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	Compress or expand the dynamic range. This effect peak-sensing and input
 	channels are linked. If the ratio is in (1,inf), the dynamic range will be
 	compressed. If the ratio is in (0,1), the dynamic range will be expanded.
-	Attack refers to decreases in gain and decay refers to increases in gain.
+	Attack refers to decreases in gain and release refers to increases in gain.
 * `stats [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 	(dBFS), crest factor (dB), peak count, number of samples, and length (s)
