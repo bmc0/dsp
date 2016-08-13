@@ -186,10 +186,8 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	Delay line.
 * `resample [bandwidth] fs`  
 	Sinc resampler. Ignores the channel selector.
-* `fir [min_len [max_len]] impulse_file`  
-	Non-uniform partitioned FFT convolution. `min_len` is the minimum partition
-	length and `max_len` is the maximum partition length. Lengths are rounded
-	to the largest power of two that does not exceed the given value.
+* `fir impulse_file`  
+	FFT convolution.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
