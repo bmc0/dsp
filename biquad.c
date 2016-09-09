@@ -286,7 +286,7 @@ void biquad_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	int i, type, width_type = BIQUAD_WIDTH_Q;
 	double arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;

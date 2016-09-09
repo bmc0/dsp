@@ -59,7 +59,7 @@ void delay_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	struct effect *e;
 	struct delay_state *state;

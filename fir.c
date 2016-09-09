@@ -123,13 +123,14 @@ void fir_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	int i, k, j, n_channels;
 	struct effect *e;
 	struct fir_state *state;
 	struct codec *c_filter;
 	sample_t *tmp_buf = NULL, *filter;
+	char *p;
 	fftw_plan filter_plan;
 
 	if (argc != 2) {
@@ -139,11 +140,14 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	for (i = n_channels = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
-	c_filter = init_codec(argv[1], NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+	p = construct_full_path(dir, argv[1]);
+	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG(LL_ERROR, "dsp: %s: error: failed to open impulse file: %s\n", argv[0], argv[1]);
+		LOG(LL_ERROR, "dsp: %s: error: failed to open impulse file: %s\n", argv[0], p);
+		free(p);
 		return NULL;
 	}
+	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
 		LOG(LL_ERROR, "dsp: %s: error: channel mismatch: channels=%d impulse_channels=%d\n", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);

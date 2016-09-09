@@ -6,7 +6,7 @@
 struct effect_info {
 	const char *name;
 	const char *usage;
-	struct effect * (*init)(struct effect_info *, struct stream_info *, char *, int, char **);
+	struct effect * (*init)(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
 };
 
 struct effect {
@@ -29,7 +29,6 @@ struct effects_chain {
 };
 
 struct effect_info * get_effect_info(const char *);
-struct effect * init_effect(struct effect_info *, struct stream_info *, char *, int, char **);
 void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
 int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);

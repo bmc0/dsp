@@ -103,7 +103,7 @@ void stats_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	struct effect *e;
 	struct stats_state *state;

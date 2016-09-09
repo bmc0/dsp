@@ -231,3 +231,23 @@ char * get_file_contents(const char *path)
 	close(fd);
 	return NULL;
 }
+
+char * construct_full_path(const char *dir, const char *path)
+{
+	int i;
+	char *env, *p;
+	if (path[0] != '\0' && path[0] == '~' && path[1] == '/') {
+		env = getenv("HOME");
+		i = strlen(env) + strlen(&path[1]) + 1;
+		p = calloc(i, sizeof(char));
+		snprintf(p, i, "%s%s", env, &path[1]);
+	}
+	else if (dir == NULL || path[0] == '/')
+		p = strdup(path);
+	else {
+		i = strlen(dir) + 1 + strlen(path) + 1;
+		p = calloc(i, sizeof(char));
+		snprintf(p, i, "%s/%s", dir, path);
+	}
+	return p;
+}

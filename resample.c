@@ -145,7 +145,7 @@ void resample_copy_effect_destroy(struct effect *e)
 	/* do nothing */
 }
 
-struct effect * resample_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * resample_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	struct effect *e;
 	struct resample_state *state;

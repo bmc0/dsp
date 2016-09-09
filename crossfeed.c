@@ -60,7 +60,7 @@ void crossfeed_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
-struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
+struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
 	struct effect *e;
 	struct crossfeed_state *state;

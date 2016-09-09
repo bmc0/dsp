@@ -40,7 +40,7 @@ static struct effect_info effects[] = {
 #ifndef __SYMMETRIC_IO__
 	{ "resample",           "resample [bandwidth] fs",               resample_effect_init },
 #endif
-	{ "fir",                "fir impulse_file",                      fir_effect_init },
+	{ "fir",                "fir [~/]impulse_path",                  fir_effect_init },
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },
@@ -54,11 +54,6 @@ struct effect_info * get_effect_info(const char *name)
 		if (strcmp(name, effects[i].name) == 0)
 			return &effects[i];
 	return NULL;
-}
-
-struct effect * init_effect(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv)
-{
-	return ei->init(ei, istream, channel_selector, argc, argv);
 }
 
 void destroy_effect(struct effect *e)
@@ -135,7 +130,7 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			print_selector(channel_selector, stream->channels);
 			fprintf(stderr, "] fs=%d\n", stream->fs);
 		}
-		e = init_effect(ei, stream, channel_selector, i - k, &argv[k]);
+		e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
 		if (e == NULL) {
 			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
 			goto fail;
@@ -166,22 +161,10 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 
 int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir, const char *path)
 {
-	char **argv = NULL, *env, *tmp = NULL, *d = NULL, *p = NULL, *c = NULL;
+	char **argv = NULL, *tmp, *d, *p, *c;
 	int i, argc = 0;
 
-	if (path[0] != '\0' && path[0] == '~' && path[1] == '/') {
-		env = getenv("HOME");
-		i = strlen(env) + strlen(&path[1]) + 1;
-		p = calloc(i, sizeof(char));
-		snprintf(p, i, "%s%s", env, &path[1]);
-	}
-	else if (dir == NULL || path[0] == '/')
-		p = strdup(path);
-	else {
-		i = strlen(dir) + 1 + strlen(path) + 1;
-		p = calloc(i, sizeof(char));
-		snprintf(p, i, "%s/%s", dir, path);
-	}
+	p = construct_full_path(dir, path);
 	if (!(c = get_file_contents(p))) {
 		LOG(LL_ERROR, "dsp: info: failed to load effects file: %s: %s\n", p, strerror(errno));
 		goto fail;

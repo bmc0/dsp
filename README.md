@@ -186,7 +186,7 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	Delay line.
 * `resample [bandwidth] fs`  
 	Sinc resampler. Ignores the channel selector.
-* `fir impulse_file`  
+* `fir [~/]impulse_path`  
 	FFT convolution.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
@@ -212,7 +212,7 @@ Suffix | Description
 `h`    | Bandwidth in Hz.
 `k`    | Bandwidth in kHz.
 
-#### Effects file paths:
+#### File paths:
 
 * On the command line, relative paths are relative to `$PWD`.
 * Within an effects file, relative paths are relative to the directory
