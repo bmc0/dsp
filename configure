@@ -4,7 +4,7 @@ PREFIX=/usr
 BINDIR=/bin
 LIBDIR=/lib
 
-USAGE="Usage: $0 [option]
+USAGE="Usage: $0 [option ...]
 
 Options:
   --disable-dsp
@@ -32,18 +32,18 @@ done
 
 for i in "$@"; do
 	case "$i" in
-		--disable-dsp)        CONFIG_DISABLE_DSP=y ;;
-		--disable-sndfile)    CONFIG_DISABLE_SNDFILE=y ;;
-		--disable-ffmpeg)     CONFIG_DISABLE_FFMPEG=y ;;
-		--disable-fftw3)      CONFIG_DISABLE_FFTW3=y ;;
-		--disable-alsa)       CONFIG_DISABLE_ALSA=y ;;
-		--disable-ao)         CONFIG_DISABLE_AO=y ;;
-		--disable-mad)        CONFIG_DISABLE_MAD=y ;;
-		--disable-pulse)      CONFIG_DISABLE_PULSE=y ;;
-		--disable-ladspa_dsp) CONFIG_DISABLE_LADSPA_DSP=y ;;
-		--prefix=*)           PREFIX="${i#--prefix=}" ;;
-		--bindir=*)           BINDIR="${i#--bindir=}" ;;
-		--libdir=*)           LIBDIR="${i#--libdir=}" ;;
+		--disable-dsp)            CONFIG_DISABLE_DSP=y ;;
+		--disable-sndfile)        CONFIG_DISABLE_SNDFILE=y ;;
+		--disable-ffmpeg)         CONFIG_DISABLE_FFMPEG=y ;;
+		--disable-fftw3)          CONFIG_DISABLE_FFTW3=y ;;
+		--disable-alsa)           CONFIG_DISABLE_ALSA=y ;;
+		--disable-ao)             CONFIG_DISABLE_AO=y ;;
+		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
+		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
+		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
+		--prefix=*)               PREFIX="${i#--prefix=}" ;;
+		--bindir=*)               BINDIR="${i#--bindir=}" ;;
+		--libdir=*)               LIBDIR="${i#--libdir=}" ;;
 		--no-config) ;;
 		--help) echo "$USAGE"; exit 0 ;;
 		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;
@@ -78,8 +78,8 @@ check_pkg_ladspa_dsp() {
 }
 
 unset TARGETS INSTALL_TARGETS
-unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LIBS
-unset LADSPA_DSP_OPTIONAL_OBJECTS LADSPA_DSP_OPTIONAL_PACKAGES LADSPA_DSP_EXTRA_CFLAGS LADSPA_DSP_EXTRA_LIBS
+unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_CPP_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LIBS
+unset LADSPA_DSP_OPTIONAL_OBJECTS LADSPA_DSP_OPTIONAL_CPP_OJBECTS LADSPA_DSP_OPTIONAL_PACKAGES LADSPA_DSP_EXTRA_CFLAGS LADSPA_DSP_EXTRA_LIBS
 
 if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	echo "enabled dsp"
@@ -100,7 +100,9 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	echo "enabled ladspa_dsp"
 	TARGETS="$TARGETS ladspa_dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
-	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__; then
+	unset INCLUDE_CODECS
+	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__ && INCLUDE_CODECS=y
+	if [ "$INCLUDE_CODECS" = "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o null.o pcm.o sampleconv.o"
 		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
 		check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
@@ -117,8 +119,10 @@ PREFIX := $PREFIX
 BINDIR := $BINDIR
 LIBDIR := $LIBDIR
 DSP_OBJ += $DSP_OPTIONAL_OBJECTS
+DSP_CPP_OBJ += $DSP_OPTIONAL_CPP_OBJECTS
 DSP_EXTRA_CFLAGS := $DSP_EXTRA_CFLAGS $([ -n "$DSP_OPTIONAL_PACKAGES" ] && pkg-config --cflags $DSP_OPTIONAL_PACKAGES)
 DSP_EXTRA_LIBS := $DSP_EXTRA_LIBS $([ -n "$DSP_OPTIONAL_PACKAGES" ] && pkg-config --libs $DSP_OPTIONAL_PACKAGES)
 LADSPA_DSP_OBJ += $LADSPA_DSP_OPTIONAL_OBJECTS
+LADSPA_DSP_CPP_OBJ += $LADSPA_DSP_OPTIONAL_CPP_OBJECTS
 LADSPA_DSP_EXTRA_CFLAGS := $LADSPA_DSP_EXTRA_CFLAGS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --cflags $LADSPA_DSP_OPTIONAL_PACKAGES)
 LADSPA_DSP_EXTRA_LIBS := $LADSPA_DSP_EXTRA_LIBS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --libs $LADSPA_DSP_OPTIONAL_PACKAGES)" > config.mk
