@@ -14,6 +14,7 @@ a given effects chain.
 #### Optional dependencies:
 
 * fftw3: For resample and fir effects.
+* zita-convolver: For zita_convolver effect.
 * libsndfile: For sndfile input/output support.
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
 * alsa-lib: For alsa input/output support.
@@ -192,7 +193,9 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 * `resample [bandwidth] fs`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]impulse_path`  
-	FFT convolution.
+	Non-partitioned 64-bit FFT convolution.
+* `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`
+	Partitioned 32-bit FFT convolution using the zita-convolver library.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).

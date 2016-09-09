@@ -12,6 +12,7 @@
 #include "delay.h"
 #include "resample.h"
 #include "fir.h"
+#include "zita_convolver.h"
 #include "noise.h"
 #include "compress.h"
 #include "reverb.h"
@@ -43,6 +44,9 @@ static struct effect_info effects[] = {
 	{ "resample",           "resample [bandwidth] fs",               resample_effect_init },
 #endif
 	{ "fir",                "fir [~/]impulse_path",                  fir_effect_init },
+#endif
+#ifdef __HAVE_ZITA_CONVOLVER__
+	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init },
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },

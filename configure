@@ -11,6 +11,7 @@ Options:
   --disable-sndfile
   --disable-ffmpeg
   --disable-fftw3
+  --disable-zita-convolver
   --disable-alsa
   --disable-ao
   --disable-mad
@@ -37,6 +38,7 @@ for i in "$@"; do
 		--disable-sndfile)        CONFIG_DISABLE_SNDFILE=y ;;
 		--disable-ffmpeg)         CONFIG_DISABLE_FFMPEG=y ;;
 		--disable-fftw3)          CONFIG_DISABLE_FFTW3=y ;;
+		--disable-zita-convolver) CONFIG_DISABLE_ZITA_CONVOLVER=y ;;
 		--disable-alsa)           CONFIG_DISABLE_ALSA=y ;;
 		--disable-ao)             CONFIG_DISABLE_AO=y ;;
 		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
@@ -98,6 +100,14 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
 	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
+	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" -a -f "/usr/include/zita-convolver.h" ]; then
+		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
+		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lzita-convolver"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__HAVE_ZITA_CONVOLVER__"
+		echo "[dsp] enabled zita_convolver.o"
+	else
+		echo "[dsp] disabled zita_convolver.o"
+	fi
 	check_pkg_dsp alsa "$CONFIG_DISABLE_ALSA" alsa.o -D__HAVE_ALSA__
 	check_pkg_dsp ao "$CONFIG_DISABLE_AO" ao.o -D__HAVE_AO__
 	check_pkg_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -D__HAVE_MAD__
@@ -120,6 +130,15 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 		echo "[ladspa_dsp] disabled gpl code (reverb.o g2reverb.o)"
 	fi
 	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__ && INCLUDE_CODECS=y
+	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" -a -f "/usr/include/zita-convolver.h" ]; then
+		INCLUDE_CODECS=y
+		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
+		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lzita-convolver"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -D__HAVE_ZITA_CONVOLVER__"
+		echo "[ladspa_dsp] enabled zita_convolver.o"
+	else
+		echo "[ladspa_dsp] disabled zita_convolver.o"
+	fi
 	if [ "$INCLUDE_CODECS" = "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o null.o pcm.o sampleconv.o"
 		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
