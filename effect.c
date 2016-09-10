@@ -74,7 +74,7 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 
 int build_effects_chain(int argc, char **argv, struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir)
 {
-	int i = 1, k = 0, j, last_selector_index = -1, old_stream_channels;
+	int i = 1, k = 0, j, last_selector_index = -1, old_stream_channels, allow_fail = 0;
 	char *tmp_channel_selector;
 	struct effect_info *ei = NULL;
 	struct effect *e = NULL;
@@ -90,6 +90,11 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 	}
 
 	while (k < argc) {
+		if (argv[k][0] == '!' && argv[k][1] == '\0') {
+			allow_fail = 1;
+			i = ++k + 1;
+			continue;
+		}
 		if (argv[k][0] == ':') {
 			if (parse_selector(&argv[k][1], channel_selector, stream->channels))
 				goto fail;
@@ -116,40 +121,53 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			continue;
 		}
 		ei = get_effect_info(argv[k]);
+		/* Find end of argument list */
+		for (; i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':' && argv[i][0] != '@' && !(argv[i][0] == '!' && argv[i][1] == '\0'); ++i);
 		if (ei == NULL) {
-			LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
-			goto fail;
-		}
-		while (i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':' && argv[i][0] != '@')
-			++i;
-		if (LOGLEVEL(LL_VERBOSE)) {
-			fprintf(stderr, "dsp: effect:");
-			for (j = 0; j < i - k; ++j)
-				fprintf(stderr, " %s", argv[k + j]);
-			fprintf(stderr, "; channels=%d [", stream->channels);
-			print_selector(channel_selector, stream->channels);
-			fprintf(stderr, "] fs=%d\n", stream->fs);
-		}
-		e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
-		if (e == NULL) {
-			LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
-			goto fail;
-		}
-		append_effect(chain, e);
-		k = i;
-		i = k + 1;
-		if (e->ostream.channels != stream->channels) {
-			tmp_channel_selector = NEW_SELECTOR(e->ostream.channels);
-			if (last_selector_index == -1)
-				SET_SELECTOR(tmp_channel_selector, e->ostream.channels);
-			else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels)) {
-				free(tmp_channel_selector);
+			if (allow_fail)
+				LOG(LL_VERBOSE, "dsp: warning: no such effect: %s\n", argv[k]);
+			else {
+				LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
 				goto fail;
 			}
-			free(channel_selector);
-			channel_selector = tmp_channel_selector;
 		}
-		*stream = e->ostream;
+		else {
+			if (LOGLEVEL(LL_VERBOSE)) {
+				fprintf(stderr, "dsp: effect:");
+				for (j = 0; j < i - k; ++j)
+					fprintf(stderr, " %s", argv[k + j]);
+				fprintf(stderr, "; channels=%d [", stream->channels);
+				print_selector(channel_selector, stream->channels);
+				fprintf(stderr, "] fs=%d\n", stream->fs);
+			}
+			e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
+			if (e == NULL) {
+				if (allow_fail)
+					LOG(LL_VERBOSE, "dsp: warning: failed to initialize non-essential effect: %s\n", argv[k]);
+				else {
+					LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
+					goto fail;
+				}
+			}
+			else {
+				append_effect(chain, e);
+				if (e->ostream.channels != stream->channels) {
+					tmp_channel_selector = NEW_SELECTOR(e->ostream.channels);
+					if (last_selector_index == -1)
+						SET_SELECTOR(tmp_channel_selector, e->ostream.channels);
+					else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels)) {
+						free(tmp_channel_selector);
+						goto fail;
+					}
+					free(channel_selector);
+					channel_selector = tmp_channel_selector;
+				}
+				*stream = e->ostream;
+			}
+		}
+		allow_fail = 0;
+		k = i;
+		i = k + 1;
 	}
 	free(channel_selector);
 	return 0;

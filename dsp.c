@@ -41,7 +41,7 @@ static struct codec *out_codec = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
 
 static const char usage[] =
-	"Usage: dsp [options] path ... [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
+	"Usage: dsp [options] path ... [!] [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
 	"\n"
 	"Global options:\n"
 	"  -h         show this help\n"
@@ -65,7 +65,10 @@ static const char usage[] =
 	"  -B/L/N           big/little/native endian\n"
 	"  -r frequency[k]  sample rate\n"
 	"  -c channels      number of channels\n"
-	"  -n               equivalent to '-t null null'\n";
+	"  -n               equivalent to '-t null null'\n"
+	"\n"
+	"Selector syntax:\n"
+	"  [[start][-[end]][,...]]\n";
 
 static const char interactive_help[] =
 	"Keys:\n"
@@ -367,7 +370,7 @@ int main(int argc, char *argv[])
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
 		interactive = 0;
-	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':' && argv[optind][0] != '@') {
+	while (optind < argc && get_effect_info(argv[optind]) == NULL && argv[optind][0] != ':' && argv[optind][0] != '@' && !(argv[optind][0] == '!' && argv[optind][1] == '\0')) {
 		if (parse_codec_params(argc, argv, &p))
 			cleanup_and_exit(1);
 		if (p.mode == CODEC_MODE_WRITE)

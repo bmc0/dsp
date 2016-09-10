@@ -37,7 +37,7 @@ options. Run `./configure --help` to see all available options.
 
 #### Synopsis:
 
-	dsp [options] path ... [:channel_selector]
+	dsp [options] path ... [!] [:channel_selector]
 		[@[~/]effects_file] [effect [args ...]] ...
 
 #### Global options:
@@ -69,6 +69,11 @@ Flag              | Description
 `-r frequency[k]` | Sample rate.
 `-c channels`     | Number of channels.
 `-n`              | Equivalent to `-t null null`.
+
+#### Exclamation mark
+
+A `!` marks the effect that follows as "non-essential". If an effect is marked
+non-essential and it fails to initialize, it will be skipped.
 
 #### Selector syntax:
 
