@@ -14,6 +14,7 @@
 #include "fir.h"
 #include "noise.h"
 #include "compress.h"
+#include "reverb.h"
 #include "stats.h"
 
 static struct effect_info effects[] = {
@@ -44,6 +45,7 @@ static struct effect_info effects[] = {
 #endif
 	{ "noise",              "noise level",                           noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",  compress_effect_init },
+	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init },
 	{ "stats",              "stats [ref_level]",                     stats_effect_init },
 };
 
