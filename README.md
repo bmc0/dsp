@@ -205,6 +205,8 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	Add reverberation using the freeverb algorithm. Effect ported from libSoX.
 	`reverberance`, `hf_damping`, `room_scale`, and `stereo_depth` are in
 	percent. `pre_delay` is in seconds.
+* `g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]`  
+	Add reverberation using Fons Adriaensen's g2reverb algorithm.
 * `stats [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 	(dBFS), crest factor (dB), peak count, number of samples, and length (s)
