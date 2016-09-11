@@ -331,11 +331,11 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 	}
 	if (argc > ++i) {
 		room_scale = atof(argv[i]);
-		CHECK_RANGE(room_scale >= 0.0 && room_scale <= 100.0, "room_scale", return NULL);
+		CHECK_RANGE(room_scale > 0.0 && room_scale <= 100.0, "room_scale", return NULL);
 	}
 	if (argc > ++i) {
 		stereo_depth = atof(argv[i]);
-		CHECK_RANGE(stereo_depth >= 0.0 && stereo_depth <= 100.0, "stereo_depth", return NULL;);
+		CHECK_RANGE(stereo_depth > 0.0 && stereo_depth <= 100.0, "stereo_depth", return NULL;);
 	}
 	if (argc > ++i) {
 		pre_delay_ms = atof(argv[i]) * 1000.0;
@@ -345,7 +345,7 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 		wet_gain_dB = atof(argv[i]);
 		CHECK_RANGE(wet_gain_dB >= -20.0 && wet_gain_dB <= 10.0, "wet_gain", return NULL);
 	}
-	if (i <= 1 || (wet_only && i > 8) || i > 7) {
+	if (argc > 8 || (!wet_only && argc > 7)) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
