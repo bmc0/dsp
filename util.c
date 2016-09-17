@@ -102,7 +102,7 @@ void print_selector(const char *b, int n)
 		if (c && l)
 			range_start = (range_start == -1) ? i - 1 : range_start;
 		else if (!c && range_start != -1) {
-			fprintf(stderr, "%s%d-%d", (f) ? "" : ",", range_start, i - 1);
+			fprintf(stderr, "%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
 			range_start = -1;
 			f = 0;
 		}
@@ -113,7 +113,7 @@ void print_selector(const char *b, int n)
 		l = c;
 	}
 	if (range_start != -1)
-		fprintf(stderr, "%s%d-%d", (f) ? "" : ",", range_start, n - 1);
+		fprintf(stderr, "%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
 	else if (l)
 		fprintf(stderr, "%s%d", (f) ? "" : ",", n - 1);
 }
