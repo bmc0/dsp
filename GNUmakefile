@@ -14,11 +14,10 @@ DSP_OBJ := dsp.o \
 	delay.o \
 	noise.o \
 	compress.o \
-	reverb.o \
 	stats.o \
 	null.o \
 	pcm.o
-DSP_CPP_OBJ := g2reverb.o
+DSP_CPP_OBJ :=
 LADSPA_DSP_OBJ := ladspa_dsp.o \
 	effect.o \
 	util.o \
@@ -29,9 +28,8 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	delay.o \
 	noise.o \
 	compress.o \
-	reverb.o \
 	stats.o
-LADSPA_DSP_CPP_OBJ := g2reverb.o
+LADSPA_DSP_CPP_OBJ :=
 
 BASE_CFLAGS        := -Os -Wall -std=gnu99
 BASE_CXXFLAGS      := -Os -Wall -std=gnu++11

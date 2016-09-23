@@ -16,6 +16,7 @@ Options:
   --disable-mad
   --disable-pulse
   --disable-ladspa_dsp
+  --disable-gpl-code
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
   --libdir=path (default: $LIBDIR)
@@ -41,6 +42,7 @@ for i in "$@"; do
 		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
 		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
+		--disable-gpl-code)       CONFIG_DISABLE_GPL_CODE=y ;;
 		--prefix=*)               PREFIX="${i#--prefix=}" ;;
 		--bindir=*)               BINDIR="${i#--bindir=}" ;;
 		--libdir=*)               LIBDIR="${i#--libdir=}" ;;
@@ -85,6 +87,14 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	echo "enabled dsp"
 	TARGETS="$TARGETS dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_dsp"
+	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
+		echo "[dsp] enabled gpl code (reverb.o g2reverb.o)"
+		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS reverb.o"
+		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__ENABLE_GPL_CODE__"
+	else
+		echo "[dsp] disabled gpl code (reverb.o g2reverb.o)"
+	fi
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
 	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
@@ -101,6 +111,14 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 	TARGETS="$TARGETS ladspa_dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	unset INCLUDE_CODECS
+	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
+		echo "[ladspa_dsp] enabled gpl code (reverb.o g2reverb.o)"
+		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS reverb.o"
+		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -D__ENABLE_GPL_CODE__"
+	else
+		echo "[ladspa_dsp] disabled gpl code (reverb.o g2reverb.o)"
+	fi
 	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__ && INCLUDE_CODECS=y
 	if [ "$INCLUDE_CODECS" = "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o null.o pcm.o sampleconv.o"
