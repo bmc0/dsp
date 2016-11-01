@@ -10,7 +10,6 @@ struct ffmpeg_state {
 	AVFormatContext *container;
 	AVCodecContext *cc;
 	AVFrame *frame;
-	AVPacket packet;
 	void (*read_func)(char *, sample_t *, ssize_t);
 	void (*readp_func)(char **, sample_t *, int, ssize_t, ssize_t);
 	int planar, bytes, stream_index, got_frame;
@@ -84,37 +83,43 @@ static void read_buf_doublep(char **in, sample_t *out, int channels, ssize_t sta
 ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
-	int len, done = 0;
+	AVPacket packet;
+	int r, done = 0;  /* set to 1 at EOF */
 	ssize_t buf_pos = 0, avail = 0;
 	if (state->got_frame)
 		avail = state->frame->nb_samples - state->frame_pos;
 	while (buf_pos < frames && !(done && avail == 0)) {
 		if (avail == 0) {
-			skip_frame:
-			if (state->packet.size <= 0) {
-				av_packet_unref(&state->packet);
-				if (av_read_frame(state->container, &state->packet) < 0) {
+			if (state->got_frame)
+				av_frame_unref(state->frame);
+			state->got_frame = 0;
+			state->frame_pos = 0;
+			if ((r = avcodec_receive_frame(state->cc, state->frame)) < 0) {
+				switch (r) {
+				case AVERROR_EOF:
 					done = 1;
 					continue;
+				case AVERROR(EAGAIN):
+					skip_packet:
+					if (av_read_frame(state->container, &packet) < 0) {
+						avcodec_send_packet(state->cc, NULL);  /* send flush packet */
+						continue;
+					}
+					if (packet.stream_index != state->stream_index) {
+						av_packet_unref(&packet);
+						goto skip_packet;
+					}
+					if (avcodec_send_packet(state->cc, &packet) < 0)
+						return 0;  /* FIXME: handle decoding errors more intelligently */
+					av_packet_unref(&packet);
+					break;
+				default:
+					return 0;  /* FIXME: handle decoding errors more intelligently */
 				}
 			}
-			if (state->packet.stream_index == state->stream_index) {
-				state->got_frame = 0;
-				state->frame_pos = 0;
-				av_frame_unref(state->frame);
-				if ((len = avcodec_decode_audio4(state->cc, state->frame, &state->got_frame, &state->packet)) < 0) {
-					state->packet.size = 0;
-					goto skip_frame;
-				}
-				state->packet.size -= len;
-				state->packet.data += len;
-				if (!state->got_frame)
-					goto skip_frame;
-			}
-			else
-				state->packet.size = 0;
+			state->got_frame = 1;
 		}
-		else if (state->got_frame) {
+		if (state->got_frame) {
 			avail = (avail > frames - buf_pos) ? frames - buf_pos : avail;
 			if (state->planar)
 				state->readp_func((char **) state->frame->extended_data, &buf[buf_pos * c->channels],
@@ -124,9 +129,8 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 					&buf[buf_pos * c->channels], avail * c->channels);
 			buf_pos += avail;
 			state->frame_pos += avail;
-		}
-		if (state->got_frame)
 			avail = state->frame->nb_samples - state->frame_pos;
+		}
 	}
 	return buf_pos;
 }
@@ -150,8 +154,10 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 	timestamp = pos * time_base.den / time_base.num / c->fs;
 	if (av_seek_frame(state->container, state->stream_index, timestamp, AVSEEK_FLAG_FRAME) < 0)
 		return -1;
+	avcodec_flush_buffers(state->cc);
+	if (state->got_frame)
+		av_frame_unref(state->frame);
 	state->got_frame = 0;
-	state->packet.size = 0;
 	return pos;
 }
 
@@ -173,7 +179,6 @@ void ffmpeg_pause(struct codec *c, int p)
 void ffmpeg_destroy(struct codec *c)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
-	av_packet_unref(&state->packet);
 	av_frame_free(&state->frame);
 	avcodec_close(state->cc);
 	avformat_close_input(&state->container);
@@ -186,6 +191,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	int i, err;
 	struct ffmpeg_state *state = NULL;
 	struct codec *c = NULL;
+	AVStream *st;
 	AVCodec *codec = NULL;
 	AVRational time_base;
 
@@ -216,14 +222,28 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		LOG(LL_ERROR, "dsp: ffmpeg: error: could not find an audio stream\n");
 		goto fail;
 	}
+	st = state->container->streams[state->stream_index];
 
 	/* open codec */
-	state->cc = state->container->streams[state->stream_index]->codec;
-	codec = avcodec_find_decoder(state->cc->codec_id);
+	codec = avcodec_find_decoder(st->codecpar->codec_id);
+	if (!codec) {
+		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to find decoder\n");
+		goto fail;
+	}
+	state->cc = avcodec_alloc_context3(codec);
+	if (!state->cc) {
+		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to allocate codec context\n");
+		goto fail;
+	}
+	if ((err = avcodec_parameters_to_context(state->cc, st->codecpar)) < 0) {
+		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to copy codec parameters to decoder context: %s\n", av_err2str(err));
+		goto fail;
+	}
 	if ((err = avcodec_open2(state->cc, codec, NULL)) < 0) {
 		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open required decoder: %s\n", av_err2str(err));
 		goto fail;
 	}
+
 	state->frame = av_frame_alloc();
 	if (state->frame == NULL) {
 		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to allocate frame\n");
@@ -290,11 +310,11 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	return c;
 
 	fail:
-	if (state->frame != NULL)
+	if (state->frame)
 		av_frame_free(&state->frame);
-	if (state->cc != NULL)
+	if (state->cc)
 		avcodec_close(state->cc);
-	if (state->container != NULL)
+	if (state->container)
 		avformat_close_input(&state->container);
 	free(state);
 	return NULL;
