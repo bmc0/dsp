@@ -142,16 +142,15 @@ ssize_t ffmpeg_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 {
-	AVRational time_base;
+	AVStream *st;
 	int64_t timestamp;
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	if (pos < 0)
 		pos = 0;
 	else if (pos >= c->frames)
 		pos = c->frames - 1;
-	time_base.num = state->container->streams[state->stream_index]->time_base.num;
-	time_base.den = state->container->streams[state->stream_index]->time_base.den;
-	timestamp = pos * time_base.den / time_base.num / c->fs;
+	st = state->container->streams[state->stream_index];
+	timestamp = pos * st->time_base.den / st->time_base.num / c->fs;
 	if (av_seek_frame(state->container, state->stream_index, timestamp, AVSEEK_FLAG_FRAME) < 0)
 		return -1;
 	avcodec_flush_buffers(state->cc);
@@ -193,7 +192,6 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	struct codec *c = NULL;
 	AVStream *st;
 	AVCodec *codec = NULL;
-	AVRational time_base;
 
 	if (!av_registered) {
 		if (LOGLEVEL(LL_VERBOSE))
@@ -295,9 +293,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		LOG(LL_ERROR, "dsp: ffmpeg: error: unhandled sample format\n");
 		goto fail;
 	}
-	time_base.num = state->container->streams[state->stream_index]->time_base.num;
-	time_base.den = state->container->streams[state->stream_index]->time_base.den;
-	c->frames = state->container->streams[state->stream_index]->duration * time_base.num * c->fs / time_base.den;
+	c->frames = st->duration * st->time_base.num * c->fs / st->time_base.den;
 	c->read = ffmpeg_read;
 	c->write = ffmpeg_write;
 	c->seek = ffmpeg_seek;
