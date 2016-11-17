@@ -194,8 +194,9 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]impulse_path`  
 	Non-partitioned 64-bit FFT convolution.
-* `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`
+* `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
+	`{min,max}_part_len` must be powers of 2 between 64 and 8192.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
