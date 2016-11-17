@@ -190,7 +190,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	if (c_filter->read(c_filter, buf_interleaved, c_filter->frames) != c_filter->frames)
 		LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
 	buf_planar = (float **) calloc(c_filter->channels, sizeof(float *));
-	for (i = 0; i < istream->channels; ++i)
+	for (i = 0; i < c_filter->channels; ++i)
 		buf_planar[i] = (float *) calloc(c_filter->frames, sizeof(float));
 	write_buf_floatp(buf_interleaved, buf_planar, c_filter->channels, c_filter->frames);
 	free(buf_interleaved);
@@ -200,7 +200,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 			++k;
 		}
 	}
-	for (i = 0; i < istream->channels; ++i)
+	for (i = 0; i < c_filter->channels; ++i)
 		free(buf_planar[i]);
 	free(buf_planar);
 	destroy_codec(c_filter);
