@@ -13,8 +13,8 @@ a given effects chain.
 
 #### Optional dependencies:
 
-* fftw3: For resample and fir effects.
-* zita-convolver: For zita_convolver effect.
+* fftw3: For `resample` and `fir` effects.
+* zita-convolver: For `zita_convolver` effect.
 * libsndfile: For sndfile input/output support.
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
 * alsa-lib: For alsa input/output support.
