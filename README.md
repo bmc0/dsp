@@ -55,6 +55,7 @@ Flag        | Description
 `-v`        | Verbose mode.
 `-d`        | Force dithering.
 `-D`        | Disable dithering.
+`-E`        | Don't drain effects chain before rebuilding.
 `-p`        | Plot effects chain instead of processing audio.
 `-V`        | Enable verbose progress display.
 `-S`        | Use "sequence" input combining mode.

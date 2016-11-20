@@ -34,7 +34,7 @@ enum {
 
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, input_mode = INPUT_MODE_CONCAT,
-	term_attrs_saved = 0, force_dither = 0, verbose_progress = 0;
+	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -54,6 +54,7 @@ static const char usage[] =
 	"  -v         verbose mode\n"
 	"  -d         force dithering\n"
 	"  -D         disable dithering\n"
+	"  -E         don't drain effects chain before rebuilding\n"
 	"  -p         plot effects chain instead of processing audio\n"
 	"  -V         enable verbose progress display\n"
 	"  -S         run in sequence mode\n"
@@ -161,7 +162,7 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 	p->endian = CODEC_ENDIAN_DEFAULT;
 	p->mode = CODEC_MODE_READ;
 
-	while ((opt = getopt(argc, argv, "+:hb:R:iIqsvdDpVSot:e:BLNr:c:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:R:iIqsvdDEpVSot:e:BLNr:c:n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_usage();
@@ -208,6 +209,9 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			break;
 		case 'D':
 			force_dither = -1;
+			break;
+		case 'E':
+			drain_effects = 0;
 			break;
 		case 'p':
 			plot = 1;
@@ -488,7 +492,7 @@ int main(int argc, char *argv[])
 						if (show_progress)
 							fputs("\033[1K\r", stderr);
 						LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
-						if (!pause) {
+						if (!pause && drain_effects) {
 							do {
 								w = dsp_globals.buf_frames;
 								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
@@ -557,7 +561,7 @@ int main(int argc, char *argv[])
 				fputs("\033[1K\r", stderr);
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
 				LOG(LL_NORMAL, "dsp: info: input sample rate and/or channels changed; rebuilding effects chain\n");
-				if (!pause) {
+				if (!pause && drain_effects) {
 					do {
 						w = dsp_globals.buf_frames;
 						obuf = drain_effects_chain(&chain, &w, buf1, buf2);
