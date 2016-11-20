@@ -10,10 +10,10 @@ extern "C" {
 }
 
 struct zita_convolver_state {
-	int has_output;
-	unsigned int len, pos;
+	ssize_t filter_frames, len, pos, drain_frames, drain_pos;
 	sample_t **output;
 	Convproc *cproc;
+	int has_output, is_draining;
 };
 
 void zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -70,8 +70,25 @@ void zita_convolver_effect_reset(struct effect *e)
 
 void zita_convolver_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
-	/* FIXME */
-	*frames = -1;
+	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
+	if (!state->has_output && state->pos == 0)
+		*frames = -1;
+	else {
+		if (!state->is_draining) {
+			state->drain_frames = state->filter_frames;
+			if (state->has_output)
+				state->drain_frames += state->len - state->pos;
+			state->drain_frames += state->pos;
+			state->is_draining = 1;
+		}
+		if (state->drain_pos < state->drain_frames) {
+			zita_convolver_effect_run(e, frames, NULL, obuf);
+			state->drain_pos += *frames;
+			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
+		}
+		else
+			*frames = -1;
+	}
 }
 
 void zita_convolver_effect_destroy(struct effect *e)
@@ -179,6 +196,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	e->destroy = zita_convolver_effect_destroy;
 
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
+	state->filter_frames = c_filter->frames;
 	state->len = min_part_len;
 	state->cproc = cproc;
 	state->output = (sample_t **) calloc(istream->channels, sizeof(sample_t *));
