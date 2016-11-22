@@ -39,7 +39,7 @@ struct dsp_globals dsp_globals = {
 };
 
 static int n_configs = 0;
-struct ladspa_dsp_config *configs = NULL;
+static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
 
 static char * isolate(char *s, char c)
@@ -157,7 +157,7 @@ static void load_configs(void)
 	free(c_dir_path);
 }
 
-LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
+static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 {
 	char *lc_n_old = NULL;
 	struct stream_info stream;
@@ -199,14 +199,14 @@ LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 	return NULL;
 }
 
-void connect_port_to_dsp(LADSPA_Handle inst, unsigned long port, LADSPA_Data *data)
+static void connect_port_to_dsp(LADSPA_Handle inst, unsigned long port, LADSPA_Data *data)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 	if (port < d->input_channels + d->output_channels)
 		d->ports[port] = data;
 }
 
-void run_dsp(LADSPA_Handle inst, unsigned long s)
+static void run_dsp(LADSPA_Handle inst, unsigned long s)
 {
 	unsigned long i, j, k;
 	sample_t *obuf;
@@ -232,7 +232,7 @@ void run_dsp(LADSPA_Handle inst, unsigned long s)
 			d->ports[k][i] = (LADSPA_Data) obuf[j++];
 }
 
-void cleanup_dsp(LADSPA_Handle inst)
+static void cleanup_dsp(LADSPA_Handle inst)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: cleaning up...\n");
