@@ -306,6 +306,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	return c;
 
 	fail:
+	free(c);
 	if (state->frame)
 		av_frame_free(&state->frame);
 	if (state->cc)

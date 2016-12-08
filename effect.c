@@ -189,8 +189,8 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 
 int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir, const char *path)
 {
-	char **argv = NULL, *tmp, *d, *p, *c;
-	int i, argc = 0;
+	char **argv = NULL, *tmp, *d = NULL, *p, *c;
+	int i, ret = 0, argc = 0;
 
 	p = construct_full_path(dir, path);
 	if (!(c = get_file_contents(p))) {
@@ -201,29 +201,28 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 		goto fail;
 	d = strdup(p);
 	tmp = strrchr(d, '/');
-	if (tmp == NULL)
+	if (tmp == NULL) {
+		free(d);
 		d = strdup(".");
+	}
 	else
 		*tmp = '\0';
 	LOG(LL_VERBOSE, "dsp: info: begin effects file: %s\n", p);
 	if (build_effects_chain(argc, argv, chain, stream, channel_selector, d))
 		goto fail;
 	LOG(LL_VERBOSE, "dsp: info: end effects file: %s\n", p);
+	done:
 	free(c);
 	free(p);
 	free(d);
 	for (i = 0; i < argc; ++i)
 		free(argv[i]);
 	free(argv);
-	return 0;
+	return ret;
 
 	fail:
-	free(c);
-	free(p);
-	for (i = 0; i < argc; ++i)
-		free(argv[i]);
-	free(argv);
-	return 1;
+	ret = 1;
+	goto done;
 }
 
 double get_effects_chain_max_ratio(struct effects_chain *chain)
