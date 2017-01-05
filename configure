@@ -3,6 +3,8 @@
 PREFIX=/usr
 BINDIR=/bin
 LIBDIR=/lib
+CC=${CC:-"cc"}
+CXX=${CC:-"c++"}
 
 USAGE="Usage: $0 [option ...]
 
@@ -81,6 +83,10 @@ check_pkg_ladspa_dsp() {
 	fi
 }
 
+check_header() {
+	echo "#include <$2>" | "$1" -E - > /dev/null 2>&1
+}
+
 unset TARGETS INSTALL_TARGETS
 unset DSP_OPTIONAL_OBJECTS DSP_OPTIONAL_CPP_OBJECTS DSP_OPTIONAL_PACKAGES DSP_EXTRA_CFLAGS DSP_EXTRA_LIBS
 unset LADSPA_DSP_OPTIONAL_OBJECTS LADSPA_DSP_OPTIONAL_CPP_OJBECTS LADSPA_DSP_OPTIONAL_PACKAGES LADSPA_DSP_EXTRA_CFLAGS LADSPA_DSP_EXTRA_LIBS
@@ -100,7 +106,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
 	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
 	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
-	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" -a -f "/usr/include/zita-convolver.h" ]; then
+	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header $CXX zita-convolver.h; then
 		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lzita-convolver"
 		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__HAVE_ZITA_CONVOLVER__"
@@ -116,7 +122,7 @@ else
 	echo "disabled dsp"
 fi
 
-if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
+if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header $CC ladspa.h; then
 	echo "enabled ladspa_dsp"
 	TARGETS="$TARGETS ladspa_dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
@@ -130,7 +136,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" -a -f "/usr/include/ladspa.h" ]; then
 		echo "[ladspa_dsp] disabled gpl code (reverb.o g2reverb.o)"
 	fi
 	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__ && INCLUDE_CODECS=y
-	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" -a -f "/usr/include/zita-convolver.h" ]; then
+	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header $CXX zita-convolver.h; then
 		INCLUDE_CODECS=y
 		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lzita-convolver"
