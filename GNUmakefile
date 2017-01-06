@@ -1,4 +1,4 @@
-DEPS := config.mk dsp.h
+STATIC_DEPS := config.mk
 OBJDIR := obj
 DSP_OBJDIR := ${OBJDIR}/dsp
 LADSPA_DSP_OBJDIR := ${OBJDIR}/ladspa_dsp
@@ -38,18 +38,21 @@ BASE_LIBS          := -lm
 
 include config.mk
 
-DSP_CFLAGS          := ${BASE_CFLAGS} ${DSP_EXTRA_CFLAGS} ${CFLAGS}
-DSP_CXXFLAGS        := ${BASE_CXXFLAGS} ${DSP_EXTRA_CFLAGS} ${CXXFLAGS}
+DEPFLAGS            := -MMD -MP
+DSP_CFLAGS          := ${DEPFLAGS} ${BASE_CFLAGS} ${DSP_EXTRA_CFLAGS} ${CFLAGS}
+DSP_CXXFLAGS        := ${DEPFLAGS} ${BASE_CXXFLAGS} ${DSP_EXTRA_CFLAGS} ${CXXFLAGS}
 DSP_LDFLAGS         := ${BASE_LDFLAGS} ${LDFLAGS}
 DSP_LIBS            := ${DSP_EXTRA_LIBS} ${BASE_LIBS}
-LADSPA_DSP_CFLAGS   := ${BASE_CFLAGS} -fPIC -DPIC -D__SYMMETRIC_IO__ ${LADSPA_DSP_EXTRA_CFLAGS} ${CFLAGS}
-LADSPA_DSP_CXXFLAGS := ${BASE_CXXFLAGS} -fPIC -DPIC -D__SYMMETRIC_IO__ ${LADSPA_DSP_EXTRA_CFLAGS} ${CXXFLAGS}
+LADSPA_DSP_CFLAGS   := ${DEPFLAGS} ${BASE_CFLAGS} -fPIC -DPIC -D__SYMMETRIC_IO__ ${LADSPA_DSP_EXTRA_CFLAGS} ${CFLAGS}
+LADSPA_DSP_CXXFLAGS := ${DEPFLAGS} ${BASE_CXXFLAGS} -fPIC -DPIC -D__SYMMETRIC_IO__ ${LADSPA_DSP_EXTRA_CFLAGS} ${CXXFLAGS}
 LADSPA_DSP_LDFLAGS  := ${BASE_LDFLAGS} -shared -nostartfiles -fPIC ${LDFLAGS}
 LADSPA_DSP_LIBS     := ${LADSPA_DSP_EXTRA_LIBS} ${BASE_LIBS}
 DSP_OBJ             := ${addprefix ${DSP_OBJDIR}/,${DSP_OBJ}}
 DSP_CPP_OBJ         := ${addprefix ${DSP_OBJDIR}/,${DSP_CPP_OBJ}}
+DSP_DEPFILES        := ${patsubst %.o,%.d,${DSP_OBJ} ${DSP_CPP_OBJ}}
 LADSPA_DSP_OBJ      := ${addprefix ${LADSPA_DSP_OBJDIR}/,${LADSPA_DSP_OBJ}}
 LADSPA_DSP_CPP_OBJ  := ${addprefix ${LADSPA_DSP_OBJDIR}/,${LADSPA_DSP_CPP_OBJ}}
+LADSPA_DSP_DEPFILES := ${patsubst %.o,%.d,${LADSPA_DSP_OBJ} ${LADSPA_DSP_CPP_OBJ}}
 
 ladspa_dsp: ladspa_dsp.so
 
@@ -59,16 +62,16 @@ config.mk: configure
 ${DSP_OBJDIR} ${LADSPA_DSP_OBJDIR}:
 	mkdir -p $@
 
-${DSP_OBJ}: ${DSP_OBJDIR}/%.o: %.c ${DEPS} | ${DSP_OBJDIR}
+${DSP_OBJ}: ${DSP_OBJDIR}/%.o: %.c ${STATIC_DEPS} | ${DSP_OBJDIR}
 	${CC} -c -o $@ ${DSP_CFLAGS} $<
 
-${DSP_CPP_OBJ}: ${DSP_OBJDIR}/%.o: %.cpp ${DEPS} | ${DSP_OBJDIR}
+${DSP_CPP_OBJ}: ${DSP_OBJDIR}/%.o: %.cpp ${STATIC_DEPS} | ${DSP_OBJDIR}
 	${CXX} -c -o $@ ${DSP_CXXFLAGS} $<
 
-${LADSPA_DSP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.c ${DEPS} | ${LADSPA_DSP_OBJDIR}
+${LADSPA_DSP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.c ${STATIC_DEPS} | ${LADSPA_DSP_OBJDIR}
 	${CC} -c -o $@ ${LADSPA_DSP_CFLAGS} $<
 
-${LADSPA_DSP_CPP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.cpp ${DEPS} | ${LADSPA_DSP_OBJDIR}
+${LADSPA_DSP_CPP_OBJ}: ${LADSPA_DSP_OBJDIR}/%.o: %.cpp ${STATIC_DEPS} | ${LADSPA_DSP_OBJDIR}
 	${CXX} -c -o $@ ${LADSPA_DSP_CXXFLAGS} $<
 
 ifdef DSP_CPP_OBJ
@@ -94,10 +97,12 @@ install_ladspa_dsp: ladspa_dsp.so
 	install -Dm755 ladspa_dsp.so ${DESTDIR}${PREFIX}${LIBDIR}/ladspa/ladspa_dsp.so
 
 clean:
-	rm -f dsp ladspa_dsp.so ${DSP_OBJ} ${DSP_CPP_OBJ} ${LADSPA_DSP_OBJ} ${LADSPA_DSP_CPP_OBJ}
+	rm -f dsp ladspa_dsp.so ${DSP_OBJ} ${DSP_CPP_OBJ} ${DSP_DEPFILES} ${LADSPA_DSP_OBJ} ${LADSPA_DSP_CPP_OBJ} ${LADSPA_DSP_DEPFILES}
 
 distclean: clean
 	rm -f config.mk
 	rm -rf ${OBJDIR}
 
 .PHONY: all install ladspa_dsp install_dsp install_ladspa_dsp clean distclean
+
+-include ${DSP_DEPFILES} ${LADSPA_DSP_DEPFILES}
