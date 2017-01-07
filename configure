@@ -4,7 +4,7 @@ PREFIX=/usr
 BINDIR=/bin
 LIBDIR=/lib
 CC=${CC:-"cc"}
-CXX=${CC:-"c++"}
+CXX=${CXX:-"c++"}
 
 USAGE="Usage: $0 [option ...]
 
