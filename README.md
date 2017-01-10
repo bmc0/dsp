@@ -283,7 +283,7 @@ Apply effects from a file:
 
 	dsp file.flac @eq.txt
 
-### LADSPA frontend (experimental):
+### LADSPA frontend:
 
 #### Configuration:
 
