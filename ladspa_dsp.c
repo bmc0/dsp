@@ -45,8 +45,8 @@ static LADSPA_Descriptor *descriptors = NULL;
 static char * isolate(char *s, char c)
 {
 	while (*s && *s != c) ++s;
-	*s = '\0';
-	return s + 1;
+	if (*s != '\0') *s++ = '\0';
+	return s;
 }
 
 static DIR * try_dir(const char *path)
