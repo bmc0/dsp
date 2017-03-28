@@ -191,7 +191,7 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	output channel.
 * `delay seconds`  
 	Delay line.
-* `resample [bandwidth] fs`  
+* `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]impulse_path`  
 	Non-partitioned 64-bit FFT convolution.

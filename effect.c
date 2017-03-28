@@ -41,7 +41,7 @@ static struct effect_info effects[] = {
 	{ "delay",              "delay seconds",                         delay_effect_init },
 #ifdef __HAVE_FFTW3__
 #ifndef __SYMMETRIC_IO__
-	{ "resample",           "resample [bandwidth] fs",               resample_effect_init },
+	{ "resample",           "resample [bandwidth] fs[k]",            resample_effect_init },
 #endif
 	{ "fir",                "fir [~/]impulse_path",                  fir_effect_init },
 #endif
