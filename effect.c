@@ -309,10 +309,10 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 				printf("+H%d_%d(f)", k, j);
 			putchar('\n');
 		}
-		printf("plot [f=10:%d/2] [-30:20] Hsum%d(f) title 'Channel %d'", (max_fs == -1) ? input_fs : max_fs, 0, 0);
+		printf("plot [10:%d/2] [-30:20] Hsum%d(x) title 'Channel %d'", (max_fs == -1) ? input_fs : max_fs, 0, 0);
 		for (k = 1; k < channels; ++k)
-			printf(", Hsum%d(f) title 'Channel %d'", k, k);
-		putchar('\n');
+			printf(", Hsum%d(x) title 'Channel %d'", k, k);
+		puts("\npause mouse close");
 	}
 }
 

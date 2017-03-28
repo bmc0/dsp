@@ -269,7 +269,7 @@ Plot amplitude vs frequency for a complex effects chain:
 		eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0
 		lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8
 		eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6
-		highshelf 10000 0.7 -0.5 | gnuplot -p
+		highshelf 10000 0.7 -0.5 | gnuplot
 
 Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the
 left and right woofers, and channels 1 and 3 are the left and right tweeters,
