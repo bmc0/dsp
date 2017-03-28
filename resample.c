@@ -125,6 +125,7 @@ void resample_effect_destroy(struct effect *e)
 	int i;
 	struct resample_state *state = (struct resample_state *) e->data;
 	fftw_free(state->sinc_fr);
+	fftw_free(state->tmp_fr);
 	for (i = 0; i < e->ostream.channels; ++i) {
 		fftw_free(state->input[i]);
 		fftw_free(state->output[i]);
