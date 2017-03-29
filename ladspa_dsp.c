@@ -38,6 +38,7 @@ struct dsp_globals dsp_globals = {
 	DEFAULT_MAX_BUF_RATIO,  /* max_buf_ratio */
 };
 
+static char *config_dir = NULL;
 static int n_configs = 0;
 static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
@@ -102,44 +103,44 @@ static void load_configs(void)
 {
 	int i;
 	DIR *d = NULL;
-	char *c_dir_path = NULL, *c_path, *env;
+	char *c_path, *env;
 	struct dirent *d_ent;
 
 	/* Use environment variable, if present */
 	if ((env = getenv("LADSPA_DSP_DIR"))) {
-		c_dir_path = strdup(env);
-		d = try_dir(c_dir_path);
+		config_dir = strdup(env);
+		d = try_dir(config_dir);
 	}
 	else {
 		/* Build local config dir path */
 		if ((env = getenv("XDG_CONFIG_HOME"))) {
 			i = strlen(env) + strlen(DEFAULT_CONFIG_DIR) + 1;
-			c_dir_path = calloc(i, sizeof(char));
-			snprintf(c_dir_path, i, "%s%s", env, DEFAULT_CONFIG_DIR);
+			config_dir = calloc(i, sizeof(char));
+			snprintf(config_dir, i, "%s%s", env, DEFAULT_CONFIG_DIR);
 		}
 		else if ((env = getenv("HOME"))) {
 			i = strlen(env) + strlen(DEFAULT_XDG_CONFIG_DIR) + strlen(DEFAULT_CONFIG_DIR) + 1;
-			c_dir_path = calloc(i, sizeof(char));
-			snprintf(c_dir_path, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_DIR);
+			config_dir = calloc(i, sizeof(char));
+			snprintf(config_dir, i, "%s%s%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_DIR);
 		}
 
-		if (c_dir_path)
-			d = try_dir(c_dir_path);
+		if (config_dir)
+			d = try_dir(config_dir);
 		if (!d) {
-			free(c_dir_path);
-			c_dir_path = strdup(GLOBAL_CONFIG_DIR);
-			d = try_dir(c_dir_path);
+			free(config_dir);
+			config_dir = strdup(GLOBAL_CONFIG_DIR);
+			d = try_dir(config_dir);
 		}
 	}
 
 	if (d) {
-		LOG(LL_VERBOSE, "ladspa_dsp: info: selected config dir: %s\n", c_dir_path);
+		LOG(LL_VERBOSE, "ladspa_dsp: info: selected config dir: %s\n", config_dir);
 		while((d_ent = readdir(d))) {
 			if (strcmp(d_ent->d_name, "config") == 0
 					|| (strncmp(d_ent->d_name, "config_", 7) == 0 && strlen(d_ent->d_name) > 7)) {
-				i = strlen(c_dir_path) + strlen(d_ent->d_name) + 2;
+				i = strlen(config_dir) + strlen(d_ent->d_name) + 2;
 				c_path = calloc(i, sizeof(char));
-				snprintf(c_path, i, "%s/%s", c_dir_path, d_ent->d_name);
+				snprintf(c_path, i, "%s/%s", config_dir, d_ent->d_name);
 				configs = realloc(configs, (n_configs + 1) * sizeof(struct ladspa_dsp_config));
 				memset(&configs[n_configs], 0, sizeof(struct ladspa_dsp_config));
 				configs[n_configs].input_channels = configs[n_configs].output_channels = 1;
@@ -154,7 +155,6 @@ static void load_configs(void)
 		}
 		closedir(d);
 	}
-	free(c_dir_path);
 }
 
 static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
@@ -173,7 +173,7 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
 	lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
 	setlocale(LC_NUMERIC, config->lc_n);
-	if (build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, NULL)) {
+	if (build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config_dir)) {
 		setlocale(LC_NUMERIC, lc_n_old);
 		free(lc_n_old);
 		goto fail;
@@ -330,6 +330,7 @@ void _fini() {
 	}
 	free(descriptors);
 	free(configs);
+	free(config_dir);
 }
 
 const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)

@@ -323,6 +323,9 @@ Example configuration:
 	output_channels=1
 	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
 
+Relative file paths in the `effects_chain` line are relative to the
+configuration directory.
+
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.
 
