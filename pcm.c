@@ -164,8 +164,8 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	if (mode == CODEC_MODE_READ) {
 		size = lseek(fd, 0, SEEK_END);
 		c->frames = (size == -1) ? -1 : size / enc_info->bytes / channels;
+		lseek(fd, 0, SEEK_SET);
 	}
-	lseek(fd, 0, SEEK_SET);
 	c->read = pcm_read;
 	c->write = pcm_write;
 	c->seek = pcm_seek;
