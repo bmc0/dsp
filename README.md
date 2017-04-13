@@ -15,7 +15,7 @@ a given effects chain.
 
 * fftw3: For `resample` and `fir` effects.
 * zita-convolver: For `zita_convolver` effect.
-* libsndfile: For sndfile input/output support.
+* libsndfile: For sndfile input/output support (recommended).
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
 * alsa-lib: For alsa input/output support.
 * libao: For ao output support.

@@ -146,10 +146,14 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header $CC ladspa.h; then
 		echo "[ladspa_dsp] disabled zita_convolver.o"
 	fi
 	if [ "$INCLUDE_CODECS" = "y" ]; then
-		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o null.o pcm.o sampleconv.o"
-		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
-		check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
-		check_pkg_ladspa_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -D__HAVE_MAD__
+		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sampleconv.o"
+		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__ \
+			|| check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__ \
+			|| echo "[ladspa_dsp] WARNING: The fir and zita_convolver effects cannot be used without either sndfile or ffmpeg"
+		# Extra codecs
+		#LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS null.o pcm.o"
+		#check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
+		#check_pkg_ladspa_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -D__HAVE_MAD__
 	fi
 else
 	echo "disabled ladspa_dsp"
