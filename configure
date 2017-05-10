@@ -54,6 +54,8 @@ for i in "$@"; do
 		--prefix=*)               PREFIX="${i#--prefix=}" ;;
 		--bindir=*)               BINDIR="${i#--bindir=}" ;;
 		--libdir=*)               LIBDIR="${i#--libdir=}" ;;
+		--datadir=*)              DATADIR="${i#--datadir=}" ;;
+		--mandir=*)               MANDIR="${i#--mandir=}" ;;
 		--no-config) ;;
 		--help) echo "$USAGE"; exit 0 ;;
 		*) echo "error: invalid option: $i"; echo "$USAGE"; exit 1 ;;

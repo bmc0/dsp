@@ -403,6 +403,7 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 * Some effects do not support plotting.
 
 ### License
+
 This software is released under the ISC license, except for the `reverb`
 effect, which is under the LGPLv2.1 license (copyright
 robs@users.sourceforge.net), and the `g2reverb` effect, which is under the
