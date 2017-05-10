@@ -1,0 +1,358 @@
+.TH DSP 1 dsp\-1.1
+.SH NAME
+dsp \- an audio processing program with an interactive mode
+.SH SYNOPSIS
+.B dsp
+[\fIoptions\fR] \fIpath\fR ... [\fI!\fR] [:\fIchannel_selector\fR]
+[@[~/]\fIeffects_file\fR] [\fIeffect\fR [\fIargs\fR ...]] ...
+.SH DESCRIPTION
+.B dsp
+is an audio processing program with an interactive mode.
+.SH OPTIONS
+.SS Global options
+.TP
+\fB\-h\fR
+Show help text.
+.TP
+\fB\-b\fR \fIframes\fR
+Set buffer size (must be given before the first input).
+.TP
+\fB\-R\fR \fIratio\fR
+Set codec maximum buffer ratio (must be given before the first input).
+.TP
+\fB\-i\fR
+Force interactive mode.
+.TP
+\fB\-I\fR
+Disable interactive mode.
+.TP
+\fB\-q\fR
+Disable progress display.
+.TP
+\fB\-s\fR
+Silent mode.
+.TP
+\fB\-v\fR
+Verbose mode.
+.TP
+\fB\-d\fR
+Force dithering.
+.TP
+\fB\-D\fR
+Disable dithering.
+.TP
+\fB\-E\fR
+Don't drain effects chain before rebuilding.
+.TP
+\fB\-p\fR
+Plot effects chain instead of processing audio.
+.TP
+\fB\-V\fR
+Enable verbose progress display.
+.TP
+\fB\-S\fR
+Use `sequence' input combining mode.
+.SS Input/output options
+.TP
+\fB\-o\fR
+Output.
+.TP
+\fB\-t\fR \fItype\fR
+Type.
+.TP
+\fB\-e\fR \fIencoding\fR
+Encoding.
+.TP
+\fB\-B\fR/L/N
+Big/little/native endian.
+.TP
+\fB\-r\fR \fIfrequency\fR[\fBk\fR]
+Sample rate.
+.TP
+\fB\-c\fR \fIchannels\fR
+Number of channels.
+.TP
+\fB\-n\fR
+Equivalent to
+.EX
+	\-t null null.
+.EE
+.SH INPUTS AND OUTPUTS
+For a complete list of supported input/output types, run
+.EX
+	$ dsp -h
+.EE
+.SS Input Combining Modes
+In concatenate mode (the default), the inputs are concatenated in the order
+given and sent to the output. All inputs must have the same sample rate and
+number of channels.
+.PP
+In sequence mode, the inputs are sent serially to the output like concatenate
+mode, but the inputs do not need to have the same sample rate or number of
+channels. The effects chain and/or output will be rebuilt/reopened when
+required. Note that if the output is a file, the file will be truncated if it
+is reopened. This mode is most useful when the output is an audio device, but
+can also be used to concatenate inputs with different sample rates and/or
+numbers of channels into a single output file when used with the \fBresample\fR
+and/or \fBremix\fR effects.
+.SH EFFECTS
+.SS Full effects list
+.TP
+\fBlowpass_1\fR \fIf0\fR[\fBk\fR]
+Single-pole lowpass filter.
+.TP
+\fBhighpass_1\fR \fIf0\fR[\fBk\fR]
+Single-pole highpass filter.
+.TP
+\fBlowpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole lowpass filter.
+.TP
+\fBhighpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole highpass filter.
+.TP
+\fBbandpass_skirt\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole bandpass filter with constant skirt gain.
+.TP
+\fBbandpass_peak\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole bandpass filter with constant peak gain.
+.TP
+\fBnotch\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole notch filter.
+.TP
+\fBallpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Double-pole allpass filter.
+.TP
+\fBeq\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Double-pole peaking filter.
+.TP
+\fBlowshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Double-pole lowshelf filter.
+.TP
+\fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Double-pole highshelf filter.
+.TP
+\fBlinkwitz_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
+Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+.TP
+\fBdeemph\fR
+Compact Disc de-emphasis filter.
+.TP
+\fBbiquad\fR \fIb0\fR \fIb1\fR \fIb2\fR \fIa0\fR \fIa1\fR \fIa2\fR
+Biquad filter.
+.TP
+\fBgain\fR [\fIchannel\fR] \fIgain\fR
+Gain adjustment. Ignores the channel selector when the \fIchannel\fR argument
+is given.
+.TP
+\fBmult\fR [\fIchannel\fR] \fImultiplier\fR
+Multiplies each sample by \fImultiplier\fR. Ignores the channel selector when
+the \fIchannel\fR argument is given.
+.TP
+\fBcrossfeed\fR \fIf0\fR[\fBk\fR] \fIseparation\fR
+Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
+crossfeed. Ignores the channel selector. Input must be 2 channels.
+.TP
+\fBremix\fR \fIchannel_selector\fR|. ...
+Select and mix input channels into output channels. Each channel selector
+specifies the input channels to be mixed to produce each output channel.
+`.' selects no input channels. For example,
+.EX
+	remix 0,1 2,3
+.EE
+mixes input channels 0 and 1 into output channel 0, and input channels 2
+and 3 into output channel 1.
+.EX
+	remix -
+.EE
+mixes all input channels into a single output channel.
+.TP
+\fBdelay\fR \fIseconds\fR
+Delay line.
+.TP
+\fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
+Sinc resampler. Ignores the channel selector.
+.TP
+\fBfir\fR [~/]\fIimpulse_path\fR
+Non-partitioned 64-bit FFT convolution.
+.TP
+\fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIimpulse_path\fR
+Partitioned 32-bit FFT convolution using the zita-convolver library.
+\fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192.
+.TP
+\fBnoise\fR \fIlevel\fR
+Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
+(dBFS).
+.TP
+\fBcompress\fR \fIthresh\fR \fIratio\fR \fIattack\fR \fIrelease\fR
+Compress or expand the dynamic range. This effect peak-sensing and input
+channels are linked. If the ratio is in (1,inf), the dynamic range will be
+compressed. If the ratio is in (0,1), the dynamic range will be expanded.
+Attack refers to decreases in gain and release refers to increases in gain.
+.TP
+\fBreverb\fR [\fB-w\fR] [\fIreverberance\fR [\fIhf_damping\fR [\fIroom_scale\fR [\fIstereo_depth\fR [\fIpre_delay\fR [\fIwet_gain\fR]]]]]]
+Add reverberation using the freeverb algorithm. Effect ported from libSoX.
+\fIreverberance\fR, \fIhf_damping\fR, \fIroom_scale\fR, and \fIstereo_depth\fR are in
+percent. \fIpre_delay\fR is in seconds.
+.TP
+\fBg2reverb\fR [\fB-w\fR] [\fIroom_size\fR [\fIreverb_time\fR [\fIinput_bandwidth\fR [\fIdamping\fR [\fIdry_level\fR [\fIreflection_level\fR [\fItail_level\fR]]]]]]]
+Add reverberation using Fons Adriaensen's g2reverb algorithm.
+.TP
+\fBstats\fR [\fIref_level\fR]
+Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
+(dBFS), crest factor (dB), peak count, number of samples, and length (s)
+for each channel. If \fIref_level\fR is given, peak and RMS levels relative
+to \fIref_level\fR will be shown as well (dBr).
+.SS Exclamation mark
+A `!' marks the effect that follows as `non-essential'. If an effect is marked
+non-essential and it fails to initialize, it will be skipped.
+.SS Selector syntax
+[[\fIstart\fR][-[\fIend\fR]][,...]]
+.TS
+tab (|);
+lB lB
+lB l.
+Example|Description
+_
+<empty>|all
+\-|all
+2-|2 to n
+\-4|0 through 4
+1,3|1 and 3
+1-4,7,9-|1 through 4, 7, and 9 to n
+.TE
+.SS Width suffixes
+.TS
+tab (|);
+lB lB
+lB l.
+Suffix|Description
+_
+q|Q-factor (default).
+s|Slope (shelving filters only).
+o|Bandwidth in octaves.
+h|Bandwidth in Hz.
+k|Bandwidth in kHz.
+.TE
+.SS File paths
+.IP *
+On the command line, relative paths are relative to `$PWD'.
+.IP *
+Within an effects file, relative paths are relative to the directory
+containing said effects file.
+.IP *
+The `~/' prefix will be expanded to the contents of `$HOME'.
+.SS Effects file syntax
+.IP *
+Arguments are delimited by whitespace.
+.IP *
+If the first non-whitespace character in a line is `#', the line is ignored.
+.IP *
+The `\\' character removes any special meaning of the next character.
+.PP
+Example:
+.EX
+	gain -10
+	# This is a comment
+	eq 1k 1.0 +10.0 eq 3k 3.0 -4.0
+	lowshelf 90 0.7 +4.0
+.EE
+.PP
+Effects files inherit a copy of the current channel selector. In other words,
+if an effects chain is this:
+.EX
+	:2,4 @eq_file.txt eq 2k 1.0 -2.0
+.EE
+\fIeq_file.txt\fR will inherit the `2,4' selector, but any selector specified
+within \fIeq_file.txt\fR will not affect the `eq 2k 1.0 -2.0' effect that comes
+after it.
+.SH EXAMPLES
+Read \fIfile.flac\fR, apply a bass boost, and write to alsa device \fIhw:2\fR:
+.EX
+	dsp file.flac -ot alsa -e s24_3 hw:2 lowshelf 60 0.5 +4.0
+.EE
+.PP
+Plot amplitude vs frequency for a complex effects chain:
+.EX
+	dsp -pn gain -1.5 lowshelf 60 0.7 +7.8 eq 50 2.0 -2.7 eq 100 2.0 -3.9
+	  eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0
+	  lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8
+	  eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6
+	  highshelf 10000 0.7 -0.5 | gnuplot
+.EE
+.PP
+Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the
+left and right woofers, and channels 1 and 3 are the left and right tweeters,
+respectively:
+.EX
+	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 0 1 1 :0,2
+	  lowpass 2.2k 0.707 lowpass 2.2k 0.707 :1,3 highpass 2.2k 0.707
+	  highpass 2.2k 0.707 :
+.EE
+.PP
+Apply effects from a file:
+.EX
+	dsp file.flac @eq.txt
+.EE
+.SH LADSPA FRONTEND
+.SS Configuration
+The default search paths for the configuration directory are as follows:
+
+.IP *
+$XDG_CONFIG_HOME/ladspa_dsp
+.IP *
+$HOME/.config/ladspa_dsp (if $XDG_CONFIG_HOME is not set)
+.IP *
+/etc/ladspa_dsp
+.PP
+To override the default search paths, set the `LADSPA_DSP_CONFIG' environment
+variable to the desired path.
+.PP
+Each file in the configuration directory that is named either \fIconfig\fR or
+\fIconfig_<name>\fR (where `<name>' is any string) is loaded as a separate plugin
+type. The label is either \fIladspa_dsp\fR (for \fIconfig\fR) or \fIladspa_dsp:<name>\fR
+(for \fIconfig_<name>\fR).
+.PP
+The config file is a simple key-value format. Leading whitespace is ignored.
+The valid keys are:
+.TP
+.B input_channels
+Number of input channels. Default value is 1. May be left unset unless
+you want individual control over each channel.
+.TP
+.B output_channels
+Number of output channels. Default value is 1. Initialization will fail
+if this value is set incorrectly.
+.TP
+.B LC_NUMERIC
+Set `LC_NUMERIC' to the given value while building the effects chain.
+.TP
+.B effects_chain
+String to build the effects chain. The format is the same as an effects
+file, but only a single line is interpreted.
+.PP
+Example configuration:
+.EX
+	# This is a comment
+	input_channels=1
+	output_channels=1
+	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
+.EE
+.PP
+Relative file paths in the \fBeffects_chain\fR line are relative to the
+configuration directory.
+.PP
+The loglevel can be set to `VERBOSE', `NORMAL', or `SILENT' through the
+`LADSPA_DSP_LOGLEVEL' environment variable.
+.PP
+Note: The resample effect cannot be used with the LADSPA frontend.
+.SS Examples
+See https://github.com/bmc0/dsp/blob/master/README.md for usage examples.
+.SH BUGS
+No support for metadata.
+.PP
+Some effects do not support plotting.
+.SH LICENSE
+This software is released under the ISC license, except for the \fBreverb\fR
+effect, which is under LGPLv2.1 license (copyright robs@users.sourceforge.net),
+and the \fBg2reverb\fR effect, which is under the GPLv2 license (copyright Fons
+Adriaensen <fons@linuxaudio.org>). See the LICENSE files for more details.

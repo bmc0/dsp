@@ -3,6 +3,8 @@
 PREFIX=/usr
 BINDIR=/bin
 LIBDIR=/lib
+DATADIR=/share
+MANDIR=/man
 CC=${CC:-"cc"}
 CXX=${CXX:-"c++"}
 
@@ -23,6 +25,8 @@ Options:
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
   --libdir=path (default: $LIBDIR)
+  --datadir=path (default: $DATADIR)
+  --mandir=path (default: $MANDIR)
   --no-config
   --help"
 
@@ -160,11 +164,13 @@ else
 fi
 
 echo "all: $TARGETS
-install: $INSTALL_TARGETS
+install: $INSTALL_TARGETS install_manual
 
 PREFIX := $PREFIX
 BINDIR := $BINDIR
 LIBDIR := $LIBDIR
+DATADIR := $DATADIR
+MANDIR := $MANDIR
 DSP_OBJ += $DSP_OPTIONAL_OBJECTS
 DSP_CPP_OBJ += $DSP_OPTIONAL_CPP_OBJECTS
 DSP_EXTRA_CFLAGS := $DSP_EXTRA_CFLAGS $([ -n "$DSP_OPTIONAL_PACKAGES" ] && pkg-config --cflags $DSP_OPTIONAL_PACKAGES)
