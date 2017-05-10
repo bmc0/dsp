@@ -1,17 +1,15 @@
-### About:
+### About
 
-Dsp is an audio processing program with an interactive mode. Dsp is capable
-of generating gnuplot commands to plot the amplitude vs frequency response of
-a given effects chain.
+dsp is an audio processing program with an interactive mode.
 
-### Building:
+### Building
 
-#### Dependencies:
+#### Dependencies
 
 * GNU Make
 * pkg-config
 
-#### Optional dependencies:
+#### Optional dependencies
 
 * fftw3: For `resample` and `fir` effects.
 * zita-convolver: For `zita_convolver` effect.
@@ -23,31 +21,31 @@ a given effects chain.
 * libpulse-simple: For PulseAudio input/ouput support.
 * LADSPA: For building the LADSPA frontend.
 
-#### Build:
+#### Build
 
 	$ make
 
 Run `./configure [options]` manually if you want to build with non-default
 options. Run `./configure --help` to see all available options.
 
-#### Install:
+#### Install
 
 	# make install
 
-### Usage:
-
-#### Synopsis:
+### Synopsis
 
 	dsp [options] path ... [!] [:channel_selector]
 		[@[~/]effects_file] [effect [args ...]] ...
 
-#### Global options:
+### Options
+
+#### Global options
 
 Flag        | Description
 ----------- | --------------------------------------------------------------------------
 `-h`        | Show help text.
-`-b frames` | Set buffer size (must be specified before the first input).
-`-R ratio`  | Set codec maximum buffer ratio (must be specified before the first input).
+`-b frames` | Set buffer size (must be given before the first input).
+`-R ratio`  | Set codec maximum buffer ratio (must be given before the first input).
 `-i`        | Force interactive mode.
 `-I`        | Disable interactive mode.
 `-q`        | Disable progress display.
@@ -60,7 +58,7 @@ Flag        | Description
 `-V`        | Enable verbose progress display.
 `-S`        | Use "sequence" input combining mode.
 
-#### Input/output options:
+#### Input/output options
 
 Flag              | Description
 ----------------- | -----------------------------
@@ -72,40 +70,9 @@ Flag              | Description
 `-c channels`     | Number of channels.
 `-n`              | Equivalent to `-t null null`.
 
-#### Exclamation mark
+### Inputs and Outputs
 
-A `!` marks the effect that follows as "non-essential". If an effect is marked
-non-essential and it fails to initialize, it will be skipped.
-
-#### Selector syntax:
-
-	[[start][-[end]][,...]]
-
-Example    | Description
----------- | --------------------------
-`<empty>`  | all
-`-`        | all
-`2-`       | 2 to n
-`-4`       | 0 through 4
-`1,3`      | 1 and 3
-`1-4,7,9-` | 1 through 4, 7, and 9 to n
-
-#### Input combining modes:
-
-In concatenate mode (the default), the inputs are concatenated in the order
-given and sent to the output. All inputs must have the same sample rate and
-number of channels.
-
-In sequence mode, the inputs are sent serially to the output like concatenate
-mode, but the inputs do not need to have the same sample rate or number of
-channels. The effects chain and/or output will be rebuilt/reopened when
-required. Note that if the output is a file, the file will be truncated if it
-is reopened. This mode is most useful when the output is an audio device, but
-can also be used to concatenate inputs with different sample rates and/or
-numbers of channels into a single output file when used with the `resample`
-and/or `remix` effects.
-
-#### Supported input/output types:
+#### Supported input/output types
 
 Type    | Modes | Encodings
 ------- | ----- | -------------------------------------------------------------------------------------
@@ -143,7 +110,24 @@ mp3     | r     | mad_f
 pcm     | rw    | s16 u8 s8 s24 s24_3 s32 float double
 pulse   | rw    | s16 u8 s24 s24_3 s32 float
 
-#### Effects:
+#### Input combining modes
+
+In concatenate mode (the default), the inputs are concatenated in the order
+given and sent to the output. All inputs must have the same sample rate and
+number of channels.
+
+In sequence mode, the inputs are sent serially to the output like concatenate
+mode, but the inputs do not need to have the same sample rate or number of
+channels. The effects chain and/or output will be rebuilt/reopened when
+required. Note that if the output is a file, the file will be truncated if it
+is reopened. This mode is most useful when the output is an audio device, but
+can also be used to concatenate inputs with different sample rates and/or
+numbers of channels into a single output file when used with the `resample`
+and/or `remix` effects.
+
+### Effects
+
+#### Full effects list
 
 * `lowpass_1 f0[k]`  
 	Single-pole lowpass filter.
@@ -218,7 +202,25 @@ pulse   | rw    | s16 u8 s24 s24_3 s32 float
 	for each channel. If `ref_level` is given, peak and RMS levels relative
 	to `ref_level` will be shown as well (dBr).
 
-#### Width suffixes:
+#### Exclamation mark
+
+A `!` marks the effect that follows as "non-essential". If an effect is marked
+non-essential and it fails to initialize, it will be skipped.
+
+#### Selector syntax
+
+	[[start][-[end]][,...]]
+
+Example    | Description
+---------- | --------------------------
+`<empty>`  | all
+`-`        | all
+`2-`       | 2 to n
+`-4`       | 0 through 4
+`1,3`      | 1 and 3
+`1-4,7,9-` | 1 through 4, 7, and 9 to n
+
+#### Width suffixes
 
 Suffix | Description
 ------ | ------------------------------
@@ -228,14 +230,14 @@ Suffix | Description
 `h`    | Bandwidth in Hz.
 `k`    | Bandwidth in kHz.
 
-#### File paths:
+#### File paths
 
 * On the command line, relative paths are relative to `$PWD`.
 * Within an effects file, relative paths are relative to the directory
   containing said effects file.
 * The `~/` prefix will be expanded to the contents of `$HOME`.
 
-#### Effects file syntax:
+#### Effects file syntax
 
 * Arguments are delimited by whitespace.
 * If the first non-whitespace character in a line is `#`, the line is ignored.
@@ -257,7 +259,7 @@ if an effects chain is this:
 within `eq_file.txt` will not affect the `eq 2k 1.0 -2.0` effect that comes
 after it.
 
-#### Examples:
+### Examples
 
 Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
 
@@ -283,9 +285,9 @@ Apply effects from a file:
 
 	dsp file.flac @eq.txt
 
-### LADSPA frontend:
+### LADSPA frontend
 
-#### Configuration:
+#### Configuration
 
 The default search paths for the configuration directory are as follows:
 
@@ -329,7 +331,7 @@ configuration directory.
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.
 
-#### Usage example: Route alsa audio through ladspa_dsp:
+#### Usage example: Route alsa audio through ladspa_dsp
 
 Put this in `~/.asoundrc`:
 
@@ -395,7 +397,7 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 
 **Note:** The resample effect cannot be used with the LADSPA frontend.
 
-### Bugs:
+### Bugs
 
 * No support for metadata.
 * Some effects do not support plotting.
