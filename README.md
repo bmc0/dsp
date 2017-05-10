@@ -404,6 +404,7 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 
 ### License
 This software is released under the ISC license, except for the `reverb`
-effect, which is under LGPLv2.1 license (copyright robs@users.sourceforge.net),
-and the `g2reverb` effect, which is under the GPLv2 license (copyright Fons
-Adriaensen <fons@linuxaudio.org>). See the LICENSE files for more details.
+effect, which is under the LGPLv2.1 license (copyright
+robs@users.sourceforge.net), and the `g2reverb` effect, which is under the
+GPLv2 license (copyright Fons Adriaensen \<fons@linuxaudio.org>). See the
+LICENSE files for more details.
