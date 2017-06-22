@@ -151,6 +151,10 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	for (i = n_channels = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
+	if (n_channels > MINIMUM(Convproc::MAXINP, Convproc::MAXOUT)) {
+		LOG(LL_ERROR, "dsp: %s: error: number of channels must not exceed %d\n", argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
+		return NULL;
+	}
 	p = construct_full_path(dir, argv[argc - 1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
