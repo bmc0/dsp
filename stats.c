@@ -110,7 +110,7 @@ struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *is
 	sample_t ref = -HUGE_VAL;
 
 	if (argc == 2)
-		ref = atoi(argv[1]);
+		ref = atof(argv[1]);
 	else if (argc != 1) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
