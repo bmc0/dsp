@@ -86,11 +86,6 @@ void resample_effect_reset(struct effect *e)
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 }
 
-void resample_copy_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
 void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
@@ -115,11 +110,6 @@ void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 	}
 }
 
-void resample_copy_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void resample_effect_destroy(struct effect *e)
 {
 	int i;
@@ -139,11 +129,6 @@ void resample_effect_destroy(struct effect *e)
 	free(state->r2c_plan);
 	free(state->c2r_plan);
 	free(state);
-}
-
-void resample_copy_effect_destroy(struct effect *e)
-{
-	/* do nothing */
 }
 
 struct effect * resample_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
@@ -177,9 +162,6 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 
 	if (rate == istream->fs) {
 		e->run = resample_copy_effect_run;
-		e->reset = resample_copy_effect_reset;
-		e->drain = resample_copy_effect_drain;
-		e->destroy = resample_copy_effect_destroy;
 		LOG(LL_VERBOSE, "dsp: %s: info: sample rates match; no proccessing will be done\n", argv[0]);
 		return e;
 	}

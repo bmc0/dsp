@@ -287,16 +287,6 @@ void reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample
 	}
 }
 
-void reverb_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
-void reverb_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void reverb_effect_destroy(struct effect *e)
 {
 	int i;
@@ -387,8 +377,6 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = reverb_effect_run;
-	e->reset = reverb_effect_reset;
-	e->drain = reverb_effect_drain;
 	e->destroy = reverb_effect_destroy;
 	e->data = state;
 

@@ -50,11 +50,6 @@ void crossfeed_effect_plot(struct effect *e, int i)
 	printf("H1_%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
 }
 
-void crossfeed_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void crossfeed_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -88,7 +83,6 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	e->run = crossfeed_effect_run;
 	e->reset = crossfeed_effect_reset;
 	e->plot = crossfeed_effect_plot;
-	e->drain = crossfeed_effect_drain;
 	e->destroy = crossfeed_effect_destroy;
 	state = calloc(1, sizeof(struct crossfeed_state));
 

@@ -272,11 +272,6 @@ void biquad_effect_plot(struct effect *e, int i)
 	}
 }
 
-void biquad_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void biquad_effect_destroy(struct effect *e)
 {
 	int i;
@@ -484,7 +479,6 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->run = biquad_effect_run;
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;
-	e->drain = biquad_effect_drain;
 	e->destroy = biquad_effect_destroy;
 	state = calloc(istream->channels, sizeof(struct biquad_state *));
 	for (i = 0; i < istream->channels; ++i) {

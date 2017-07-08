@@ -26,16 +26,6 @@ void noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 	}
 }
 
-void noise_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
-void noise_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void noise_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -60,8 +50,6 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = noise_effect_run;
-	e->reset = noise_effect_reset;
-	e->drain = noise_effect_drain;
 	e->destroy = noise_effect_destroy;
 	state = calloc(1, sizeof(struct noise_state));
 	state->mult = pow(10, atof(argv[1]) / 20) / PM_RAND_MAX;

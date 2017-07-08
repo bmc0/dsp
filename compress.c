@@ -47,11 +47,6 @@ void compress_effect_reset(struct effect *e)
 	state->gain = 1.0;
 }
 
-void compress_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void compress_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -91,7 +86,6 @@ struct effect * compress_effect_init(struct effect_info *ei, struct stream_info 
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = compress_effect_run;
 	e->reset = compress_effect_reset;
-	e->drain = compress_effect_drain;
 	e->destroy = compress_effect_destroy;
 	e->data = state;
 	return e;

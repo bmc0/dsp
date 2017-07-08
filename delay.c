@@ -44,11 +44,6 @@ void delay_effect_plot(struct effect *e, int i)
 		printf("H%d_%d(f)=0\n", k, i);
 }
 
-void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void delay_effect_destroy(struct effect *e)
 {
 	int i;
@@ -88,7 +83,6 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	e->run = delay_effect_run;
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;
-	e->drain = delay_effect_drain;
 	e->destroy = delay_effect_destroy;
 	e->data = state;
 	return e;

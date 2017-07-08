@@ -22,16 +22,6 @@ void remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 	}
 }
 
-void remix_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
-void remix_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
-}
-
 void remix_effect_destroy(struct effect *e)
 {
 	int i;
@@ -69,8 +59,6 @@ struct effect * remix_effect_init(struct effect_info *ei, struct stream_info *is
 	e->ostream.channels = out_channels;
 	e->worst_case_ratio = e->ratio = (double) e->ostream.channels / e->istream.channels;
 	e->run = remix_effect_run;
-	e->reset = remix_effect_reset;
-	e->drain = remix_effect_drain;
 	e->destroy = remix_effect_destroy;
 	e->data = state;
 	return e;

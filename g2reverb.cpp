@@ -262,12 +262,7 @@ void g2reverb_effect_reset(struct effect *e)
 	state->r->reset();
 }
 
-void g2reverb_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	/* I may want to modify this to run silence through the effect until the
-	   reverb decays significantly (perhaps rt60 time), but this works for now. */
-	*frames = -1;
-}
+/* FIXME: Add drain function */
 
 void g2reverb_effect_destroy(struct effect *e)
 {
@@ -354,7 +349,6 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = g2reverb_effect_run;
 	e->reset = g2reverb_effect_reset;
-	e->drain = g2reverb_effect_drain;
 	e->destroy = g2reverb_effect_destroy;
 	e->data = state;
 

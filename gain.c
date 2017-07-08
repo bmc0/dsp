@@ -35,11 +35,6 @@ void gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t
 	}
 }
 
-void gain_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
 void gain_effect_plot(struct effect *e, int i)
 {
 	struct gain_state *state = (struct gain_state *) e->data;
@@ -60,11 +55,6 @@ void gain_effect_plot(struct effect *e, int i)
 				printf("H%d_%d(f)=0\n", k, i);
 		}
 	}
-}
-
-void gain_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
 }
 
 void gain_effect_destroy(struct effect *e)
@@ -99,9 +89,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = gain_effect_run;
-	e->reset = gain_effect_reset;
 	e->plot = gain_effect_plot;
-	e->drain = gain_effect_drain;
 	e->destroy = gain_effect_destroy;
 	state = calloc(1, sizeof(struct gain_state));
 	state->channel = channel;

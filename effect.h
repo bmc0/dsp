@@ -15,6 +15,7 @@ struct effect {
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
 	double ratio, worst_case_ratio;
+	/* All functions may be NULL except run() */
 	void (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*reset)(struct effect *);
 	void (*plot)(struct effect *, int);

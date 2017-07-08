@@ -35,21 +35,11 @@ void stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 	}
 }
 
-void stats_effect_reset(struct effect *e)
-{
-	/* do nothing */
-}
-
 void stats_effect_plot(struct effect *e, int i)
 {
 	int k;
 	for (k = 0; k < e->ostream.channels; ++k)
 		printf("H%d_%d(f)=0\n", k, i);
-}
-
-void stats_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	*frames = -1;
 }
 
 void stats_effect_destroy(struct effect *e)
@@ -122,9 +112,7 @@ struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *is
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = stats_effect_run;
-	e->reset = stats_effect_reset;
 	e->plot = stats_effect_plot;
-	e->drain = stats_effect_drain;
 	e->destroy = stats_effect_destroy;
 	state = calloc(istream->channels, sizeof(struct stats_state));
 	state->ref = ref;

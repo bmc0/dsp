@@ -68,7 +68,7 @@ struct effect_info * get_effect_info(const char *name)
 
 void destroy_effect(struct effect *e)
 {
-	e->destroy(e);
+	if (e->destroy != NULL) e->destroy(e);
 	free(e);
 }
 
@@ -266,7 +266,7 @@ void reset_effects_chain(struct effects_chain *chain)
 {
 	struct effect *e = chain->head;
 	while (e != NULL) {
-		e->reset(e);
+		if (e->reset != NULL) e->reset(e);
 		e = e->next;
 	}
 }
@@ -324,7 +324,8 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == -1) {
 		dframes = *frames * fratio;
-		e->drain(e, &dframes, ibuf);
+		if (e->drain != NULL) e->drain(e, &dframes, ibuf);
+		else dframes = -1;
 		fratio *= e->ratio * e->istream.channels / e->ostream.channels;
 		e = e->next;
 	}
