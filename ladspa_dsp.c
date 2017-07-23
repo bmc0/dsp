@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <math.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
@@ -18,7 +19,7 @@
 
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
-	size_t buf_len;
+	size_t buf_frames;
 	int input_channels, output_channels;
 	struct effects_chain chain;
 	double max_ratio;
@@ -213,12 +214,11 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 	ssize_t w = s;
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 
-	i = s * MAXIMUM(d->input_channels, d->output_channels);
-	if (i > d->buf_len) {
-		d->buf_len = i;
-		d->buf1 = realloc(d->buf1, d->buf_len * d->max_ratio * sizeof(sample_t));
-		d->buf2 = realloc(d->buf2, d->buf_len * d->max_ratio * sizeof(sample_t));
-		LOG(LL_VERBOSE, "ladspa_dsp: info: buf_len=%zd frames=%ld\n", d->buf_len, s);
+	if (s > d->buf_frames) {
+		d->buf_frames = s;
+		d->buf1 = realloc(d->buf1, (size_t) ceil(s * d->input_channels * d->max_ratio) * sizeof(sample_t));
+		d->buf2 = realloc(d->buf2, (size_t) ceil(s * d->input_channels * d->max_ratio) * sizeof(sample_t));
+		LOG(LL_VERBOSE, "ladspa_dsp: info: buf_frames=%zd\n", d->buf_frames);
 	}
 
 	for (i = j = 0; i < s; i++)

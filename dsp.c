@@ -444,6 +444,7 @@ int main(int argc, char *argv[])
 
 		buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
 		buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+		/* LOG(LL_VERBOSE, "dsp: info: buffer samples: %zd\n", (size_t) ceil(dsp_globals.buf_frames * get_effects_chain_max_ratio(&chain)) * in_codecs.head->channels); */
 
 		if (interactive) {
 			setup_term();
