@@ -60,6 +60,12 @@ void zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 	*frames = oframes;
 }
 
+ssize_t zita_convolver_effect_delay(struct effect *e)
+{
+	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
+	return (state->has_output) ? state->len : state->pos;
+}
+
 void zita_convolver_effect_reset(struct effect *e)
 {
 	/* Note: This doesn't reset zita_convolver's internal state */
@@ -195,6 +201,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = zita_convolver_effect_run;
+	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;
 	e->drain = zita_convolver_effect_drain;
 	e->destroy = zita_convolver_effect_destroy;

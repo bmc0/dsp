@@ -262,6 +262,17 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sampl
 	return ibuf;
 }
 
+double get_effects_chain_delay(struct effects_chain *chain)
+{
+	double delay = 0.0;
+	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (e->delay != NULL) delay += (double) e->delay(e) / e->ostream.fs;
+		e = e->next;
+	}
+	return delay;
+}
+
 void reset_effects_chain(struct effects_chain *chain)
 {
 	struct effect *e = chain->head;

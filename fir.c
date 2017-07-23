@@ -67,6 +67,12 @@ void fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t 
 	*frames = oframes;
 }
 
+ssize_t fir_effect_delay(struct effect *e)
+{
+	struct fir_state *state = (struct fir_state *) e->data;
+	return (state->has_output) ? state->len : state->buf_pos;
+}
+
 void fir_effect_reset(struct effect *e)
 {
 	int i;
@@ -171,6 +177,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = fir_effect_run;
+	e->delay = fir_effect_delay;
 	e->reset = fir_effect_reset;
 	e->drain = fir_effect_drain;
 	e->destroy = fir_effect_destroy;

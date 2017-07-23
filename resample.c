@@ -8,8 +8,8 @@
 #include "util.h"
 
 /* Tunables */
-static double bw = 0.95;  /* default bandwidth */
-static const double m_fact = 8;  /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
+static const double default_bw = 0.95;  /* default bandwidth */
+static const double m_fact = 8;         /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
 
 struct resample_state {
 	struct {
@@ -76,6 +76,18 @@ void resample_copy_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	memcpy(obuf, ibuf, *frames * e->ostream.channels * sizeof(sample_t));
 }
 
+ssize_t resample_effect_delay(struct effect *e)
+{
+	ssize_t frames = 0;
+	struct resample_state *state = (struct resample_state *) e->data;
+	if (state->has_output) {
+		frames += state->out_delay;  /* filter delay */
+		frames += state->out_len - state->out_buf_pos;  /* pending output frames */
+	}
+	frames += state->in_buf_pos * state->ratio.n / state->ratio.d;  /* pending input frames */
+	return frames;
+}
+
 void resample_effect_reset(struct effect *e)
 {
 	int i;
@@ -136,6 +148,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	struct effect *e;
 	struct resample_state *state;
 	int rate, max_rate, min_rate, max_factor, gcd, rem, i;
+	double bw = default_bw;
 	sample_t *sinc, width, fc, m;
 	fftw_plan sinc_plan;
 
@@ -157,16 +170,18 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	e->istream.fs = istream->fs;
 	e->ostream.fs = rate;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->ratio = (double) rate / istream->fs;
-	e->worst_case_ratio = ceil((double) rate / istream->fs);
 
 	if (rate == istream->fs) {
+		e->worst_case_ratio = e->ratio = 1.0;
 		e->run = resample_copy_effect_run;
 		LOG(LL_VERBOSE, "dsp: %s: info: sample rates match; no proccessing will be done\n", argv[0]);
 		return e;
 	}
 
+	e->ratio = (double) rate / istream->fs;
+	e->worst_case_ratio = ceil((double) rate / istream->fs);
 	e->run = resample_effect_run;
+	e->delay = resample_effect_delay;
 	e->reset = resample_effect_reset;
 	e->drain = resample_effect_drain;
 	e->destroy = resample_effect_destroy;
