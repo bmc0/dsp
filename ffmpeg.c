@@ -262,18 +262,21 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	case AV_SAMPLE_FMT_U8:
 	case AV_SAMPLE_FMT_U8P:
 		c->prec = 8;
+		c->can_dither = 1;
 		state->read_func = read_buf_u8;
 		state->readp_func = read_buf_u8p;
 		break;
 	case AV_SAMPLE_FMT_S16:
 	case AV_SAMPLE_FMT_S16P:
 		c->prec = 16;
+		c->can_dither = 1;
 		state->read_func = read_buf_s16;
 		state->readp_func = read_buf_s16p;
 		break;
 	case AV_SAMPLE_FMT_S32:
 	case AV_SAMPLE_FMT_S32P:
 		c->prec = 32;
+		c->can_dither = 1;
 		state->read_func = read_buf_s32;
 		state->readp_func = read_buf_s32p;
 		break;

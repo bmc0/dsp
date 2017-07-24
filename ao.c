@@ -135,6 +135,7 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	c->fs = fs;
 	c->channels = channels;
 	c->prec = enc_info->prec;
+	c->can_dither = 1;  /* all formats are fixed-point LPCM */
 	c->interactive = 1;
 	c->frames = -1;
 	c->read = ao_read;

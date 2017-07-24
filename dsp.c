@@ -15,7 +15,7 @@
 #define CHOOSE_INPUT_CHANNELS(x) \
 	(((x) == -1) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : (x))
 #define SHOULD_DITHER(in, out, has_effects) \
-	(force_dither != -1 && (force_dither == 1 || ((out)->prec < 24 && ((has_effects) || (in)->prec > (out)->prec))))
+	(force_dither != -1 && (out)->can_dither && (force_dither == 1 || ((out)->prec < 24 && ((has_effects) || (in)->prec > (out)->prec || !(in)->can_dither))))
 #define TIME_FMT "%.2zd:%.2zd:%05.2lf"
 #define TIME_FMT_ARGS(frames, fs) \
 	((frames) != -1) ? (frames) / (fs) / 3600 : 0, \

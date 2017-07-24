@@ -9,7 +9,7 @@
 struct alsa_enc_info {
 	const char *name;
 	snd_pcm_format_t fmt;
-	int bytes, prec;
+	int bytes, prec, can_dither;
 	void (*write_func)(sample_t *, char *, ssize_t);
 	void (*read_func)(char *, sample_t *, ssize_t);
 };
@@ -111,14 +111,14 @@ void alsa_destroy(struct codec *c)
 }
 
 static struct alsa_enc_info encodings[] = {
-	{ "s16",    SND_PCM_FORMAT_S16,     2, 16, write_buf_s16,    read_buf_s16 },
-	{ "u8",     SND_PCM_FORMAT_U8,      1, 8,  write_buf_u8,     read_buf_u8 },
-	{ "s8",     SND_PCM_FORMAT_S8,      1, 8,  write_buf_s8,     read_buf_s8 },
-	{ "s24",    SND_PCM_FORMAT_S24,     4, 24, write_buf_s24,    read_buf_s24 },
-	{ "s24_3",  SND_PCM_FORMAT_S24_3LE, 3, 24, write_buf_s24_3,  read_buf_s24_3 },
-	{ "s32",    SND_PCM_FORMAT_S32,     4, 32, write_buf_s32,    read_buf_s32 },
-	{ "float",  SND_PCM_FORMAT_FLOAT,   4, 24, write_buf_float,  read_buf_float },
-	{ "double", SND_PCM_FORMAT_FLOAT64, 8, 53, write_buf_double, read_buf_double },
+	{ "s16",    SND_PCM_FORMAT_S16,     2, 16, 1, write_buf_s16,    read_buf_s16 },
+	{ "u8",     SND_PCM_FORMAT_U8,      1, 8,  1, write_buf_u8,     read_buf_u8 },
+	{ "s8",     SND_PCM_FORMAT_S8,      1, 8,  1, write_buf_s8,     read_buf_s8 },
+	{ "s24",    SND_PCM_FORMAT_S24,     4, 24, 1, write_buf_s24,    read_buf_s24 },
+	{ "s24_3",  SND_PCM_FORMAT_S24_3LE, 3, 24, 1, write_buf_s24_3,  read_buf_s24_3 },
+	{ "s32",    SND_PCM_FORMAT_S32,     4, 32, 1, write_buf_s32,    read_buf_s32 },
+	{ "float",  SND_PCM_FORMAT_FLOAT,   4, 24, 0, write_buf_float,  read_buf_float },
+	{ "double", SND_PCM_FORMAT_FLOAT64, 8, 53, 0, write_buf_double, read_buf_double },
 };
 
 static struct alsa_enc_info * alsa_get_enc_info(const char *enc)
@@ -209,6 +209,7 @@ struct codec * alsa_codec_init(const char *path, const char *type, const char *e
 	c->fs = fs;
 	c->channels = channels;
 	c->prec = enc_info->prec;
+	c->can_dither = enc_info->can_dither;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
 	c->frames = -1;
 	c->read = alsa_read;

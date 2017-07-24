@@ -12,7 +12,7 @@ struct sndfile_type_info {
 
 struct sndfile_enc_info {
 	const char *name;
-	int prec, sf_enc;
+	int prec, can_dither, sf_enc;
 };
 
 struct sndfile_state {
@@ -50,28 +50,28 @@ static struct sndfile_type_info types[] = {
 };
 
 static struct sndfile_enc_info encodings[] = {
-	{ "s16",       16, SF_FORMAT_PCM_16 },
-	{ "s8",        8,  SF_FORMAT_PCM_S8 },
-	{ "u8",        8,  SF_FORMAT_PCM_U8 },
-	{ "s24",       24, SF_FORMAT_PCM_24 },
-	{ "s32",       32, SF_FORMAT_PCM_32 },
-	{ "float",     24, SF_FORMAT_FLOAT  },
-	{ "double",    53, SF_FORMAT_DOUBLE },
-	{ "mu-law",    13, SF_FORMAT_ULAW },
-	{ "a-law",     14, SF_FORMAT_ALAW },
-	{ "ima_adpcm", 13, SF_FORMAT_IMA_ADPCM },
-	{ "ms_adpcm",  13, SF_FORMAT_MS_ADPCM },
-	{ "gsm6.10",   16, SF_FORMAT_GSM610 },
-	{ "vox_adpcm", 13, SF_FORMAT_VOX_ADPCM },
-	{ "g721_32",   12, SF_FORMAT_G721_32 },
-	{ "g723_24",   8,  SF_FORMAT_G723_24 },
-	{ "g723_40",   14, SF_FORMAT_G723_40 },
-	{ "dwvw_12",   12, SF_FORMAT_DWVW_12 },
-	{ "dwvw_16",   16, SF_FORMAT_DWVW_16 },
-	{ "dwvw_24",   24, SF_FORMAT_DWVW_24 },
-	{ "dpcm_8",    8,  SF_FORMAT_DPCM_8 },
-	{ "dpcm_16",   16, SF_FORMAT_DPCM_16 },
-	{ "vorbis",    24, SF_FORMAT_VORBIS },
+	{ "s16",       16, 1, SF_FORMAT_PCM_16 },
+	{ "s8",        8,  1, SF_FORMAT_PCM_S8 },
+	{ "u8",        8,  1, SF_FORMAT_PCM_U8 },
+	{ "s24",       24, 1, SF_FORMAT_PCM_24 },
+	{ "s32",       32, 1, SF_FORMAT_PCM_32 },
+	{ "float",     24, 0, SF_FORMAT_FLOAT  },
+	{ "double",    53, 0, SF_FORMAT_DOUBLE },
+	{ "mu-law",    13, 0, SF_FORMAT_ULAW },
+	{ "a-law",     14, 0, SF_FORMAT_ALAW },
+	{ "ima_adpcm", 13, 0, SF_FORMAT_IMA_ADPCM },
+	{ "ms_adpcm",  13, 0, SF_FORMAT_MS_ADPCM },
+	{ "gsm6.10",   16, 0, SF_FORMAT_GSM610 },
+	{ "vox_adpcm", 13, 0, SF_FORMAT_VOX_ADPCM },
+	{ "g721_32",   12, 0, SF_FORMAT_G721_32 },
+	{ "g723_24",   8,  0, SF_FORMAT_G723_24 },
+	{ "g723_40",   14, 0, SF_FORMAT_G723_40 },
+	{ "dwvw_12",   12, 0, SF_FORMAT_DWVW_12 },
+	{ "dwvw_16",   16, 0, SF_FORMAT_DWVW_16 },
+	{ "dwvw_24",   24, 0, SF_FORMAT_DWVW_24 },
+	{ "dpcm_8",    8,  0, SF_FORMAT_DPCM_8 },
+	{ "dpcm_16",   16, 0, SF_FORMAT_DPCM_16 },
+	{ "vorbis",    24, 0, SF_FORMAT_VORBIS },
 };
 
 ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
@@ -148,21 +148,13 @@ static int sndfile_get_sf_enc(const char *enc)
 	return 0;
 }
 
-static const char * sndfile_get_enc_name(int f)
+static struct sndfile_enc_info * sndfile_get_enc_info(int f)
 {
 	int i;
 	for (i = 0; i < LENGTH(encodings); ++i)
 		if (encodings[i].sf_enc == (f & SF_FORMAT_SUBMASK))
-			return encodings[i].name;
-	return 0;
-}
-static int sndfile_get_enc_prec(int f)
-{
-	int i;
-	for (i = 0; i < LENGTH(encodings); ++i)
-		if (encodings[i].sf_enc == (f & SF_FORMAT_SUBMASK))
-			return encodings[i].prec;
-	return 0;
+			return &encodings[i];
+	return NULL;
 }
 
 static int sndfile_get_endian(int endian)
@@ -185,6 +177,7 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	SF_INFO *info = NULL;
 	struct codec *c = NULL;
 	struct sndfile_state *state = NULL;
+	struct sndfile_enc_info *enc_info = NULL;
 
 	info = calloc(1, sizeof(SF_INFO));
 	info->samplerate = fs;
@@ -209,12 +202,14 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	state->info = info;
 
 	c = calloc(1, sizeof(struct codec));
+	enc_info = sndfile_get_enc_info(info->format);
 	c->path = path;
 	c->type = sndfile_get_type_name(info->format);
-	c->enc = sndfile_get_enc_name(info->format);
+	c->enc = (enc_info != NULL) ? enc_info->name : "unknown";
 	c->fs = info->samplerate;
 	c->channels = info->channels;
-	c->prec = sndfile_get_enc_prec(info->format);
+	c->prec = (enc_info != NULL) ? enc_info->prec : 0;
+	c->can_dither = (enc_info != NULL) ? enc_info->can_dither : 0;
 	c->frames = info->frames;
 	c->read = sndfile_read;
 	c->write = sndfile_write;
