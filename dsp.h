@@ -11,7 +11,7 @@ enum {
 	LL_NORMAL,
 	LL_VERBOSE,
 };
-#define LOGLEVEL(l) (dsp_globals.loglevel >= l)
+#define LOGLEVEL(l) (dsp_globals.loglevel >= (l))
 #define LOG(l, ...) do { if (LOGLEVEL(l)) fprintf(stderr, __VA_ARGS__); } while (0)
 
 #define DEFAULT_FS            44100

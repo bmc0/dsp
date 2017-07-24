@@ -4,9 +4,9 @@
 #include <string.h>
 #include "dsp.h"
 
-#define LENGTH(x) (sizeof(x) / sizeof(x[0]))
-#define MAXIMUM(a, b) ((a > b) ? a : b)
-#define MINIMUM(a, b) ((a < b) ? a : b)
+#define LENGTH(x) (sizeof(x) / sizeof((x)[0]))
+#define MAXIMUM(a, b) (((a) > (b)) ? (a) : (b))
+#define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 #define CHECK_RANGE(cond, name, action) \
 	if (!(cond)) { \
 		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \
