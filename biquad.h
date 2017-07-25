@@ -6,6 +6,9 @@
 
 /* See http://musicdsp.org/files/Audio-EQ-Cookbook.txt */
 
+/* Use the transposed direct form 2 implementation instead of the direct form 1 implementation */
+#define BIQUAD_USE_TDF_2 1
+
 enum {
 	BIQUAD_NONE = 0,  /* dummy value for effect init function; do not use */
 	BIQUAD_LOWPASS_1,
@@ -31,7 +34,11 @@ enum {
 
 struct biquad_state {
 	sample_t c0, c1, c2, c3, c4;
+#if BIQUAD_USE_TDF_2
+	sample_t m0, m1;
+#else
 	sample_t i0, i1, o0, o1;
+#endif
 };
 
 void biquad_init(struct biquad_state *, double, double, double, double, double, double);
