@@ -181,30 +181,6 @@ int gen_argv_from_string(const char *str, int *argc, char ***argv)
 	return 0;
 }
 
-long unsigned int pm_rand(void)
-{
-	static long unsigned int s = 1;
-	long unsigned int h, l;
-
-	l = 16807 * (s & 0xffff);
-	h = 16807 * (s >> 16);
-	l += (h & 0x7fff) << 16;
-	l += h >> 15;
-	l = (l & 0x7fffffff) + (l >> 31);
-	return (s = l);
-}
-
-sample_t tpdf_dither_sample(sample_t s, int prec)
-{
-	if (prec < 1 || prec > 32)
-		return s;
-	unsigned long int d = (unsigned long int) 1 << (prec - 1);
-	sample_t m = 1 / ((sample_t) PM_RAND_MAX * d);
-	sample_t n1 = (sample_t) pm_rand() * m;
-	sample_t n2 = (sample_t) pm_rand() * m;
-	return s + n1 - n2;
-}
-
 char * get_file_contents(const char *path)
 {
 	const size_t g = 512;
