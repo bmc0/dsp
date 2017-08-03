@@ -22,6 +22,7 @@ Options:
   --disable-pulse
   --disable-ladspa_dsp
   --disable-gpl-code
+  --debug-build
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
   --libdir=path (default: $LIBDIR)
@@ -51,6 +52,7 @@ for i in "$@"; do
 		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
 		--disable-gpl-code)       CONFIG_DISABLE_GPL_CODE=y ;;
+		--debug-build)            CONFIG_DEBUG_BUILD=y ;;
 		--prefix=*)               PREFIX="${i#--prefix=}" ;;
 		--bindir=*)               BINDIR="${i#--bindir=}" ;;
 		--libdir=*)               LIBDIR="${i#--libdir=}" ;;
@@ -181,3 +183,11 @@ LADSPA_DSP_OBJ += $LADSPA_DSP_OPTIONAL_OBJECTS
 LADSPA_DSP_CPP_OBJ += $LADSPA_DSP_OPTIONAL_CPP_OBJECTS
 LADSPA_DSP_EXTRA_CFLAGS := $LADSPA_DSP_EXTRA_CFLAGS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --cflags $LADSPA_DSP_OPTIONAL_PACKAGES)
 LADSPA_DSP_EXTRA_LIBS := $LADSPA_DSP_EXTRA_LIBS $([ -n "$LADSPA_DSP_OPTIONAL_PACKAGES" ] && pkg-config --libs $LADSPA_DSP_OPTIONAL_PACKAGES)" > config.mk
+
+if [ "$CONFIG_DEBUG_BUILD" = "y" ]; then
+	echo "doing debug build"
+	DEBUG_FLAGS="-g -fsanitize=address,undefined -fsanitize-address-use-after-scope"
+	echo "BASE_CFLAGS += $DEBUG_FLAGS
+BASE_CXXFLAGS += $DEBUG_FLAGS
+BASE_LDFLAGS += $DEBUG_FLAGS" >> config.mk
+fi
