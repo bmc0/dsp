@@ -7,7 +7,7 @@ struct remix_state {
 	char **channel_selectors;
 };
 
-void remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, j;
 	struct remix_state *state = (struct remix_state *) e->data;
@@ -20,6 +20,7 @@ void remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 			}
 		}
 	}
+	return obuf;
 }
 
 void remix_effect_destroy(struct effect *e)

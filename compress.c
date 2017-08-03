@@ -8,7 +8,7 @@ struct compress_state {
 	sample_t thresh, thresh_db, ratio, attack, release, gain;
 };
 
-void compress_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * compress_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
 	sample_t s, gain_target;
@@ -32,13 +32,11 @@ void compress_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 			if (state->gain > gain_target)
 				state->gain = gain_target;
 		}
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (k = 0; k < e->ostream.channels; ++k)
 			if (GET_BIT(e->channel_selector, k))
-				obuf[i + k] = ibuf[i + k] * state->gain;
-			else
-				obuf[i + k] = ibuf[i + k];
-		}
+				ibuf[i + k] *= state->gain;
 	}
+	return ibuf;
 }
 
 void compress_effect_reset(struct effect *e)

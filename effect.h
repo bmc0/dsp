@@ -15,8 +15,8 @@ struct effect {
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
 	double ratio, worst_case_ratio;
-	/* All functions may be NULL except run() */
-	void (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);
+	/* All functions may be NULL */
+	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
 	void (*reset)(struct effect *);
 	void (*plot)(struct effect *, int);

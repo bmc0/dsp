@@ -16,7 +16,7 @@ struct zita_convolver_state {
 	int has_output, is_draining;
 };
 
-void zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	ssize_t i, k, iframes = 0, oframes = 0;
@@ -58,6 +58,7 @@ void zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 		}
 	}
 	*frames = oframes;
+	return obuf;
 }
 
 ssize_t zita_convolver_effect_delay(struct effect *e)

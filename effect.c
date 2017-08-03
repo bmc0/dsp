@@ -159,6 +159,10 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 					goto fail;
 				}
 			}
+			else if (e->run == NULL) {
+				LOG(LL_VERBOSE, "dsp: info: not using effect: %s\n", argv[k]);
+				destroy_effect(e);
+			}
 			else {
 				append_effect(chain, e);
 				if (e->ostream.channels != stream->channels) {
@@ -253,10 +257,11 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sampl
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
 	struct effect *e = chain->head;
 	while (e != NULL && *frames > 0) {
-		e->run(e, frames, ibuf, obuf);
-		tmp = ibuf;
-		ibuf = obuf;
-		obuf = tmp;
+		tmp = e->run(e, frames, ibuf, obuf);
+		if (tmp == obuf) {
+			obuf = ibuf;
+			ibuf = tmp;
+		}
 		e = e->next;
 	}
 	return ibuf;
@@ -342,10 +347,11 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 	}
 	*frames = dframes;
 	while (e != NULL && *frames > 0) {
-		e->run(e, frames, ibuf, obuf);
-		tmp = ibuf;
-		ibuf = obuf;
-		obuf = tmp;
+		tmp = e->run(e, frames, ibuf, obuf);
+		if (tmp == obuf) {
+			obuf = ibuf;
+			ibuf = tmp;
+		}
 		e = e->next;
 	}
 	return ibuf;

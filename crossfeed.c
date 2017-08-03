@@ -16,7 +16,7 @@ struct crossfeed_state {
 	struct biquad_state f1_c1;  /* highpass for channel 1 */
 };
 
-void crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t samples, i;
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
@@ -32,6 +32,7 @@ void crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 			+ (biquad(&state->f1_c1, ibuf[i + 1]) * state->cross_gain);
 		obuf[i + 1] *= state->direct_gain;
 	}
+	return obuf;
 }
 
 void crossfeed_effect_reset(struct effect *e)

@@ -234,18 +234,15 @@ sample_t biquad(struct biquad_state *state, sample_t s)
 	return r;
 }
 
-void biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t samples = *frames * e->ostream.channels, i, k;
 	struct biquad_state **state = (struct biquad_state **) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels) {
-		for (k = 0; k < e->ostream.channels; ++k) {
+	for (i = 0; i < samples; i += e->ostream.channels)
+		for (k = 0; k < e->ostream.channels; ++k)
 			if (state[k])
-				obuf[i + k] = biquad(state[k], ibuf[i + k]);
-			else
-				obuf[i + k] = ibuf[i + k];
-		}
-	}
+				ibuf[i + k] = biquad(state[k], ibuf[i + k]);
+	return ibuf;
 }
 
 void biquad_effect_reset(struct effect *e)

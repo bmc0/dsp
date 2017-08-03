@@ -16,7 +16,7 @@ struct fir_state {
 	int has_output, is_draining;
 };
 
-void fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	ssize_t i, k, iframes = 0, oframes = 0;
@@ -65,6 +65,7 @@ void fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t 
 		}
 	}
 	*frames = oframes;
+	return obuf;
 }
 
 ssize_t fir_effect_delay(struct effect *e)

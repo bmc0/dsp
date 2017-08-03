@@ -244,16 +244,13 @@ struct g2reverb_state {
 	Greverb *r;
 };
 
-void g2reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * g2reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, k, samples = *frames * e->ostream.channels;
+	ssize_t i, samples = *frames * e->ostream.channels;
 	struct g2reverb_state *state = (struct g2reverb_state *) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels) {
-		for (k = 0; k < e->ostream.channels; ++k)
-			if (k != state->c1 && k != state->c2)
-				obuf[i + k] = ibuf[i + k];
-		state->r->process(1, &ibuf[i + state->c1], &ibuf[i + state->c2], &obuf[i + state->c1], &obuf[i + state->c2]);
-	}
+	for (i = 0; i < samples; i += e->ostream.channels)
+		state->r->process(1, &ibuf[i + state->c1], &ibuf[i + state->c2], &ibuf[i + state->c1], &ibuf[i + state->c2]);
+	return ibuf;
 }
 
 void g2reverb_effect_reset(struct effect *e)

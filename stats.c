@@ -9,7 +9,7 @@ struct stats_state {
 	sample_t sum, sum_sq, min, max, ref;
 };
 
-void stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
@@ -30,9 +30,9 @@ void stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 				++state[k].peak_count;
 			if (fabs(ibuf[i + k]) >= MAXIMUM(fabs(state[k].max), fabs(state[k].min)))
 				state[k].peak_frame = state[k].samples;
-			obuf[i + k] = ibuf[i + k];
 		}
 	}
+	return ibuf;
 }
 
 void stats_effect_plot(struct effect *e, int i)

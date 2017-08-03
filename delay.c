@@ -10,7 +10,7 @@ struct delay_state {
 	ssize_t len, p;
 };
 
-void delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	int i, k;
 	struct delay_state *state = (struct delay_state *) e->data;
@@ -25,6 +25,7 @@ void delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_
 		}
 		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
 	}
+	return obuf;
 }
 
 void delay_effect_reset(struct effect *e)

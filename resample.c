@@ -23,7 +23,7 @@ struct resample_state {
 	int has_output, is_draining;
 };
 
-void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	ssize_t i, k, iframes = 0, oframes = 0, max_oframes = (double) *frames * e->worst_case_ratio;
@@ -69,11 +69,7 @@ void resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, samp
 		}
 	}
 	*frames = oframes;
-}
-
-void resample_copy_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
-{
-	memcpy(obuf, ibuf, *frames * e->ostream.channels * sizeof(sample_t));
+	return obuf;
 }
 
 ssize_t resample_effect_delay(struct effect *e)
@@ -166,18 +162,14 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
+	if (rate == istream->fs) {
+		LOG(LL_VERBOSE, "dsp: %s: info: sample rates match; no proccessing will be done\n", argv[0]);
+		return e;  /* Note: the effect will not be used because run() is unset */
+	}
 	e->name = ei->name;
 	e->istream.fs = istream->fs;
 	e->ostream.fs = rate;
 	e->istream.channels = e->ostream.channels = istream->channels;
-
-	if (rate == istream->fs) {
-		e->worst_case_ratio = e->ratio = 1.0;
-		e->run = resample_copy_effect_run;
-		LOG(LL_VERBOSE, "dsp: %s: info: sample rates match; no proccessing will be done\n", argv[0]);
-		return e;
-	}
-
 	e->ratio = (double) rate / istream->fs;
 	e->worst_case_ratio = ceil((double) rate / istream->fs);
 	e->run = resample_effect_run;

@@ -250,7 +250,7 @@ struct reverb_state {
 	struct reverb_channel *chan;
 };
 
-void reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, c, f = 0, len;
 	struct reverb_state *state = (struct reverb_state *) e->data;
@@ -285,6 +285,7 @@ void reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample
 		}
 		f += len;
 	}
+	return obuf;
 }
 
 void reverb_effect_destroy(struct effect *e)
