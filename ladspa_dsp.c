@@ -67,7 +67,7 @@ static int read_config(const char *path, const char *name, struct ladspa_dsp_con
 	c = get_file_contents(path);
 	if (!c)
 		return 1;
-		
+
 	key = c;
 	for (i = 1; *key != '\0'; ++i) {
 		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')

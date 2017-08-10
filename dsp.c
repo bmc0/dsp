@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (dsp_globals.loglevel == 0)	
+	if (dsp_globals.loglevel == 0)
 		show_progress = 0;  /* disable progress display if in silent mode */
 	if (in_codecs.head == NULL) {
 		LOG(LL_ERROR, "dsp: error: no inputs\n");
