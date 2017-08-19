@@ -44,7 +44,24 @@ struct biquad_state {
 void biquad_init(struct biquad_state *, double, double, double, double, double, double);
 void biquad_reset(struct biquad_state *);
 void biquad_init_using_type(struct biquad_state *, int, double, double, double, double, double, int);
-sample_t biquad(struct biquad_state *, sample_t);
 struct effect * biquad_effect_init(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
+
+static inline sample_t biquad(struct biquad_state *state, sample_t s)
+{
+#if BIQUAD_USE_TDF_2
+	sample_t r = (state->c0 * s) + state->m0;
+	state->m0 = state->m1 + (state->c1 * s) - (state->c3 * r);
+	state->m1 = (state->c2 * s) - (state->c4 * r);
+#else
+	sample_t r = (state->c0 * s) + (state->c1 * state->i0) + (state->c2 * state->i1) - (state->c3 * state->o0) - (state->c4 * state->o1);
+
+	state->i1 = state->i0;
+	state->i0 = s;
+
+	state->o1 = state->o0;
+	state->o0 = r;
+#endif
+	return r;
+}
 
 #endif

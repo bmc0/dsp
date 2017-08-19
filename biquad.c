@@ -216,24 +216,6 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 	biquad_init(b, b0, b1, b2, a0, a1, a2);
 }
 
-sample_t biquad(struct biquad_state *state, sample_t s)
-{
-#if BIQUAD_USE_TDF_2
-	sample_t r = (state->c0 * s) + state->m0;
-	state->m0 = state->m1 + (state->c1 * s) - (state->c3 * r);
-	state->m1 = (state->c2 * s) - (state->c4 * r);
-#else
-	sample_t r = (state->c0 * s) + (state->c1 * state->i0) + (state->c2 * state->i1) - (state->c3 * state->o0) - (state->c4 * state->o1);
-
-	state->i1 = state->i0;
-	state->i0 = s;
-
-	state->o1 = state->o0;
-	state->o0 = r;
-#endif
-	return r;
-}
-
 sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t samples = *frames * e->ostream.channels, i, k;
