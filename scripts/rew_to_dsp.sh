@@ -26,10 +26,14 @@ AWK_SCRIPT='
 			print "highpass", $6, $9
 		else if ($4=="NO")
 			print "notch", $6, "30.0"
-		else if ($4=="LS" && $5 == "Fc")
+		else if ($4=="LS" && $5=="Fc")
 			print "lowshelf", $6, "0.9s", $9
-		else if ($4=="HS" && $5 == "Fc")
+		else if ($4=="HS" && $5=="Fc")
 			print "highshelf", $6, "0.9s", $9
+		else if ($4=="LS" && $5~/[0-9]+dB/)
+			print "lowshelf", $7, substr($5, 1, length($5)-2)"d", $10
+		else if ($4=="HS" && $5~/[0-9]+dB/)
+			print "highshelf", $7, substr($5, 1, length($5)-2)"d", $10
 		else if ($4=="AP")
 			print "allpass", $6, $9
 	}
