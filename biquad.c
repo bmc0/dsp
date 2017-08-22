@@ -5,12 +5,6 @@
 #include "biquad.h"
 #include "util.h"
 
-#define CHECK_WIDTH_TYPE(cond, action) \
-	if (!(cond)) { \
-		LOG(LL_ERROR, "dsp: %s: error: invalid width type\n", argv[0]); \
-		action; \
-	}
-
 static void parse_width(const char *s, double *w, int *type)
 {
 	size_t len = strlen(s);
@@ -24,6 +18,9 @@ static void parse_width(const char *s, double *w, int *type)
 		break;
 	case 's':
 		*type = BIQUAD_WIDTH_SLOPE;
+		break;
+	case 'd':
+		*type = BIQUAD_WIDTH_SLOPE_DB;
 		break;
 	case 'o':
 		*type = BIQUAD_WIDTH_BW_OCT;
@@ -92,6 +89,15 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 		f0 = arg0;
 		width = arg1;
 		gain = arg2;
+
+		if (width_type == BIQUAD_WIDTH_SLOPE_DB) {
+			width_type = BIQUAD_WIDTH_SLOPE;
+			width /= 12.0;
+			if (type == BIQUAD_LOWSHELF)
+				f0 *= pow(10.0, fabs(gain) / 80.0 / width);
+			else if (type == BIQUAD_HIGHSHELF)
+				f0 /= pow(10.0, fabs(gain) / 80.0 / width);
+		}
 
 		a = pow(10.0, gain / 40.0);
 		w0 = 2 * M_PI * f0 / fs;
@@ -269,6 +275,12 @@ void biquad_effect_destroy(struct effect *e)
 	free(state);
 }
 
+#define CHECK_WIDTH_TYPE(cond, action) \
+	if (!(cond)) { \
+		LOG(LL_ERROR, "dsp: %s: error: invalid width type\n", argv[0]); \
+		action; \
+	}
+
 #define CHECK_ARGC(n) \
 	if (argc != (n)) { \
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage); \
@@ -302,7 +314,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "highpass") == 0) {
 		CHECK_ARGC(3);
@@ -311,7 +323,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
 		CHECK_ARGC(3);
@@ -320,7 +332,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "bandpass_peak") == 0) {
 		CHECK_ARGC(3);
@@ -329,7 +341,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "notch") == 0) {
 		CHECK_ARGC(3);
@@ -338,7 +350,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "allpass") == 0) {
 		CHECK_ARGC(3);
@@ -347,7 +359,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		parse_width(argv[2], &arg1, &width_type);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "eq") == 0) {
 		CHECK_ARGC(4);
@@ -357,7 +369,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		arg2 = atof(argv[3]);
 		CHECK_RANGE(arg0 >= 0.0 && arg0 < (double) istream->fs / 2.0, "f0", return NULL);
 		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE, return NULL);
+		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
 	}
 	else if (strcmp(argv[0], "lowshelf") == 0) {
 		CHECK_ARGC(4);

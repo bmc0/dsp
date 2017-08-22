@@ -147,9 +147,9 @@ and/or `remix` effects.
 	Double-pole allpass filter.
 * `eq f0[k] width[q|o|h|k] gain`  
 	Double-pole peaking filter.
-* `lowshelf f0[k] width[q|s|o|h|k] gain`  
+* `lowshelf f0[k] width[q|s|d|o|h|k] gain`  
 	Double-pole lowshelf filter.
-* `highshelf f0[k] width[q|s|o|h|k] gain`  
+* `highshelf f0[k] width[q|s|d|o|h|k] gain`  
 	Double-pole highshelf filter.
 * `linkwitz_transform fz[k] qz fp[k] qp`  
 	Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
@@ -226,6 +226,7 @@ Suffix | Description
 ------ | ------------------------------
 `q`    | Q-factor (default).
 `s`    | Slope (shelving filters only).
+`d`    | Slope in dB/octave (shelving filters only). Also changes the definition of `f0` from center frequency to corner frequency (like Room EQ Wizard and the Behringer DCX2496).
 `o`    | Bandwidth in octaves.
 `h`    | Bandwidth in Hz.
 `k`    | Bandwidth in kHz.
