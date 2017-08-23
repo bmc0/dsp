@@ -125,10 +125,10 @@ Double-pole allpass filter.
 \fBeq\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
 Double-pole peaking filter.
 .TP
-\fBlowshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+\fBlowshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
 Double-pole lowshelf filter.
 .TP
-\fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+\fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
 Double-pole highshelf filter.
 .TP
 \fBlinkwitz_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
@@ -229,10 +229,15 @@ Suffix|Description
 _
 q|Q-factor (default).
 s|Slope (shelving filters only).
+d|Slope in dB/octave (shelving filters only).
 o|Bandwidth in octaves.
 h|Bandwidth in Hz.
 k|Bandwidth in kHz.
 .TE
+.PP
+Note: The `\fBd\fR' width suffix also changes the definition of \fIf0\fR from
+center frequency to corner frequency (like Room EQ Wizard and the Behringer
+DCX2496).
 .SS File paths
 .IP *
 On the command line, relative paths are relative to `$PWD'.
