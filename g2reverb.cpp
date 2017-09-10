@@ -270,6 +270,7 @@ void g2reverb_effect_destroy(struct effect *e)
 
 struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	char *endptr;
 	struct effect *e;
 	struct g2reverb_state *state;
 	sample_t roomsize = 50.0, revbtime = 3.0, ipbandw = 0.75, damping = 0.2, dryslev = 1.0, refllev = 0.125892541179, taillev = 0.0501187233627;
@@ -289,27 +290,37 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 		++i;
 	}
 	if (argc > ++i) {
-		roomsize = atof(argv[i]);
+		roomsize = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "room_size", return NULL);
 		CHECK_RANGE(roomsize > 0.0, "room_size", return NULL);
 	}
 	if (argc > ++i) {
-		revbtime = atof(argv[i]);
+		revbtime = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "reverb_time", return NULL);
 		CHECK_RANGE(revbtime >= MIN_REVBTIME && revbtime <= MAX_REVBTIME, "reverb_time", return NULL);
 	}
 	if (argc > ++i) {
-		ipbandw = atof(argv[i]);
+		ipbandw = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "input_bandwidth", return NULL);
 		CHECK_RANGE(ipbandw >= 0.1 && ipbandw <= 1.0, "input_bandwidth", return NULL);
 	}
 	if (argc > ++i) {
-		damping = atof(argv[i]);
+		damping = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "damping", return NULL);
 		CHECK_RANGE(damping >= 0.0 && damping <= 0.9, "damping", return NULL);
 	}
-	if (argc > ++i)
-		dryslev = pow(10.0, atof(argv[i]) / 20.0);
-	if (argc > ++i)
-		refllev = pow(10.0, atof(argv[i]) / 20.0);
-	if (argc > ++i)
-		taillev = pow(10.0, atof(argv[i]) / 20.0);
+	if (argc > ++i) {
+		dryslev = pow(10.0, strtod(argv[i], &endptr) / 20.0);
+		CHECK_ENDPTR(argv[i], endptr, "dry_level", return NULL);
+	}
+	if (argc > ++i) {
+		refllev = pow(10.0, strtod(argv[i], &endptr) / 20.0);
+		CHECK_ENDPTR(argv[i], endptr, "reflection_level", return NULL);
+	}
+	if (argc > ++i) {
+		taillev = pow(10.0, strtod(argv[i], &endptr) / 20.0);
+		CHECK_ENDPTR(argv[i], endptr, "tail_level", return NULL);
+	}
 	if (argc > 9 || (!wet_only && argc > 8)) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;

@@ -62,11 +62,10 @@ static DIR * try_dir(const char *path)
 static int read_config(const char *path, const char *name, struct ladspa_dsp_config *config)
 {
 	int i, k;
-	char *c, *key, *value, *next;
+	char *c, *key, *value, *next, *endptr;
 
 	c = get_file_contents(path);
-	if (!c)
-		return 1;
+	if (!c) return 2;
 
 	key = c;
 	for (i = 1; *key != '\0'; ++i) {
@@ -75,10 +74,22 @@ static int read_config(const char *path, const char *name, struct ladspa_dsp_con
 		next = isolate(key, '\n');
 		if (*key != '\0' && *key != '#') {
 			value = isolate(key, '=');
-			if (strcmp(key, "input_channels") == 0)
-				config->input_channels = atoi(value);
-			else if (strcmp(key, "output_channels") == 0)
-				config->output_channels = atoi(value);
+			if (strcmp(key, "input_channels") == 0) {
+				config->input_channels = strtol(value, &endptr, 10);
+				if (check_endptr(path, value, endptr, "input_channels")) goto parse_fail;
+				if (config->input_channels <= 0) {
+					LOG(LL_ERROR, "ladspa_dsp: error: input_channels must be > 0\n");
+					goto parse_fail;
+				}
+			}
+			else if (strcmp(key, "output_channels") == 0) {
+				config->output_channels = strtol(value, &endptr, 10);
+				if (check_endptr(path, value, endptr, "output_channels")) goto parse_fail;
+				if (config->output_channels <= 0) {
+					LOG(LL_ERROR, "ladspa_dsp: error: output_channels must be > 0\n");
+					goto parse_fail;
+				}
+			}
 			else if (strcmp(key, "LC_NUMERIC") == 0) {
 				free(config->lc_n);
 				config->lc_n = strdup(value);
@@ -98,11 +109,15 @@ static int read_config(const char *path, const char *name, struct ladspa_dsp_con
 	free(config->name);
 	config->name = (name) ? strdup(name) : NULL;
 	return 0;
+
+	parse_fail:
+	free(c);
+	return 1;
 }
 
 static void load_configs(void)
 {
-	int i;
+	int i, err;
 	DIR *d = NULL;
 	char *c_path, *env;
 	struct dirent *d_ent;
@@ -145,8 +160,10 @@ static void load_configs(void)
 				configs = realloc(configs, (n_configs + 1) * sizeof(struct ladspa_dsp_config));
 				memset(&configs[n_configs], 0, sizeof(struct ladspa_dsp_config));
 				configs[n_configs].input_channels = configs[n_configs].output_channels = 1;
-				if (read_config(c_path, (strcmp(d_ent->d_name, "config") == 0) ? NULL : &d_ent->d_name[7], &configs[n_configs]))
-					LOG(LL_ERROR, "ladspa_dsp: warning: failed to read config file: %s: %s\n", c_path, strerror(errno));
+				if ((err = read_config(c_path, (strcmp(d_ent->d_name, "config") == 0) ? NULL : &d_ent->d_name[7], &configs[n_configs]))) {
+					if (err == 2) LOG(LL_ERROR, "ladspa_dsp: warning: failed to read config file: %s: %s\n", c_path, strerror(errno));
+					else LOG(LL_ERROR, "ladspa_dsp: warning: failed to read config file: %s\n", c_path);
+				}
 				else {
 					LOG(LL_VERBOSE, "ladspa_dsp: info: read config file: %s\n", c_path);
 					++n_configs;

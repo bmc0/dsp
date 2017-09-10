@@ -12,6 +12,10 @@
 		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \
 		action; \
 	}
+#define CHECK_FREQ(var, fs, name, action) \
+	CHECK_RANGE((var) >= 0.0 && (var) < (double) (fs) / 2.0, name, action)
+#define CHECK_ENDPTR(str, endptr, param_name, action) \
+	if (check_endptr(argv[0], str, endptr, param_name)) { action; }
 #if 0
 #define GET_BIT(x, o) (((char *) x)[(int) (o) / 8] & (1 << ((int) (o) % 8)))
 #define SET_BIT(x, o) ((char *) x)[(int) (o) / 8] |= (1 << ((int) (o) % 8))
@@ -29,7 +33,8 @@
 #endif
 #define PM_RAND_MAX 2147483647
 
-double parse_freq(const char *);
+int check_endptr(const char *, const char *, const char *, const char *);
+double parse_freq(const char *, char **);
 int parse_selector(const char *, char *, int);
 void print_selector(const char *, int);
 int gen_argv_from_string(const char *, int *, char ***);

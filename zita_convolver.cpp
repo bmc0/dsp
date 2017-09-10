@@ -134,16 +134,20 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	Convproc *cproc;
 	sample_t *buf_interleaved;
 	float **buf_planar;
-	char *p;
+	char *endptr, *p;
 
 	if (argc > 4 || argc < 2) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
-	if (argc > 2)
-		min_part_len = atoi(argv[1]);
-	if (argc > 3)
-		max_part_len = atoi(argv[2]);
+	if (argc > 2) {
+		min_part_len = strtol(argv[1], &endptr, 10);
+		CHECK_ENDPTR(argv[1], endptr, "min_part_len", return NULL);
+	}
+	if (argc > 3) {
+		max_part_len = strtol(argv[2], &endptr, 10);
+		CHECK_ENDPTR(argv[2], endptr, "max_part_len", return NULL);
+	}
 	min_part_len = (min_part_len == 0) ? Convproc::MINPART : min_part_len;
 	max_part_len = (max_part_len == 0) ? Convproc::MAXPART : max_part_len;
 	if (min_part_len < Convproc::MINPART || min_part_len > Convproc::MAXPART || max_part_len < Convproc::MINPART || max_part_len > Convproc::MAXPART) {

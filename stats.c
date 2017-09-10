@@ -95,12 +95,15 @@ void stats_effect_destroy(struct effect *e)
 
 struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	char *endptr;
 	struct effect *e;
 	struct stats_state *state;
 	sample_t ref = -HUGE_VAL;
 
-	if (argc == 2)
-		ref = atof(argv[1]);
+	if (argc == 2) {
+		ref = strtod(argv[1], &endptr);
+		CHECK_ENDPTR(argv[1], endptr, "ref_level", return NULL);
+	}
 	else if (argc != 1) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;

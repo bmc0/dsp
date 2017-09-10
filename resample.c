@@ -143,6 +143,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 {
 	struct effect *e;
 	struct resample_state *state;
+	char *endptr;
 	int rate, max_rate, min_rate, max_factor, gcd, rem, i;
 	double bw = default_bw;
 	sample_t *sinc, width, fc, m;
@@ -153,11 +154,15 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 		return NULL;
 	}
 	if (argc == 3) {
-		bw = atof(argv[1]);
-		rate = lround(parse_freq(argv[2]));
+		bw = strtod(argv[1], &endptr);
+		CHECK_ENDPTR(argv[1], endptr, "bandwidth", return NULL);
+		rate = lround(parse_freq(argv[2], &endptr));
+		CHECK_ENDPTR(argv[2], endptr, "fs", return NULL);
 	}
-	else
-		rate = lround(parse_freq(argv[1]));
+	else {
+		rate = lround(parse_freq(argv[1], &endptr));
+		CHECK_ENDPTR(argv[1], endptr, "fs", return NULL);
+	}
 	CHECK_RANGE(bw > 0 && bw < 1, "bandwidth", return NULL);
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 

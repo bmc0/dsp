@@ -53,6 +53,7 @@ void compress_effect_destroy(struct effect *e)
 
 struct effect * compress_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	char *endptr;
 	struct effect *e;
 	struct compress_state *state;
 
@@ -62,15 +63,19 @@ struct effect * compress_effect_init(struct effect_info *ei, struct stream_info 
 	}
 
 	state = calloc(1, sizeof(struct compress_state));
-	state->thresh_db = atof(argv[1]);
+	state->thresh_db = strtod(argv[1], &endptr);
+	CHECK_ENDPTR(argv[1], endptr, "thresh", goto fail);
 	state->thresh = pow(10, state->thresh_db / 20);
-	state->ratio = atof(argv[2]);
+	state->ratio = strtod(argv[2], &endptr);
+	CHECK_ENDPTR(argv[2], endptr, "ratio", goto fail);
 	CHECK_RANGE(state->ratio > 0, "ratio", goto fail);
 	state->ratio = 1 - 1 / state->ratio;
-	state->attack = atof(argv[3]);
+	state->attack = strtod(argv[3], &endptr);
+	CHECK_ENDPTR(argv[3], endptr, "attack", goto fail);
 	CHECK_RANGE(state->attack >= 0, "attack", goto fail);
 	state->attack = (state->attack == 0) ? 0 : pow(10, -10 / state->attack / istream->fs / 20);
-	state->release = atof(argv[4]);
+	state->release = strtod(argv[4], &endptr);
+	CHECK_ENDPTR(argv[4], endptr, "release", goto fail);
 	CHECK_RANGE(state->release >= 0, "release", goto fail);
 	state->release = (state->release == 0) ? HUGE_VAL : pow(10, 10 / state->release / istream->fs / 20);
 	state->gain = 1.0;

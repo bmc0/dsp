@@ -6,15 +6,27 @@
 #include <fcntl.h>
 #include "util.h"
 
-double parse_freq(const char *s)
+int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
 {
-	size_t len = strlen(s);
-	if (len < 1)
-		return 0;
-	if (s[len - 1] == 'k')
-		return atof(s) * 1000;
-	else
-		return atof(s);
+	if ((endptr) == (str) || *(endptr) != '\0') {
+		if (name == NULL) LOG(LL_ERROR, "dsp: failed to parse %s: %s\n", param_name, str);
+		else LOG(LL_ERROR, "dsp: %s: failed to parse %s: %s\n", name, param_name, str);
+		return 1;
+	}
+	return 0;
+}
+
+double parse_freq(const char *s, char **endptr)
+{
+	double f = strtod(s, endptr);
+	if (*endptr != NULL && *endptr != s) {
+		if (**endptr == 'k') {
+			f *= 1000.0;
+			++(*endptr);
+		}
+		if (**endptr != '\0') LOG(LL_ERROR, "dsp: parse_freq(): trailing characters: %s\n", *endptr);
+	}
+	return f;
 }
 
 static void set_range(char *b, int n, int start, int end, int dash)

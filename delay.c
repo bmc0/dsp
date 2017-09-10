@@ -57,6 +57,7 @@ void delay_effect_destroy(struct effect *e)
 
 struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	char *endptr;
 	struct effect *e;
 	struct delay_state *state;
 	int i;
@@ -67,7 +68,8 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 		return NULL;
 	}
 
-	d = atof(argv[1]);
+	d = strtod(argv[1], &endptr);
+	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
 	CHECK_RANGE(d >= 0, "delay", return NULL);
 	state = calloc(1, sizeof(struct delay_state));
 	state->len = lround(d * istream->fs);

@@ -156,6 +156,7 @@ static void print_usage(void)
 static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 {
 	int opt;
+	char *endptr;
 	/* reset codec_params */
 	p->path = p->type = p->enc = NULL;  /* path will always be set if return value is zero */
 	p->fs = p->channels = -1;
@@ -169,7 +170,8 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			cleanup_and_exit(0);
 		case 'b':
 			if (in_codecs.head == NULL) {
-				dsp_globals.buf_frames = atoi(optarg);
+				dsp_globals.buf_frames = strtol(optarg, &endptr, 10);
+				if (check_endptr(NULL, optarg, endptr, "buffer size")) return 1;
 				if (dsp_globals.buf_frames <= 0) {
 					LOG(LL_ERROR, "dsp: error: buffer size must be > 0\n");
 					return 1;
@@ -180,7 +182,8 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			break;
 		case 'R':
 			if (in_codecs.head == NULL) {
-				dsp_globals.max_buf_ratio = atoi(optarg);
+				dsp_globals.max_buf_ratio = strtol(optarg, &endptr, 10);
+				if (check_endptr(NULL, optarg, endptr, "buffer ratio")) return 1;
 				if (dsp_globals.max_buf_ratio <= 0) {
 					LOG(LL_ERROR, "dsp: error: buffer ratio must be > 0\n");
 					return 1;
@@ -241,14 +244,16 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			p->endian = CODEC_ENDIAN_NATIVE;
 			break;
 		case 'r':
-			p->fs = parse_freq(optarg);
+			p->fs = parse_freq(optarg, &endptr);
+			if (check_endptr(NULL, optarg, endptr, "sample rate")) return 1;
 			if (p->fs <= 0) {
 				LOG(LL_ERROR, "dsp: error: sample rate must be > 0\n");
 				return 1;
 			}
 			break;
 		case 'c':
-			p->channels = atoi(optarg);
+			p->channels = strtol(optarg, &endptr, 10);
+			if (check_endptr(NULL, optarg, endptr, "number of channels")) return 1;
 			if (p->channels <= 0) {
 				LOG(LL_ERROR, "dsp: error: number of channels must be > 0\n");
 				return 1;

@@ -301,6 +301,7 @@ void reverb_effect_destroy(struct effect *e)
 
 struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	char *endptr;
 	struct effect *e;
 	struct reverb_state *state;
 	double reverberance = 50.0, hf_damping = 50.0, pre_delay_ms = 0.0;
@@ -313,27 +314,33 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 		++i;
 	}
 	if (argc > ++i) {
-		reverberance = atof(argv[i]);
+		reverberance = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "reverberance", return NULL);
 		CHECK_RANGE(reverberance >= 0.0 && reverberance <= 100.0, "reverberance", return NULL);
 	}
 	if (argc > ++i) {
-		hf_damping = atof(argv[i]);
+		hf_damping = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "hf_damping", return NULL);
 		CHECK_RANGE(hf_damping >= 0.0 && hf_damping <= 100.0, "hf_damping", return NULL);
 	}
 	if (argc > ++i) {
-		room_scale = atof(argv[i]);
+		room_scale = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "room_scale", return NULL);
 		CHECK_RANGE(room_scale > 0.0 && room_scale <= 100.0, "room_scale", return NULL);
 	}
 	if (argc > ++i) {
-		stereo_depth = atof(argv[i]);
+		stereo_depth = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "stereo_depth", return NULL);
 		CHECK_RANGE(stereo_depth > 0.0 && stereo_depth <= 100.0, "stereo_depth", return NULL;);
 	}
 	if (argc > ++i) {
-		pre_delay_ms = atof(argv[i]) * 1000.0;
+		pre_delay_ms = strtod(argv[i], &endptr) * 1000.0;
+		CHECK_ENDPTR(argv[i], endptr, "pre_delay", return NULL);
 		CHECK_RANGE(pre_delay_ms >= 0.0 && pre_delay_ms <= 500.0, "pre_delay", return NULL);
 	}
 	if (argc > ++i) {
-		wet_gain_dB = atof(argv[i]);
+		wet_gain_dB = strtod(argv[i], &endptr);
+		CHECK_ENDPTR(argv[i], endptr, "wet_gain", return NULL);
 		CHECK_RANGE(wet_gain_dB >= -20.0 && wet_gain_dB <= 10.0, "wet_gain", return NULL);
 	}
 	if (argc > 8 || (!wet_only && argc > 7)) {

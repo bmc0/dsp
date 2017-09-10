@@ -33,6 +33,8 @@ void noise_effect_destroy(struct effect *e)
 
 struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
+	double mult;
+	char *endptr;
 	struct effect *e;
 	struct noise_state *state;
 
@@ -40,6 +42,9 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 		LOG(LL_ERROR, "dsp: %s: usage %s\n", argv[0], ei->usage);
 		return NULL;
 	}
+
+	mult = pow(10.0, strtod(argv[1], &endptr) / 20.0) / PM_RAND_MAX;
+	CHECK_ENDPTR(argv[1], endptr, "level", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -51,7 +56,7 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 	e->run = noise_effect_run;
 	e->destroy = noise_effect_destroy;
 	state = calloc(1, sizeof(struct noise_state));
-	state->mult = pow(10, atof(argv[1]) / 20) / PM_RAND_MAX;
+	state->mult = mult;
 	e->data = state;
 	return e;
 }

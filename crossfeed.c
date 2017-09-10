@@ -60,20 +60,22 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 {
 	struct effect *e;
 	struct crossfeed_state *state;
+	char *endptr;
 	double freq, sep_db, sep;
 
 	if (argc != 3) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
-	freq = parse_freq(argv[1]);
-	sep_db = atof(argv[2]);
-
 	if (istream->channels != 2) {
 		LOG(LL_ERROR, "dsp: %s: error: channels != 2\n", argv[0]);
 		return NULL;
 	}
-	CHECK_RANGE(freq >= 0.0 && freq < (double) istream->fs / 2.0, "f0", return NULL);
+	freq = parse_freq(argv[1], &endptr);
+	CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
+	CHECK_FREQ(freq, istream->fs, "f0", return NULL);
+	sep_db = strtod(argv[2], &endptr);
+	CHECK_ENDPTR(argv[2], endptr, "separation", return NULL);
 	CHECK_RANGE(sep_db >= 0.0, "separation", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
