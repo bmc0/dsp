@@ -12,14 +12,15 @@ dsp is an audio processing program with an interactive mode.
 #### Optional dependencies
 
 * fftw3: For `resample` and `fir` effects.
-* zita-convolver: For `zita_convolver` effect.
+* zita-convolver: For the `zita_convolver` effect.
 * libsndfile: For sndfile input/output support (recommended).
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
 * alsa-lib: For alsa input/output support.
 * libao: For ao output support.
 * libmad: For mp3 input support.
 * libpulse-simple: For PulseAudio input/ouput support.
-* LADSPA: For building the LADSPA frontend.
+* LADSPA: For the LADSPA frontend and the `ladspa_host` effect.
+* libltdl (libtool): For the `ladspa_host` effect.
 
 #### Build
 
@@ -196,6 +197,8 @@ and/or `remix` effects.
 	percent. `pre_delay` is in seconds.
 * `g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]`  
 	Add reverberation using Fons Adriaensen's g2reverb algorithm.
+* `ladspa_host module_path plugin_label [controls ...]`  
+	Apply a LADSPA plugin.
 * `stats [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 	(dBFS), crest factor (dB), peak count, number of samples, and length (s)

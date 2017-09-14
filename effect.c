@@ -17,6 +17,7 @@
 #include "compress.h"
 #include "reverb.h"
 #include "g2reverb.h"
+#include "ladspa_host.h"
 #include "stats.h"
 
 static struct effect_info effects[] = {
@@ -53,6 +54,9 @@ static struct effect_info effects[] = {
 #ifdef __ENABLE_GPL_CODE__
 	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init },
 	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init },
+#endif
+#ifdef __ENABLE_LADSPA_HOST__
+	{ "ladspa_host",        "ladspa_host module_path plugin_label [controls ...]", ladspa_host_effect_init },
 #endif
 	{ "stats",              "stats [ref_level]",                       stats_effect_init },
 };
