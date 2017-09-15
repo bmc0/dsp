@@ -84,7 +84,7 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 
 int build_effects_chain(int argc, char **argv, struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir)
 {
-	int i = 1, k = 0, j, last_selector_index = -1, old_stream_channels, allow_fail = 0;
+	int i = 1, k = 0, j, last_selector_index = -1, old_stream_channels, allow_fail = 0, channels_changed = 0;
 	char *tmp_channel_selector;
 	struct effect_info *ei = NULL;
 	struct effect *e = NULL;
@@ -106,27 +106,35 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			continue;
 		}
 		if (argv[k][0] == ':') {
+			if (channels_changed) {
+				free(channel_selector);
+				channel_selector = NEW_SELECTOR(stream->channels);
+				channels_changed = 0;
+			}
 			if (parse_selector(&argv[k][1], channel_selector, stream->channels))
 				goto fail;
 			last_selector_index = k++;
 			i = k + 1;
 			continue;
 		}
+		if (channels_changed) {  /* re-parse the channel selector if the last effect changed the number of channels */
+			tmp_channel_selector = NEW_SELECTOR(stream->channels);
+			if (last_selector_index == -1)
+				SET_SELECTOR(tmp_channel_selector, stream->channels);
+			else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, stream->channels)) {
+				LOG(LL_VERBOSE, "dsp: note: the last effect changed the number of channels\n");
+				free(tmp_channel_selector);
+				goto fail;
+			}
+			free(channel_selector);
+			channel_selector = tmp_channel_selector;
+			channels_changed = 0;
+		}
 		if (argv[k][0] == '@') {
 			old_stream_channels = stream->channels;
 			if (build_effects_chain_from_file(chain, stream, channel_selector, dir, &argv[k][1]))
 				goto fail;
-			if (stream->channels != old_stream_channels) {
-				tmp_channel_selector = NEW_SELECTOR(stream->channels);
-				if (last_selector_index == -1)
-					SET_SELECTOR(tmp_channel_selector, stream->channels);
-				else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, stream->channels)) {
-					free(tmp_channel_selector);
-					goto fail;
-				}
-				free(channel_selector);
-				channel_selector = tmp_channel_selector;
-			}
+			if (stream->channels != old_stream_channels) channels_changed = 1;
 			i = ++k + 1;
 			continue;
 		}
@@ -165,17 +173,7 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			}
 			else {
 				append_effect(chain, e);
-				if (e->ostream.channels != stream->channels) {
-					tmp_channel_selector = NEW_SELECTOR(e->ostream.channels);
-					if (last_selector_index == -1)
-						SET_SELECTOR(tmp_channel_selector, e->ostream.channels);
-					else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, e->ostream.channels)) {
-						free(tmp_channel_selector);
-						goto fail;
-					}
-					free(channel_selector);
-					channel_selector = tmp_channel_selector;
-				}
+				if (e->ostream.channels != stream->channels) channels_changed = 1;
 				*stream = e->ostream;
 			}
 		}
