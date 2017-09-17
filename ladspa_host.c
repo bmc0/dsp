@@ -227,12 +227,13 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 		state->control = calloc(in_control_port_count + out_control_port_count, sizeof(LADSPA_Data));
 	total_output_channels = istream->channels + (state->n_out - ((state->n_in < 1) ? 1 : state->n_in)) * state->n_handles;
 
-	/* FIXME: set control port defaults */
+	/* Set input control port values */
 	if (argc != 3 + in_control_port_count) {
 		LOG(LL_ERROR, "dsp: %s: %s: %s: error: plugin expects %d controls, got %d\n", argv[0], path, argv[2], in_control_port_count, argc - 3);
 		goto fail;
 	}
-	else {
+	else if (in_control_port_count > 0) {
+		/* FIXME: set control port defaults */
 		int cport = 0, k = 3;
 		for (unsigned long i = 0; i < desc->PortCount; ++i) {
 			LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
@@ -274,6 +275,21 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 				desc->connect_port(state->handles[i], k, &state->control[cport++]);
 		}
 		if (desc->activate != NULL) desc->activate(state->handles[i]);
+	}
+
+	/* Print input control port names and values */
+	if (in_control_port_count > 0 && LOGLEVEL(LL_VERBOSE)) {
+		int cport = 0;
+		LOG(LL_VERBOSE, "dsp: %s: %s: %s: info: controls:", argv[0], path, argv[2]);
+		for (unsigned long i = 0; i < desc->PortCount; ++i) {
+			LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
+			if (LADSPA_IS_PORT_CONTROL(pd)) {
+				if (LADSPA_IS_PORT_INPUT(pd))
+					LOG(LL_VERBOSE, " \"%s\"=%g", desc->PortNames[i], state->control[cport]);
+				++cport;
+			}
+		}
+		LOG(LL_VERBOSE, "\n");
 	}
 
 	e->name = ei->name;
