@@ -350,7 +350,7 @@ void _fini() {
 	free(config_dir);
 }
 
-const LADSPA_Descriptor *ladspa_descriptor(unsigned long i)
+const LADSPA_Descriptor * ladspa_descriptor(unsigned long i)
 {
 	if (i < n_configs)
 		return &descriptors[i];

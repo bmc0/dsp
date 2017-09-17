@@ -8,7 +8,7 @@
 
 int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
 {
-	if ((endptr) == (str) || *(endptr) != '\0') {
+	if (endptr == str || *endptr != '\0') {
 		if (name == NULL) LOG(LL_ERROR, "dsp: failed to parse %s: %s\n", param_name, str);
 		else LOG(LL_ERROR, "dsp: %s: failed to parse %s: %s\n", name, param_name, str);
 		return 1;
