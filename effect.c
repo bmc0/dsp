@@ -56,7 +56,7 @@ static struct effect_info effects[] = {
 	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init },
 #endif
 #ifdef __ENABLE_LADSPA_HOST__
-	{ "ladspa_host",        "ladspa_host module_path plugin_label [controls ...]", ladspa_host_effect_init },
+	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init },
 #endif
 	{ "stats",              "stats [ref_level]",                       stats_effect_init },
 };
