@@ -197,8 +197,15 @@ and/or `remix` effects.
 	percent. `pre_delay` is in seconds.
 * `g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]`  
 	Add reverberation using Fons Adriaensen's g2reverb algorithm.
-* `ladspa_host module_path plugin_label [controls ...]`  
-	Apply a LADSPA plugin.
+* `ladspa_host module_path plugin_label [control ...]`  
+	Apply a LADSPA plugin. Supports any number of input/output ports (with
+	the exception of zero output ports). Plugins with zero input ports will
+	replace selected input channels with their output(s). If a plugin has one
+	or zero input ports, it will be instantiated multiple times to handle
+	multi-channel input.
+	
+	The `LADSPA_PATH` environment variable can be used to set the search path
+	for plugins.
 * `stats [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 	(dBFS), crest factor (dB), peak count, number of samples, and length (s)

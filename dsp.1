@@ -197,8 +197,15 @@ percent. \fIpre_delay\fR is in seconds.
 \fBg2reverb\fR [\fB-w\fR] [\fIroom_size\fR [\fIreverb_time\fR [\fIinput_bandwidth\fR [\fIdamping\fR [\fIdry_level\fR [\fIreflection_level\fR [\fItail_level\fR]]]]]]]
 Add reverberation using Fons Adriaensen's g2reverb algorithm.
 .TP
-\fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrols\fR ...]
-Apply a LADSPA plugin.
+\fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
+Apply a LADSPA plugin. Supports any number of input/output ports (with
+the exception of zero output ports). Plugins with zero input ports will
+replace selected input channels with their output(s). If a plugin has one
+or zero input ports, it will be instantiated multiple times to handle
+multi-channel input.
+
+The `LADSPA_PATH' environment variable can be used to set the search path
+for plugins.
 .TP
 \fBstats\fR [\fIref_level\fR]
 Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
