@@ -196,7 +196,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 		delete cproc;
 		return NULL;
 	}
-	LOG(LL_VERBOSE, "dsp: %s: info: filter_frames=%ld min_part_len=%d max_part_len=%d\n", argv[0], c_filter->frames, min_part_len, max_part_len);
+	LOG(LL_VERBOSE, "dsp: %s: info: filter_frames=%zd min_part_len=%d max_part_len=%d\n", argv[0], c_filter->frames, min_part_len, max_part_len);
 
 	e = (struct effect *) calloc(1, sizeof(struct effect));
 	e->name = ei->name;

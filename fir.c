@@ -170,7 +170,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 		destroy_codec(c_filter);
 		return NULL;
 	}
-	LOG(LL_VERBOSE, "dsp: %s: info: filter_frames=%ld\n", argv[0], c_filter->frames);
+	LOG(LL_VERBOSE, "dsp: %s: info: filter_frames=%zd\n", argv[0], c_filter->frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
