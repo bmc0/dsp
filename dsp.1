@@ -166,8 +166,9 @@ and 3 into output channel 1.
 .EE
 mixes all input channels into a single output channel.
 .TP
-\fBdelay\fR \fIseconds\fR
-Delay line.
+\fBdelay\fR \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
+`\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples.
 .TP
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
 Sinc resampler. Ignores the channel selector.

@@ -10,6 +10,28 @@ struct delay_state {
 	ssize_t len, p;
 };
 
+static ssize_t parse_delay(const char *s, int fs, char **endptr)
+{
+	double d = strtod(s, endptr);
+	ssize_t samples = lround(d * fs);
+	if (*endptr != NULL && *endptr != s) {
+		switch (**endptr) {
+		case 'm':
+			d /= 1000.0;
+		case 's':
+			samples = lround(d * fs);
+			++(*endptr);
+			break;
+		case 'S':
+			samples = lround(d);
+			++(*endptr);
+			break;
+		}
+		if (**endptr != '\0') LOG(LL_ERROR, "dsp: parse_delay(): trailing characters: %s\n", *endptr);
+	}
+	return samples;
+}
+
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	int i, k;
@@ -61,18 +83,19 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	struct effect *e;
 	struct delay_state *state;
 	int i;
-	double d;
+	ssize_t samples;
 
 	if (argc != 2) {
 		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
 		return NULL;
 	}
 
-	d = strtod(argv[1], &endptr);
+	samples = parse_delay(argv[1], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
-	CHECK_RANGE(d >= 0, "delay", return NULL);
+	CHECK_RANGE(samples >= 0, "delay", return NULL);
+	LOG(LL_VERBOSE, "dsp: %s: info: actual delay is %gs (%zd sample%s)\n", argv[0], (double) samples / istream->fs, samples, (samples == 1) ? "" : "s");
 	state = calloc(1, sizeof(struct delay_state));
-	state->len = lround(d * istream->fs);
+	state->len = samples;
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (i = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i) && state->len > 0)

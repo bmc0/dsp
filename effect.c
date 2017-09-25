@@ -39,7 +39,7 @@ static struct effect_info effects[] = {
 	{ "mult",               "mult [channel] multiplier",               gain_effect_init },
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init },
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init },
-	{ "delay",              "delay seconds",                           delay_effect_init },
+	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init },
 #ifdef __HAVE_FFTW3__
 #ifndef __SYMMETRIC_IO__
 	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init },

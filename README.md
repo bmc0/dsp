@@ -174,8 +174,9 @@ and/or `remix` effects.
 	channels 0 and 1 into output channel 0, and input channels 2 and 3 into
 	output channel 1. `remix -` mixes all input channels into a single
 	output channel.
-* `delay seconds`  
-	Delay line.
+* `delay delay[s|m|S]`  
+	Delay line. The unit for the delay argument depends on the suffix used:
+	`s` is seconds (the default), `m` is milliseconds, and `S` is samples.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]impulse_path`  
