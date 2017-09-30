@@ -29,7 +29,6 @@ static struct pcm_enc_info encodings[] = {
 	{ "u8",     1, 8,  1, read_buf_u8,     write_buf_u8 },
 	{ "s8",     1, 8,  1, read_buf_s8,     write_buf_s8 },
 	{ "s24",    4, 24, 1, read_buf_s24,    write_buf_s24 },
-	{ "s24_3",  3, 24, 1, read_buf_s24_3,  write_buf_s24_3 },
 	{ "s32",    4, 32, 1, read_buf_s32,    write_buf_s32 },
 	{ "float",  4, 24, 0, read_buf_float,  write_buf_float },
 	{ "double", 8, 53, 0, read_buf_double, write_buf_double },

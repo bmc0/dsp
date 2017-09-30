@@ -87,7 +87,7 @@ static struct pulse_enc_info encodings[] = {
 	{ "s16",   PA_SAMPLE_S16NE,     2, 16, 1, write_buf_s16,   read_buf_s16 },
 	{ "u8",    PA_SAMPLE_U8,        1,  8, 1, write_buf_u8,    read_buf_u8 },
 	{ "s24",   PA_SAMPLE_S24_32NE,  4, 24, 1, write_buf_s24,   read_buf_s24 },
-	{ "s24_3", PA_SAMPLE_S24NE,     3, 24, 1, write_buf_s24_3, read_buf_s24_3 },
+	{ "s24_3", PA_SAMPLE_S24LE,     3, 24, 1, write_buf_s24_3, read_buf_s24_3 },
 	{ "s32",   PA_SAMPLE_S32NE,     4, 32, 1, write_buf_s32,   read_buf_s32 },
 	{ "float", PA_SAMPLE_FLOAT32NE, 4, 24, 0, write_buf_float, read_buf_float },
 };
