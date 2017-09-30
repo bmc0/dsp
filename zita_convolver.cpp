@@ -23,7 +23,7 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 	while (iframes < *frames) {
 		while (state->pos < state->len && iframes < *frames) {
 			for (i = k = 0; i < e->ostream.channels; ++i) {
-#ifdef __SYMMETRIC_IO__
+#ifdef SYMMETRIC_IO
 				obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0;
 #else
 				if (state->has_output)
@@ -36,7 +36,7 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 				else
 					state->output[i][state->pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 			}
-#ifdef __SYMMETRIC_IO__
+#ifdef SYMMETRIC_IO
 			++oframes;
 #else
 			if (state->has_output)

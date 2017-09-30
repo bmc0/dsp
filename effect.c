@@ -40,22 +40,22 @@ static struct effect_info effects[] = {
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init },
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init },
 	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init },
-#ifdef __HAVE_FFTW3__
-#ifndef __SYMMETRIC_IO__
+#ifdef HAVE_FFTW3
+#ifndef SYMMETRIC_IO
 	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init },
 #endif
 	{ "fir",                "fir [~/]impulse_path",                    fir_effect_init },
 #endif
-#ifdef __HAVE_ZITA_CONVOLVER__
+#ifdef HAVE_ZITA_CONVOLVER
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init },
 #endif
 	{ "noise",              "noise level",                             noise_effect_init },
 	{ "compress",           "compress thresh ratio attack release",    compress_effect_init },
-#ifdef __ENABLE_GPL_CODE__
+#ifdef ENABLE_GPL_CODE
 	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init },
 	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init },
 #endif
-#ifdef __ENABLE_LADSPA_HOST__
+#ifdef ENABLE_LADSPA_HOST
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init },
 #endif
 	{ "stats",              "stats [ref_level]",                       stats_effect_init },

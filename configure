@@ -106,7 +106,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS reverb.o"
 		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
-		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__ENABLE_GPL_CODE__"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DENABLE_GPL_CODE"
 		echo "[dsp] enabled gpl code (reverb.o g2reverb.o)"
 	else
 		echo "[dsp] disabled gpl code (reverb.o g2reverb.o)"
@@ -114,26 +114,26 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	if check_header $CC ladspa.h && check_header $CC ltdl.h; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lltdl"
-		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__ENABLE_LADSPA_HOST__"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
 		echo "[dsp] enabled ladspa_host.o"
 	else
 		echo "[dsp] disabled ladspa_host.o"
 	fi
-	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__
-	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
-	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -D__HAVE_FFTW3__
+	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE
+	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
+	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o" -DHAVE_FFTW3
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header $CXX zita-convolver.h; then
 		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lzita-convolver"
-		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -D__HAVE_ZITA_CONVOLVER__"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DHAVE_ZITA_CONVOLVER"
 		echo "[dsp] enabled zita_convolver.o"
 	else
 		echo "[dsp] disabled zita_convolver.o"
 	fi
-	check_pkg_dsp alsa "$CONFIG_DISABLE_ALSA" alsa.o -D__HAVE_ALSA__
-	check_pkg_dsp ao "$CONFIG_DISABLE_AO" ao.o -D__HAVE_AO__
-	check_pkg_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -D__HAVE_MAD__
-	check_pkg_dsp libpulse-simple "$CONFIG_DISABLE_PULSE" pulse.o -D__HAVE_PULSE__
+	check_pkg_dsp alsa "$CONFIG_DISABLE_ALSA" alsa.o -DHAVE_ALSA
+	check_pkg_dsp ao "$CONFIG_DISABLE_AO" ao.o -DHAVE_AO
+	check_pkg_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -DHAVE_MAD
+	check_pkg_dsp libpulse-simple "$CONFIG_DISABLE_PULSE" pulse.o -DHAVE_PULSE
 else
 	echo "disabled dsp"
 fi
@@ -146,7 +146,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header $CC ladspa.h; then
 	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS reverb.o"
 		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
-		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -D__ENABLE_GPL_CODE__"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DENABLE_GPL_CODE"
 		echo "[ladspa_dsp] enabled gpl code (reverb.o g2reverb.o)"
 	else
 		echo "[ladspa_dsp] disabled gpl code (reverb.o g2reverb.o)"
@@ -154,30 +154,30 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header $CC ladspa.h; then
 	if check_header $CC ladspa.h && check_header $CC ltdl.h; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lltdl"
-		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -D__ENABLE_LADSPA_HOST__"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
 		echo "[ladspa_dsp] enabled ladspa_host.o"
 	else
 		echo "[ladspa_dsp] disabled ladspa_host.o"
 	fi
-	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -D__HAVE_FFTW3__ && INCLUDE_CODECS=y
+	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" fir.o -DHAVE_FFTW3 && INCLUDE_CODECS=y
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header $CXX zita-convolver.h; then
 		INCLUDE_CODECS=y
 		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lzita-convolver"
-		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -D__HAVE_ZITA_CONVOLVER__"
+		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DHAVE_ZITA_CONVOLVER"
 		echo "[ladspa_dsp] enabled zita_convolver.o"
 	else
 		echo "[ladspa_dsp] disabled zita_convolver.o"
 	fi
 	if [ "$INCLUDE_CODECS" = "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sampleconv.o"
-		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -D__HAVE_SNDFILE__ \
-			|| check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__ \
+		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE \
+			|| check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG \
 			|| echo "[ladspa_dsp] WARNING: The fir and zita_convolver effects cannot be used without either sndfile or ffmpeg"
 		# Extra codecs
 		#LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS null.o pcm.o"
-		#check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -D__HAVE_FFMPEG__
-		#check_pkg_ladspa_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -D__HAVE_MAD__
+		#check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
+		#check_pkg_ladspa_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -DHAVE_MAD
 	fi
 else
 	echo "disabled ladspa_dsp"
