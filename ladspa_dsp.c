@@ -260,7 +260,7 @@ static void cleanup_dsp(LADSPA_Handle inst)
 	free(d);
 }
 
-void _init()
+void __attribute__((constructor)) ladspa_dsp_so_init()
 {
 	int i, k;
 	char **pn, *env, *tmp;
@@ -328,7 +328,8 @@ void _init()
 	}
 }
 
-void _fini() {
+void __attribute__((destructor)) ladspa_dsp_so_fini()
+{
 	int i, k;
 	for (k = 0; k < n_configs; ++k) {
 		free((char *) descriptors[k].Label); /* note: dsp_descriptor->Name is the same data */
