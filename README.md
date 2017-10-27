@@ -209,9 +209,9 @@ and/or `remix` effects.
 	for plugins.
 * `stats [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
-	(dBFS), crest factor (dB), peak count, number of samples, and length (s)
-	for each channel. If `ref_level` is given, peak and RMS levels relative
-	to `ref_level` will be shown as well (dBr).
+	(dBFS), crest factor (dB), peak count, peak sample, number of samples, and
+	length (s) for each channel. If `ref_level` is given, peak and RMS levels
+	relative to `ref_level` will be shown as well (dBr).
 
 #### Exclamation mark
 

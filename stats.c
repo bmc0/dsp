@@ -15,21 +15,16 @@ sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	struct stats_state *state = (struct stats_state *) e->data;
 	for (i = 0; i < samples; i += e->ostream.channels) {
 		for (k = 0; k < e->ostream.channels; ++k) {
-			++state[k].samples;
 			state[k].sum += ibuf[i + k];
 			state[k].sum_sq += ibuf[i + k] * ibuf[i + k];
-			if (ibuf[i + k] < state[k].min) {
-				state[k].min = ibuf[i + k];
-				state[k].peak_count = 0;
-			}
-			if (ibuf[i + k] > state[k].max) {
-				state[k].max = ibuf[i + k];
-				state[k].peak_count = 0;
-			}
-			if (ibuf[i + k] == state[k].min || ibuf[i + k] == state[k].max)
-				++state[k].peak_count;
-			if (fabs(ibuf[i + k]) >= MAXIMUM(fabs(state[k].max), fabs(state[k].min)))
+			if (ibuf[i + k] < state[k].min) state[k].min = ibuf[i + k];
+			if (ibuf[i + k] > state[k].max) state[k].max = ibuf[i + k];
+			if (fabs(ibuf[i + k]) >= MAXIMUM(fabs(state[k].max), fabs(state[k].min))) {
 				state[k].peak_frame = state[k].samples;
+				state[k].peak_count = 0;
+			}
+			if (fabs(ibuf[i + k]) == MAXIMUM(fabs(state[k].max), fabs(state[k].min))) ++state[k].peak_count;
+			++state[k].samples;
 		}
 	}
 	return ibuf;
