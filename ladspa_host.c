@@ -228,25 +228,53 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	total_output_channels = istream->channels + (state->n_out - ((state->n_in < 1) ? 1 : state->n_in)) * state->n_handles;
 
 	/* Set input control port values */
-	if (argc != 3 + in_control_port_count) {
+	if (argc > 3 + in_control_port_count) {
 		LOG(LL_ERROR, "dsp: %s: %s: %s: error: plugin expects %d controls, got %d\n", argv[0], path, argv[2], in_control_port_count, argc - 3);
 		goto fail;
 	}
-	else if (in_control_port_count > 0) {
-		/* FIXME: set control port defaults */
+	if (in_control_port_count > 0) {
 		int cport = 0, k = 3;
 		for (unsigned long i = 0; i < desc->PortCount; ++i) {
 			LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
 			const LADSPA_PortRangeHint *pr = &desc->PortRangeHints[i];
 			if (LADSPA_IS_PORT_CONTROL(pd)) {
 				if (LADSPA_IS_PORT_INPUT(pd)) {
-					state->control[cport] = strtof(argv[k], &endptr);
-					CHECK_ENDPTR(argv[k], endptr, desc->PortNames[i], goto fail);
 					LADSPA_Data lower = pr->LowerBound, upper = pr->UpperBound;
 					if (LADSPA_IS_HINT_SAMPLE_RATE(pr->HintDescriptor)) {
 						lower *= istream->fs;
 						upper *= istream->fs;
 					}
+					if (k < argc && strcmp(argv[k], "-") != 0) {
+						state->control[cport] = strtof(argv[k], &endptr);
+						CHECK_ENDPTR(argv[k], endptr, desc->PortNames[i], goto fail);
+					}
+					else if (LADSPA_IS_HINT_HAS_DEFAULT(pr->HintDescriptor)) {
+						/* set default value */
+						if (LADSPA_IS_HINT_DEFAULT_MINIMUM(pr->HintDescriptor))
+							state->control[cport] = lower;
+						else if (LADSPA_IS_HINT_DEFAULT_LOW(pr->HintDescriptor))
+							state->control[cport] = (LADSPA_IS_HINT_LOGARITHMIC(pr->HintDescriptor)) ? exp(log(lower) * 0.75 + log(upper) * 0.25) : (lower * 0.75 + upper * 0.25);
+						else if (LADSPA_IS_HINT_DEFAULT_MIDDLE(pr->HintDescriptor))
+							state->control[cport] = (LADSPA_IS_HINT_LOGARITHMIC(pr->HintDescriptor)) ? exp(log(lower) * 0.5 + log(upper) * 0.5) : (lower * 0.5 + upper * 0.5);
+						else if (LADSPA_IS_HINT_DEFAULT_HIGH(pr->HintDescriptor))
+							state->control[cport] = (LADSPA_IS_HINT_LOGARITHMIC(pr->HintDescriptor)) ? exp(log(lower) * 0.25 + log(upper) * 0.75) : (lower * 0.25 + upper * 0.75);
+						else if (LADSPA_IS_HINT_DEFAULT_MAXIMUM(pr->HintDescriptor))
+							state->control[cport] = upper;
+						else if (LADSPA_IS_HINT_DEFAULT_0(pr->HintDescriptor))
+							state->control[cport] = 0.0;
+						else if (LADSPA_IS_HINT_DEFAULT_1(pr->HintDescriptor))
+							state->control[cport] = 1.0;
+						else if (LADSPA_IS_HINT_DEFAULT_100(pr->HintDescriptor))
+							state->control[cport] = 100.0;
+						else if (LADSPA_IS_HINT_DEFAULT_440(pr->HintDescriptor))
+							state->control[cport] = 440.0;
+					}
+					else {
+						LOG(LL_ERROR, "dsp: %s: %s: %s: error: control \"%s\" has no default value and is not set\n", argv[0], path, argv[2], desc->PortNames[i]);
+						goto fail;
+					}
+					if (LADSPA_IS_HINT_INTEGER(pr->HintDescriptor))
+						state->control[cport] = round(state->control[cport]);
 					if (LADSPA_IS_HINT_BOUNDED_BELOW(pr->HintDescriptor))
 						CHECK_RANGE(state->control[cport] >= lower, desc->PortNames[i], goto fail);
 					if (LADSPA_IS_HINT_BOUNDED_ABOVE(pr->HintDescriptor))

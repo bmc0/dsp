@@ -205,6 +205,9 @@ and/or `remix` effects.
 	or zero input ports, it will be instantiated multiple times to handle
 	multi-channel input.
 	
+	Controls which are not explicitly set or are set to `-` will use default
+	values (if available).
+	
 	The `LADSPA_PATH` environment variable can be used to set the search path
 	for plugins.
 * `stats [ref_level]`  
