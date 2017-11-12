@@ -177,6 +177,7 @@ static void load_configs(void)
 
 static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 {
+	int r;
 	char *lc_n_old = NULL;
 	struct stream_info stream;
 	struct ladspa_dsp_config *config = (struct ladspa_dsp_config *) desc->ImplementationData;
@@ -189,15 +190,16 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 	stream.fs = fs;
 	stream.channels = d->input_channels;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
-	lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
-	setlocale(LC_NUMERIC, config->lc_n);
-	if (build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config_dir)) {
+	if (config->lc_n != NULL) {
+		lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
+		setlocale(LC_NUMERIC, config->lc_n);
+	}
+	r = build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config_dir);
+	if (lc_n_old != NULL) {
 		setlocale(LC_NUMERIC, lc_n_old);
 		free(lc_n_old);
-		goto fail;
 	}
-	setlocale(LC_NUMERIC, lc_n_old);
-	free(lc_n_old);
+	if (r) goto fail;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: end effects chain\n");
 	if (stream.channels != d->output_channels) {
 		LOG(LL_ERROR, "ladspa_dsp: error: output channels mismatch\n");
