@@ -21,44 +21,44 @@
 #include "stats.h"
 
 static struct effect_info effects[] = {
-	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init },
-	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init },
-	{ "lowpass",            "lowpass f0[k] width[q|o|h|k]",            biquad_effect_init },
-	{ "highpass",           "highpass f0[k] width[q|o|h|k]",           biquad_effect_init },
-	{ "bandpass_skirt",     "bandpass_skirt f0[k] width[q|o|h|k]",     biquad_effect_init },
-	{ "bandpass_peak",      "bandpass_peak f0[k] width[q|o|h|k]",      biquad_effect_init },
-	{ "notch",              "notch f0[k] width[q|o|h|k]",              biquad_effect_init },
-	{ "allpass",            "allpass f0[k] width[q|o|h|k]",            biquad_effect_init },
-	{ "eq",                 "eq f0[k] width[q|o|h|k] gain",            biquad_effect_init },
-	{ "lowshelf",           "lowshelf f0[k] width[q|s|d|o|h|k] gain",  biquad_effect_init },
-	{ "highshelf",          "highshelf f0[k] width[q|s|d|o|h|k] gain", biquad_effect_init },
-	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp",    biquad_effect_init },
-	{ "deemph",             "deemph",                                  biquad_effect_init },
-	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",                biquad_effect_init },
-	{ "gain",               "gain [channel] gain",                     gain_effect_init },
-	{ "mult",               "mult [channel] multiplier",               gain_effect_init },
-	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init },
-	{ "remix",              "remix channel_selector|. ...",            remix_effect_init },
-	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init },
+	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_LOWPASS_1 },
+	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init,    BIQUAD_HIGHPASS_1 },
+	{ "lowpass",            "lowpass f0[k] width[q|o|h|k]",            biquad_effect_init,    BIQUAD_LOWPASS },
+	{ "highpass",           "highpass f0[k] width[q|o|h|k]",           biquad_effect_init,    BIQUAD_HIGHPASS },
+	{ "bandpass_skirt",     "bandpass_skirt f0[k] width[q|o|h|k]",     biquad_effect_init,    BIQUAD_BANDPASS_SKIRT },
+	{ "bandpass_peak",      "bandpass_peak f0[k] width[q|o|h|k]",      biquad_effect_init,    BIQUAD_BANDPASS_PEAK },
+	{ "notch",              "notch f0[k] width[q|o|h|k]",              biquad_effect_init,    BIQUAD_NOTCH },
+	{ "allpass",            "allpass f0[k] width[q|o|h|k]",            biquad_effect_init,    BIQUAD_ALLPASS },
+	{ "eq",                 "eq f0[k] width[q|o|h|k] gain",            biquad_effect_init,    BIQUAD_PEAK },
+	{ "lowshelf",           "lowshelf f0[k] width[q|s|d|o|h|k] gain",  biquad_effect_init,    BIQUAD_LOWSHELF },
+	{ "highshelf",          "highshelf f0[k] width[q|s|d|o|h|k] gain", biquad_effect_init,    BIQUAD_HIGHSHELF },
+	{ "linkwitz_transform", "linkwitz_transform fz[k] qz fp[k] qp",    biquad_effect_init,    BIQUAD_LINKWITZ_TRANSFORM },
+	{ "deemph",             "deemph",                                  biquad_effect_init,    BIQUAD_DEEMPH },
+	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",                biquad_effect_init,    BIQUAD_BIQUAD },
+	{ "gain",               "gain [channel] gain",                     gain_effect_init,      GAIN_EFFECT_NUMBER_GAIN },
+	{ "mult",               "mult [channel] multiplier",               gain_effect_init,      GAIN_EFFECT_NUMBER_MULT },
+	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
+	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
+	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init,     0 },
 #ifdef HAVE_FFTW3
 #ifndef SYMMETRIC_IO
-	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init },
+	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init,  0 },
 #endif
-	{ "fir",                "fir [~/]impulse_path",                    fir_effect_init },
+	{ "fir",                "fir [~/]impulse_path",                    fir_effect_init,       0 },
 #endif
 #ifdef HAVE_ZITA_CONVOLVER
-	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init },
+	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init, 0 },
 #endif
-	{ "noise",              "noise level",                             noise_effect_init },
-	{ "compress",           "compress thresh ratio attack release",    compress_effect_init },
+	{ "noise",              "noise level",                             noise_effect_init,     0 },
+	{ "compress",           "compress thresh ratio attack release",    compress_effect_init,  0 },
 #ifdef ENABLE_GPL_CODE
-	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init },
-	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init },
+	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init, 0 },
+	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init, 0 },
 #endif
 #ifdef ENABLE_LADSPA_HOST
-	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init },
+	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
 #endif
-	{ "stats",              "stats [ref_level]",                       stats_effect_init },
+	{ "stats",              "stats [ref_level]",                       stats_effect_init,     0 },
 };
 
 struct effect_info * get_effect_info(const char *name)

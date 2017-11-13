@@ -7,6 +7,7 @@ struct effect_info {
 	const char *name;
 	const char *usage;
 	struct effect * (*init)(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
+	int effect_number;
 };
 
 struct effect {

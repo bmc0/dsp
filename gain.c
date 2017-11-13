@@ -75,13 +75,17 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	else
 		g = argv[1];
 
-	if (strcmp(argv[0], "mult") == 0) {
+	if (ei->effect_number == GAIN_EFFECT_NUMBER_MULT) {
 		mult = strtod(g, &endptr);
 		CHECK_ENDPTR(g, endptr, "multiplier", return NULL);
 	}
-	else {
+	else if (ei->effect_number == GAIN_EFFECT_NUMBER_GAIN) {
 		mult = pow(10.0, strtod(g, &endptr) / 20.0);
 		CHECK_ENDPTR(g, endptr, "gain", return NULL);
+	}
+	else {
+		LOG(LL_ERROR, "dsp: gain.c: BUG: unknown effect: %s (%d)\n", argv[0], ei->effect_number);
+		return NULL;
 	}
 
 	e = calloc(1, sizeof(struct effect));

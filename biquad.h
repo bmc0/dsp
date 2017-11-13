@@ -10,7 +10,7 @@
 #define BIQUAD_USE_TDF_2 1
 
 enum {
-	BIQUAD_NONE = 0,  /* dummy value for effect init function; do not use */
+	/* For biquad_init_using_type() and effect_info->effect_number */
 	BIQUAD_LOWPASS_1,
 	BIQUAD_HIGHPASS_1,
 	BIQUAD_LOWPASS,
@@ -23,6 +23,9 @@ enum {
 	BIQUAD_LOWSHELF,
 	BIQUAD_HIGHSHELF,
 	BIQUAD_LINKWITZ_TRANSFORM,
+	/* Only for effect_info->effect_number */
+	BIQUAD_DEEMPH,
+	BIQUAD_BIQUAD,
 };
 
 enum {

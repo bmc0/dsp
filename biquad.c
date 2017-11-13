@@ -280,17 +280,41 @@ void biquad_effect_destroy(struct effect *e)
 	free(state);
 }
 
-#define CHECK_WIDTH_TYPE(cond, action) \
+#define GET_ARG(v, str, name) \
+	do { \
+		v = strtod(str, &endptr); \
+		CHECK_ENDPTR(str, endptr, name, return NULL); \
+	} while (0)
+
+#define GET_FREQ_ARG(v, str, name) \
+	do { \
+		v = parse_freq(str, &endptr); \
+		CHECK_ENDPTR(str, endptr, name, return NULL); \
+		CHECK_FREQ(v, istream->fs, name, return NULL); \
+	} while (0)
+
+#define GET_WIDTH_ARG(v, str, name) \
+	do { \
+		v = parse_width(str, &width_type, &endptr); \
+		CHECK_ENDPTR(str, endptr, name, return NULL); \
+		CHECK_RANGE((v) > 0.0, name, return NULL); \
+	} while (0)
+
+#define BIQUAD_WIDTH_TEST_NO_SLOPE (width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB)
+#define CHECK_WIDTH_TYPE(cond) \
 	if (!(cond)) { \
 		LOG(LL_ERROR, "dsp: %s: error: invalid width type\n", argv[0]); \
-		action; \
-	}
-
-#define CHECK_ARGC(n) \
-	if (argc != (n)) { \
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage); \
 		return NULL; \
 	}
+
+#define INIT_COMMON(n_args, b_type) \
+	do { \
+		if (argc != (n_args) + 1) { \
+			LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage); \
+			return NULL; \
+		} \
+		type = b_type; \
+	} while (0)
 
 struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
@@ -301,176 +325,71 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	struct effect *e;
 	char *endptr;
 
-	if (strcmp(argv[0], "lowpass_1") == 0) {
-		CHECK_ARGC(2);
-		type = BIQUAD_LOWPASS_1;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-	}
-	else if (strcmp(argv[0], "highpass_1") == 0) {
-		CHECK_ARGC(2);
-		type = BIQUAD_HIGHPASS_1;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-	}
-	else if (strcmp(argv[0], "lowpass") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_LOWPASS;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "highpass") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_HIGHPASS;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "bandpass_skirt") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_BANDPASS_SKIRT;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "bandpass_peak") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_BANDPASS_PEAK;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "notch") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_NOTCH;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "allpass") == 0) {
-		CHECK_ARGC(3);
-		type = BIQUAD_ALLPASS;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-	}
-	else if (strcmp(argv[0], "eq") == 0) {
-		CHECK_ARGC(4);
-		type = BIQUAD_PEAK;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		CHECK_WIDTH_TYPE(width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB, return NULL);
-		arg2 = strtod(argv[3], &endptr);
-		CHECK_ENDPTR(argv[3], endptr, "gain", return NULL);
-	}
-	else if (strcmp(argv[0], "lowshelf") == 0) {
-		CHECK_ARGC(4);
-		type = BIQUAD_LOWSHELF;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		arg2 = strtod(argv[3], &endptr);
-		CHECK_ENDPTR(argv[3], endptr, "gain", return NULL);
-	}
-	else if (strcmp(argv[0], "highshelf") == 0) {
-		CHECK_ARGC(4);
-		type = BIQUAD_HIGHSHELF;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "f0", return NULL);
-		arg1 = parse_width(argv[2], &width_type, &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "width", return NULL);
-		CHECK_RANGE(arg1 > 0.0, "width", return NULL);
-		arg2 = strtod(argv[3], &endptr);
-		CHECK_ENDPTR(argv[3], endptr, "gain", return NULL);
-	}
-	else if (strcmp(argv[0], "linkwitz_transform") == 0) {
-		CHECK_ARGC(5);
-		type = BIQUAD_LINKWITZ_TRANSFORM;
-		arg0 = parse_freq(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "fz", return NULL);
-		CHECK_FREQ(arg0, istream->fs, "fz", return NULL);
-		arg1 = strtod(argv[2], &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "qz", return NULL);
+	switch (ei->effect_number) {
+	case BIQUAD_LOWPASS_1:
+	case BIQUAD_HIGHPASS_1:
+		INIT_COMMON(1, ei->effect_number);
+		GET_FREQ_ARG(arg0, argv[1], "f0");
+		break;
+	case BIQUAD_LOWPASS:
+	case BIQUAD_HIGHPASS:
+	case BIQUAD_BANDPASS_SKIRT:
+	case BIQUAD_BANDPASS_PEAK:
+	case BIQUAD_NOTCH:
+	case BIQUAD_ALLPASS:
+		INIT_COMMON(2, ei->effect_number);
+		GET_FREQ_ARG(arg0, argv[1], "f0");
+		GET_WIDTH_ARG(arg1, argv[2], "width");
+		CHECK_WIDTH_TYPE(BIQUAD_WIDTH_TEST_NO_SLOPE);
+		break;
+	case BIQUAD_PEAK:
+	case BIQUAD_LOWSHELF:
+	case BIQUAD_HIGHSHELF:
+		INIT_COMMON(3, ei->effect_number);
+		GET_FREQ_ARG(arg0, argv[1], "f0");
+		GET_WIDTH_ARG(arg1, argv[2], "width");
+		if (ei->effect_number == BIQUAD_PEAK) CHECK_WIDTH_TYPE(BIQUAD_WIDTH_TEST_NO_SLOPE);
+		GET_ARG(arg2, argv[3], "gain");
+		break;
+	case BIQUAD_LINKWITZ_TRANSFORM:
+		INIT_COMMON(4, BIQUAD_LINKWITZ_TRANSFORM);
+		GET_FREQ_ARG(arg0, argv[1], "fz");
+		GET_ARG(arg1, argv[2], "qz");
 		CHECK_RANGE(arg1 > 0.0, "qz", return NULL);
-		arg2 = parse_freq(argv[3], &endptr);
-		CHECK_ENDPTR(argv[3], endptr, "fp", return NULL);
-		CHECK_FREQ(arg2, istream->fs, "fp", return NULL);
-		arg3 = strtod(argv[4], &endptr);
-		CHECK_ENDPTR(argv[4], endptr, "qp", return NULL);
+		GET_FREQ_ARG(arg2, argv[3], "fp");
+		GET_ARG(arg3, argv[4], "qp");
 		CHECK_RANGE(arg3 > 0.0, "qp", return NULL);
-	}
-	else if (strcmp(argv[0], "deemph") == 0) {
-		CHECK_ARGC(1);
-		type = BIQUAD_HIGHSHELF;
+		break;
+	case BIQUAD_DEEMPH:
+		INIT_COMMON(0, BIQUAD_HIGHSHELF);
 		width_type = BIQUAD_WIDTH_SLOPE;
-		if (istream->fs == 44100) {
+		switch (istream->fs) {
+		case 44100:
 			arg0 = 5283;
 			arg1 = 0.4845;
 			arg2 = -9.477;
-		}
-		else if (istream->fs == 48000) {
+			break;
+		case 48000:
 			arg0 = 5356;
 			arg1 = 0.479;
 			arg2 = -9.62;
-		}
-		else {
+			break;
+		default:
 			LOG(LL_ERROR, "dsp: %s: error: sample rate must be 44100 or 48000\n", argv[0]);
 			return NULL;
 		}
-	}
-	else if (strcmp(argv[0], "biquad") == 0) {
-		CHECK_ARGC(7);
-		type = BIQUAD_NONE;
-		b0 = strtod(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "b0", return NULL);
-		b1 = strtod(argv[2], &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "b1", return NULL);
-		b2 = strtod(argv[3], &endptr);
-		CHECK_ENDPTR(argv[3], endptr, "b2", return NULL);
-		a0 = strtod(argv[4], &endptr);
-		CHECK_ENDPTR(argv[4], endptr, "a0", return NULL);
-		a1 = strtod(argv[5], &endptr);
-		CHECK_ENDPTR(argv[5], endptr, "a1", return NULL);
-		a2 = strtod(argv[6], &endptr);
-		CHECK_ENDPTR(argv[6], endptr, "a2", return NULL);
-	}
-	else {
-		LOG(LL_ERROR, "dsp: biquad: BUG: unknown filter type: %s\n", argv[0]);
+		break;
+	case BIQUAD_BIQUAD:
+		INIT_COMMON(6, BIQUAD_BIQUAD);
+		GET_ARG(b0, argv[1], "b0");
+		GET_ARG(b1, argv[2], "b1");
+		GET_ARG(b2, argv[3], "b2");
+		GET_ARG(a0, argv[4], "a0");
+		GET_ARG(a1, argv[5], "a1");
+		GET_ARG(a2, argv[6], "a2");
+		break;
+	default:
+		LOG(LL_ERROR, "dsp: biquad.c: BUG: unknown filter type: %s (%d)\n", argv[0], ei->effect_number);
 		return NULL;
 	}
 
@@ -487,7 +406,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	for (i = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
 			state[i] = calloc(1, sizeof(struct biquad_state));
-			if (type == BIQUAD_NONE)
+			if (type == BIQUAD_BIQUAD)
 				biquad_init(state[i], b0, b1, b2, a0, a1, a2);
 			else
 				biquad_init_using_type(state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
