@@ -178,7 +178,7 @@ static void load_configs(void)
 static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 {
 	int r;
-	char *lc_n_old = NULL;
+	locale_t old_locale = 0, new_locale = 0;
 	struct stream_info stream;
 	struct ladspa_dsp_config *config = (struct ladspa_dsp_config *) desc->ImplementationData;
 	struct ladspa_dsp *d = calloc(1, sizeof(struct ladspa_dsp));
@@ -191,14 +191,25 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 	stream.channels = d->input_channels;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: begin effects chain\n");
 	if (config->lc_n != NULL) {
-		lc_n_old = strdup(setlocale(LC_NUMERIC, NULL));
-		setlocale(LC_NUMERIC, config->lc_n);
+		LOG(LL_VERBOSE, "ladspa_dsp: info: setting LC_NUMERIC to \"%s\"\n", config->lc_n);
+		new_locale = duplocale(uselocale((locale_t) 0));
+		if (new_locale == (locale_t) 0) {
+			LOG(LL_ERROR, "ladspa_dsp: error: duplocale() failed\n");
+			goto fail;
+		}
+		new_locale = newlocale(LC_NUMERIC_MASK, config->lc_n, new_locale);
+		if (new_locale == (locale_t) 0) {
+			LOG(LL_ERROR, "ladspa_dsp: error: newlocale() failed\n");
+			goto fail;
+		}
+		old_locale = uselocale(new_locale);
 	}
 	r = build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config_dir);
-	if (lc_n_old != NULL) {
-		setlocale(LC_NUMERIC, lc_n_old);
-		free(lc_n_old);
+	if (old_locale != (locale_t) 0) {
+		LOG(LL_VERBOSE, "ladspa_dsp: info: resetting locale\n");
+		uselocale(old_locale);
 	}
+	if (new_locale != (locale_t) 0) freelocale(new_locale);
 	if (r) goto fail;
 	LOG(LL_VERBOSE, "ladspa_dsp: info: end effects chain\n");
 	if (stream.channels != d->output_channels) {
