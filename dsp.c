@@ -583,7 +583,7 @@ int main(int argc, char *argv[])
 				k += w;
 				if (show_progress && k >= out_codec->fs) {
 					print_progress(in_codecs.head, out_codec, pos, pause, 0);
-					k = 0;
+					k -= out_codec->fs;
 				}
 			} while (r > 0);
 			next_input:
