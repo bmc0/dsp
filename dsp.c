@@ -495,7 +495,8 @@ int main(int argc, char *argv[])
 						reset_effects_chain(&chain);
 						goto next_input;
 					case 'c':
-						out_codec->pause(out_codec, pause = (pause) ? 0 : 1);
+						pause = !pause;
+						out_codec->pause(out_codec, pause);
 						break;
 					case 'e':
 						if (show_progress)
@@ -540,7 +541,7 @@ int main(int argc, char *argv[])
 						LOG(LL_VERBOSE, "dsp: info: dither %s\n", (do_dither) ? "on" : "off" );
 						break;
 					case 'v':
-						verbose_progress = (verbose_progress) ? 0 : 1;
+						verbose_progress = !verbose_progress;
 						break;
 					case 'q':
 						out_codec->drop(out_codec);
