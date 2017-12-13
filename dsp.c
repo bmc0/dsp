@@ -5,6 +5,7 @@
 #include <math.h>
 #include <signal.h>
 #include <termios.h>
+#include <time.h>
 #include "dsp.h"
 #include "effect.h"
 #include "codec.h"
@@ -21,6 +22,11 @@
 	((frames) != -1) ? (frames) / (fs) / 3600 : 0, \
 	((frames) != -1) ? ((frames) / (fs) / 60) % 60 : 0, \
 	((frames) != -1) ? fmod((double) (frames) / (fs), 60.0) : 0
+#if _POSIX_TIMERS && defined(_POSIX_MONOTONIC_CLOCK)
+#define HAVE_CLOCK_GETTIME
+#else
+#warning "clock_gettime() not available; Progress line throttling won't work."
+#endif
 
 struct codec_params {
 	const char *path, *type, *enc;
@@ -293,23 +299,41 @@ static void terminate(int s)
 	cleanup_and_exit(0);
 }
 
-static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int pause)
+#ifdef HAVE_CLOCK_GETTIME
+static int has_elapsed(struct timespec *then, double s)
 {
-	double in_delay_s = (double) in->delay(in) / in->fs;
-	double out_delay_s = (double) out->delay(out) / out->fs;
-	double effects_chain_delay_s = get_effects_chain_delay(&chain);
-	ssize_t delay = lround((out_delay_s + effects_chain_delay_s) * in->fs);
-	ssize_t p = (pos > delay) ? pos - delay : 0;
-	ssize_t rem = (in->frames > p) ? in->frames - p : 0;
-	fprintf(stderr, "\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
-		(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
-		TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
-	if (verbose_progress)
-		fprintf(stderr, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
-			in_delay_s * 1000.0, effects_chain_delay_s * 1000.0, out_delay_s * 1000.0, (in_delay_s + effects_chain_delay_s + out_delay_s) * 1000.0);
-	if (verbose_progress || dsp_globals.clip_count != 0)
-		fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
-	fprintf(stderr, "\033[K");
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	int r = ((now.tv_sec - then->tv_sec) + (now.tv_nsec - then->tv_nsec) / 1e9) >= s;
+	if (r) *then = now;
+	return r;
+}
+#endif
+
+static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int pause, int force)
+{
+#ifdef HAVE_CLOCK_GETTIME
+	static struct timespec then;
+	if (has_elapsed(&then, 0.1) || force) {
+#endif
+		double in_delay_s = (double) in->delay(in) / in->fs;
+		double out_delay_s = (double) out->delay(out) / out->fs;
+		double effects_chain_delay_s = get_effects_chain_delay(&chain);
+		ssize_t delay = lround((out_delay_s + effects_chain_delay_s) * in->fs);
+		ssize_t p = (pos > delay) ? pos - delay : 0;
+		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
+		fprintf(stderr, "\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
+			(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
+			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
+		if (verbose_progress)
+			fprintf(stderr, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
+				in_delay_s * 1000.0, effects_chain_delay_s * 1000.0, out_delay_s * 1000.0, (in_delay_s + effects_chain_delay_s + out_delay_s) * 1000.0);
+		if (verbose_progress || dsp_globals.clip_count != 0)
+			fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
+		fprintf(stderr, "\033[K");
+#ifdef HAVE_CLOCK_GETTIME
+	}
+#endif
 }
 
 static void write_out(ssize_t frames, sample_t *buf, int do_dither)
@@ -465,7 +489,7 @@ int main(int argc, char *argv[])
 			if (LOGLEVEL(LL_NORMAL))
 				print_io_info(in_codecs.head, "input");
 			if (show_progress)
-				print_progress(in_codecs.head, out_codec, pos, pause);
+				print_progress(in_codecs.head, out_codec, pos, pause, 1);
 			do {
 				while (interactive && (input_pending() || pause)) {
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
@@ -550,7 +574,7 @@ int main(int argc, char *argv[])
 						goto end_rw_loop;
 					}
 					if (show_progress)
-						print_progress(in_codecs.head, out_codec, pos, pause);
+						print_progress(in_codecs.head, out_codec, pos, pause, 1);
 				}
 				w = r = in_codecs.head->read(in_codecs.head, buf1, dsp_globals.buf_frames);
 				pos += r;
@@ -558,7 +582,7 @@ int main(int argc, char *argv[])
 				write_out(w, obuf, do_dither);
 				k += w;
 				if (show_progress && k >= out_codec->fs) {
-					print_progress(in_codecs.head, out_codec, pos, pause);
+					print_progress(in_codecs.head, out_codec, pos, pause, 0);
 					k = 0;
 				}
 			} while (r > 0);
