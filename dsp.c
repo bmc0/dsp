@@ -303,7 +303,7 @@ static int has_elapsed(struct timespec *then, double s)
 }
 #endif
 
-static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int pause, int force)
+static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int is_paused, int force)
 {
 #ifdef HAVE_CLOCK_GETTIME
 	static struct timespec then;
@@ -316,7 +316,7 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 		ssize_t p = (pos > delay) ? pos - delay : 0;
 		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
 		fprintf(stderr, "\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
-			(pause) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
+			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
 		if (verbose_progress)
 			fprintf(stderr, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
@@ -393,21 +393,21 @@ static void sig_handler_tstp(int s)
 	tstp_sig = 1;
 }
 
-static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *new_sa, int pause)
+static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *new_sa, int is_paused)
 {
 	if (interactive && term_attrs_saved) tcsetattr(0, TCSANOW, &term_attrs);
-	if (!pause) out_codec->pause(out_codec, 1);
+	if (!is_paused) out_codec->pause(out_codec, 1);
 	sigaction(SIGTSTP, old_sa, NULL);
 	raise(SIGTSTP);
 	tstp_sig = 0;
 	sigaction(SIGTSTP, new_sa, NULL);
 	if (interactive) setup_term();
-	if (!pause) out_codec->pause(out_codec, 0);
+	if (!is_paused) out_codec->pause(out_codec, 0);
 }
 
 int main(int argc, char *argv[])
 {
-	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
+	int k, is_paused = 0, do_dither = 0, effect_start, effect_argc;
 	ssize_t r, w, delay, pos = 0, out_frames;
 	double in_time = 0;
 	struct codec *c = NULL;
@@ -512,15 +512,15 @@ int main(int argc, char *argv[])
 			if (LOGLEVEL(LL_NORMAL))
 				print_io_info(in_codecs.head, "input");
 			if (show_progress)
-				print_progress(in_codecs.head, out_codec, pos, pause, 1);
+				print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 			do {
 				if (term_sig) goto got_term_sig;
 				if (tstp_sig) {
-					handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, pause);
+					handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, is_paused);
 					if (show_progress)
-						print_progress(in_codecs.head, out_codec, pos, pause, 1);
+						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 				}
-				while (interactive && (input_pending() || pause)) {
+				while (interactive && (input_pending() || is_paused)) {
 					if (term_sig) goto got_term_sig;
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
 					switch (getchar()) {
@@ -549,14 +549,14 @@ int main(int argc, char *argv[])
 						reset_effects_chain(&chain);
 						goto next_input;
 					case 'c':
-						pause = !pause;
-						out_codec->pause(out_codec, pause);
+						is_paused = !is_paused;
+						out_codec->pause(out_codec, is_paused);
 						break;
 					case 'e':
 						if (show_progress)
 							fputs("\033[1K\r", stderr);
 						LOG(LL_NORMAL, "dsp: info: rebuilding effects chain\n");
-						if (!pause && drain_effects) {
+						if (!is_paused && drain_effects) {
 							do {
 								w = dsp_globals.buf_frames;
 								obuf = drain_effects_chain(&chain, &w, buf1, buf2);
@@ -603,9 +603,9 @@ int main(int argc, char *argv[])
 							fputs("\033[1K\r", stderr);
 						goto end_rw_loop;
 					}
-					if (tstp_sig) handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, pause);
+					if (tstp_sig) handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, is_paused);
 					if (show_progress)
-						print_progress(in_codecs.head, out_codec, pos, pause, 1);
+						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 				}
 				w = r = in_codecs.head->read(in_codecs.head, buf1, dsp_globals.buf_frames);
 				pos += r;
@@ -613,7 +613,7 @@ int main(int argc, char *argv[])
 				write_out(w, obuf, do_dither);
 				k += w;
 				if (show_progress && k >= out_codec->fs) {
-					print_progress(in_codecs.head, out_codec, pos, pause, 0);
+					print_progress(in_codecs.head, out_codec, pos, is_paused, 0);
 					k -= out_codec->fs;
 				}
 			} while (r > 0);
@@ -626,7 +626,7 @@ int main(int argc, char *argv[])
 				fputs("\033[1K\r", stderr);
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
 				LOG(LL_NORMAL, "dsp: info: input sample rate and/or channels changed; rebuilding effects chain\n");
-				if (!pause && drain_effects) {
+				if (!is_paused && drain_effects) {
 					do {
 						w = dsp_globals.buf_frames;
 						obuf = drain_effects_chain(&chain, &w, buf1, buf2);
