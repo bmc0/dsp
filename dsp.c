@@ -41,7 +41,7 @@ enum {
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, input_mode = INPUT_MODE_CONCAT,
 	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0;
-static volatile sig_atomic_t term_sig = 0;
+static volatile sig_atomic_t term_sig = 0, tstp_sig = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -133,13 +133,13 @@ static void cleanup_and_exit(int s)
 static void setup_term(void)
 {
 	struct termios n;
-	if (term_attrs_saved == 0) {
+	if (!term_attrs_saved) {
 		tcgetattr(0, &term_attrs);
 		term_attrs_saved = 1;
-		n = term_attrs;
-		n.c_lflag &= ~(ICANON | ECHO);
-		tcsetattr(0, TCSANOW, &n);
 	}
+	n = term_attrs;
+	n.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(0, TCSANOW, &n);
 }
 
 static int input_pending(void)
@@ -148,7 +148,7 @@ static int input_pending(void)
 	fd_set f;
 	FD_ZERO(&f);
 	FD_SET(STDIN_FILENO, &f);
-	select(1, &f, NULL, NULL, &t);
+	if (select(1, &f, NULL, NULL, &t) == -1) return 0;
 	return FD_ISSET(STDIN_FILENO, &f);
 }
 
@@ -388,6 +388,23 @@ static void sig_handler_term(int s)
 	term_sig = s;
 }
 
+static void sig_handler_tstp(int s)
+{
+	tstp_sig = 1;
+}
+
+static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *new_sa, int pause)
+{
+	if (interactive && term_attrs_saved) tcsetattr(0, TCSANOW, &term_attrs);
+	if (!pause) out_codec->pause(out_codec, 1);
+	sigaction(SIGTSTP, old_sa, NULL);
+	raise(SIGTSTP);
+	tstp_sig = 0;
+	sigaction(SIGTSTP, new_sa, NULL);
+	if (interactive) setup_term();
+	if (!pause) out_codec->pause(out_codec, 0);
+}
+
 int main(int argc, char *argv[])
 {
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
@@ -397,13 +414,17 @@ int main(int argc, char *argv[])
 	struct stream_info stream;
 	struct codec_params p,
 		out_p = { NULL, NULL, NULL, -1, -1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_WRITE };
-	struct sigaction sa;
+	struct sigaction sa, old_sigtstp_sa, new_sigtstp_sa;
 
 	sa.sa_handler = sig_handler_term;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
+	new_sigtstp_sa.sa_handler = sig_handler_tstp;
+	sigemptyset(&new_sigtstp_sa.sa_mask);
+	new_sigtstp_sa.sa_flags = 0;
+	sigaction(SIGTSTP, &new_sigtstp_sa, &old_sigtstp_sa);
 
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
@@ -494,6 +515,11 @@ int main(int argc, char *argv[])
 				print_progress(in_codecs.head, out_codec, pos, pause, 1);
 			do {
 				if (term_sig) goto got_term_sig;
+				if (tstp_sig) {
+					handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, pause);
+					if (show_progress)
+						print_progress(in_codecs.head, out_codec, pos, pause, 1);
+				}
 				while (interactive && (input_pending() || pause)) {
 					if (term_sig) goto got_term_sig;
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
@@ -577,6 +603,7 @@ int main(int argc, char *argv[])
 							fputs("\033[1K\r", stderr);
 						goto end_rw_loop;
 					}
+					if (tstp_sig) handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, pause);
 					if (show_progress)
 						print_progress(in_codecs.head, out_codec, pos, pause, 1);
 				}
