@@ -41,6 +41,7 @@ enum {
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, input_mode = INPUT_MODE_CONCAT,
 	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0;
+static volatile sig_atomic_t term_sig = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
@@ -291,14 +292,6 @@ static void print_io_info(struct codec *c, const char *n)
 		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
 }
 
-static void terminate(int s)
-{
-	LOG(LL_NORMAL, "\ndsp: info: signal %d: terminating...\n", s);
-	if (out_codec != NULL)
-		out_codec->drop(out_codec);
-	cleanup_and_exit(0);
-}
-
 #ifdef HAVE_CLOCK_GETTIME
 static int has_elapsed(struct timespec *then, double s)
 {
@@ -390,6 +383,11 @@ static struct codec * init_out_codec(struct codec_params *p, struct stream_info 
 	return c;
 }
 
+static void sig_handler_term(int s)
+{
+	term_sig = s;
+}
+
 int main(int argc, char *argv[])
 {
 	int k, pause = 0, do_dither = 0, effect_start, effect_argc;
@@ -399,9 +397,13 @@ int main(int argc, char *argv[])
 	struct stream_info stream;
 	struct codec_params p,
 		out_p = { NULL, NULL, NULL, -1, -1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_WRITE };
+	struct sigaction sa;
 
-	signal(SIGINT, terminate);
-	signal(SIGTERM, terminate);
+	sa.sa_handler = sig_handler_term;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 
 	opterr = 0;
 	if (!isatty(STDIN_FILENO))
@@ -491,7 +493,9 @@ int main(int argc, char *argv[])
 			if (show_progress)
 				print_progress(in_codecs.head, out_codec, pos, pause, 1);
 			do {
+				if (term_sig) goto got_term_sig;
 				while (interactive && (input_pending() || pause)) {
+					if (term_sig) goto got_term_sig;
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
 					switch (getchar()) {
 					case 'h':
@@ -631,5 +635,11 @@ int main(int argc, char *argv[])
 	}
 	end_rw_loop:
 	cleanup_and_exit(0);
+
+	got_term_sig:
+	LOG(LL_NORMAL, "\ndsp: info: signal %d: terminating...\n", term_sig);
+	if (out_codec != NULL) out_codec->drop(out_codec);
+	goto end_rw_loop;
+
 	return 0;
 }
