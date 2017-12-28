@@ -138,7 +138,9 @@ static void setup_term(void)
 		term_attrs_saved = 1;
 	}
 	n = term_attrs;
-	n.c_lflag &= ~(ICANON | ECHO);
+	n.c_lflag &= ~(ICANON | ECHO | ISIG);
+	n.c_cc[VMIN] = 1;
+	n.c_cc[VTIME] = 0;
 	tcsetattr(0, TCSANOW, &n);
 }
 
@@ -398,7 +400,7 @@ static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *
 	if (interactive && term_attrs_saved) tcsetattr(0, TCSANOW, &term_attrs);
 	if (!is_paused) out_codec->pause(out_codec, 1);
 	sigaction(SIGTSTP, old_sa, NULL);
-	raise(SIGTSTP);
+	kill(0, SIGTSTP);
 	tstp_sig = 0;
 	sigaction(SIGTSTP, new_sa, NULL);
 	if (interactive) setup_term();
@@ -407,7 +409,7 @@ static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *
 
 int main(int argc, char *argv[])
 {
-	int k, is_paused = 0, do_dither = 0, effect_start, effect_argc;
+	int k, is_paused = 0, do_dither = 0, effect_start, effect_argc, ch;
 	ssize_t r, w, delay, pos = 0, out_frames;
 	double in_time = 0;
 	struct codec *c = NULL;
@@ -521,9 +523,9 @@ int main(int argc, char *argv[])
 						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 				}
 				while (interactive && (input_pending() || is_paused)) {
-					if (term_sig) goto got_term_sig;
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
-					switch (getchar()) {
+					ch = getchar();
+					switch (ch) {
 					case 'h':
 						if (show_progress)
 							fputs("\033[1K\r", stderr);
@@ -602,7 +604,14 @@ int main(int argc, char *argv[])
 						if (show_progress)
 							fputs("\033[1K\r", stderr);
 						goto end_rw_loop;
+					default:
+						if (term_attrs_saved) {
+							if (ch == term_attrs.c_cc[VINTR])      kill(0, SIGINT);
+							else if (ch == term_attrs.c_cc[VQUIT]) kill(0, SIGQUIT);
+							else if (ch == term_attrs.c_cc[VSUSP]) tstp_sig = 1;
+						}
 					}
+					if (term_sig) goto got_term_sig;
 					if (tstp_sig) handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, is_paused);
 					if (show_progress)
 						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
