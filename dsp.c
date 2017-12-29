@@ -364,6 +364,12 @@ static ssize_t do_seek(struct codec *in, struct codec *out, ssize_t pos, ssize_t
 	return pos;
 }
 
+static void do_pause(struct codec *in, struct codec *out, int pause_state)
+{
+	if (in != NULL)  in->pause(in, pause_state);
+	if (out != NULL) out->pause(out, pause_state);
+}
+
 static struct codec * init_out_codec(struct codec_params *p, struct stream_info *stream, ssize_t frames)
 {
 	struct codec *c;
@@ -398,13 +404,13 @@ static void sig_handler_tstp(int s)
 static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *new_sa, int is_paused)
 {
 	if (interactive && term_attrs_saved) tcsetattr(0, TCSANOW, &term_attrs);
-	if (!is_paused) out_codec->pause(out_codec, 1);
+	if (!is_paused) do_pause(in_codecs.head, out_codec, 1);
 	sigaction(SIGTSTP, old_sa, NULL);
 	kill(0, SIGTSTP);
 	tstp_sig = 0;
 	sigaction(SIGTSTP, new_sa, NULL);
 	if (interactive) setup_term();
-	if (!is_paused) out_codec->pause(out_codec, 0);
+	if (!is_paused) do_pause(in_codecs.head, out_codec, 0);
 }
 
 int main(int argc, char *argv[])
@@ -552,7 +558,7 @@ int main(int argc, char *argv[])
 						goto next_input;
 					case 'c':
 						is_paused = !is_paused;
-						out_codec->pause(out_codec, is_paused);
+						do_pause(in_codecs.head, out_codec, is_paused);
 						break;
 					case 'e':
 						if (show_progress)
