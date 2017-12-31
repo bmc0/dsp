@@ -174,10 +174,12 @@ Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 Sinc resampler. Ignores the channel selector.
 .TP
 \fBfir\fR [~/]\fIimpulse_path\fR
-Non-partitioned 64-bit FFT convolution.
+Non-partitioned 64-bit FFT convolution. Latency is equal to the length
+of the impulse.
 .TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIimpulse_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.
+Latency is equal to \fImin_part_len\fR (64 samples by default).
 \fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192.
 .TP
 \fBnoise\fR \fIlevel\fR

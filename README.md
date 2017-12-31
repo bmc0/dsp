@@ -180,9 +180,11 @@ and/or `remix` effects.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]impulse_path`  
-	Non-partitioned 64-bit FFT convolution.
+	Non-partitioned 64-bit FFT convolution. Latency is equal to the length
+	of the impulse.
 * `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
+	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
