@@ -176,7 +176,6 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = fir_effect_run;
 	e->delay = fir_effect_delay;
 	e->reset = fir_effect_reset;

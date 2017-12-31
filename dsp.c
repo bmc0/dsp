@@ -416,7 +416,7 @@ static void handle_tstp(const struct sigaction *old_sa, const struct sigaction *
 int main(int argc, char *argv[])
 {
 	int k, is_paused = 0, do_dither = 0, effect_start, effect_argc, ch;
-	ssize_t r, w, delay, pos = 0, out_frames;
+	ssize_t r, w, delay, pos = 0, out_frames, buf_len;
 	double in_time = 0;
 	struct codec *c = NULL;
 	struct stream_info stream;
@@ -489,10 +489,7 @@ int main(int argc, char *argv[])
 		if (in_time == -1)
 			out_frames = -1;
 		else
-			out_frames = lround(in_time * stream.fs
-				* get_effects_chain_total_ratio(&chain)
-				* in_codecs.head->channels / stream.channels  /* compensate for ratio due to number of channels */
-				* in_codecs.head->fs / stream.fs);            /* compensate for ratio due to sample rate */
+			out_frames = (ssize_t) llround(in_time * stream.fs);
 		if ((out_codec = init_out_codec(&out_p, &stream, out_frames)) == NULL)
 			cleanup_and_exit(1);
 		if (LOGLEVEL(LL_NORMAL))
@@ -505,9 +502,10 @@ int main(int argc, char *argv[])
 				interactive = 0;
 		}
 
-		buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-		buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-		/* LOG(LL_VERBOSE, "dsp: info: buffer samples: %zd\n", (size_t) ceil(dsp_globals.buf_frames * get_effects_chain_max_ratio(&chain)) * in_codecs.head->channels); */
+		buf_len = get_effects_chain_buffer_len(&chain, dsp_globals.buf_frames, in_codecs.head->channels);
+		buf1 = calloc(buf_len, sizeof(sample_t));
+		buf2 = calloc(buf_len, sizeof(sample_t));
+		/* LOG(LL_VERBOSE, "dsp: info: buffer length: %zd samples\n", (size_t) buf_len); */
 
 		if (interactive) {
 			setup_term();
@@ -595,10 +593,9 @@ int main(int argc, char *argv[])
 							if (LOGLEVEL(LL_NORMAL))
 								print_io_info(out_codec, "output");
 						}
-						free(buf1);
-						free(buf2);
-						buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-						buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+						buf_len = get_effects_chain_buffer_len(&chain, dsp_globals.buf_frames, in_codecs.head->channels);
+						buf1 = realloc(buf1, buf_len * sizeof(sample_t));
+						buf2 = realloc(buf2, buf_len * sizeof(sample_t));
 						do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
 						LOG(LL_VERBOSE, "dsp: info: dither %s\n", (do_dither) ? "on" : "off" );
 						break;
@@ -662,10 +659,9 @@ int main(int argc, char *argv[])
 					if (LOGLEVEL(LL_NORMAL))
 						print_io_info(out_codec, "output");
 				}
-				free(buf1);
-				free(buf2);
-				buf1 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
-				buf2 = calloc(ceil(dsp_globals.buf_frames * in_codecs.head->channels * get_effects_chain_max_ratio(&chain)), sizeof(sample_t));
+				buf_len = get_effects_chain_buffer_len(&chain, dsp_globals.buf_frames, in_codecs.head->channels);
+				buf1 = realloc(buf1, buf_len * sizeof(sample_t));
+				buf2 = realloc(buf2, buf_len * sizeof(sample_t));
 			}
 		}
 		do {

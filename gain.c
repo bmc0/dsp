@@ -94,7 +94,6 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = gain_effect_run;
 	e->plot = gain_effect_plot;
 	e->destroy = gain_effect_destroy;

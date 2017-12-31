@@ -108,7 +108,6 @@ struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *is
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = stats_effect_run;
 	e->plot = stats_effect_plot;
 	e->destroy = stats_effect_destroy;

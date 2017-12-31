@@ -58,7 +58,6 @@ struct effect * remix_effect_init(struct effect_info *ei, struct stream_info *is
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
 	e->ostream.channels = out_channels;
-	e->worst_case_ratio = e->ratio = (double) e->ostream.channels / e->istream.channels;
 	e->run = remix_effect_run;
 	e->destroy = remix_effect_destroy;
 	e->data = state;

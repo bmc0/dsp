@@ -231,27 +231,21 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 	goto done;
 }
 
-double get_effects_chain_max_ratio(struct effects_chain *chain)
+ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames, int in_channels)
 {
+	int gcd;
+	ssize_t frames = in_frames, len, max_len = in_frames * in_channels;
 	struct effect *e = chain->head;
-	double ratio = 1.0, max_ratio = 1.0;
 	while (e != NULL) {
-		ratio *= e->worst_case_ratio;
-		max_ratio = (ratio > max_ratio) ? ratio : max_ratio;
+		if (e->ostream.fs != e->istream.fs) {
+			gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			frames = ratio_mult_ceil(frames, e->ostream.fs / gcd, e->istream.fs / gcd);
+		}
+		len = frames * e->ostream.channels;
+		if (len  > max_len) max_len = len;
 		e = e->next;
 	}
-	return max_ratio;
-}
-
-double get_effects_chain_total_ratio(struct effects_chain *chain)
-{
-	struct effect *e = chain->head;
-	double ratio = 1.0;
-	while (e != NULL) {
-		ratio *= e->ratio;
-		e = e->next;
-	}
-	return ratio;
+	return max_len;
 }
 
 sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
@@ -336,15 +330,18 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
-	ssize_t dframes = -1;
+	int gcd;
+	ssize_t ftmp = *frames, dframes = -1;
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
-	double fratio = 1.0;
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == -1) {
-		dframes = *frames * fratio;
+		dframes = ftmp;
 		if (e->drain != NULL) e->drain(e, &dframes, ibuf);
 		else dframes = -1;
-		fratio *= e->ratio * e->istream.channels / e->ostream.channels;
+		if (e->ostream.fs != e->istream.fs) {
+			gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			ftmp = ratio_mult_ceil(ftmp, e->ostream.fs / gcd, e->istream.fs / gcd);
+		}
 		e = e->next;
 	}
 	*frames = dframes;

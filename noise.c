@@ -52,7 +52,6 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = noise_effect_run;
 	e->destroy = noise_effect_destroy;
 	state = calloc(1, sizeof(struct noise_state));

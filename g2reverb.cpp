@@ -354,7 +354,6 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = g2reverb_effect_run;
 	e->reset = g2reverb_effect_reset;
 	e->destroy = g2reverb_effect_destroy;

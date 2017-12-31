@@ -397,7 +397,6 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = biquad_effect_run;
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;

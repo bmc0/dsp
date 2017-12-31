@@ -105,7 +105,6 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->worst_case_ratio = e->ratio = 1.0;
 	e->run = delay_effect_run;
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;

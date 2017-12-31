@@ -15,7 +15,6 @@ struct effect {
 	const char *name;
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
-	double ratio, worst_case_ratio;
 	/* All functions may be NULL */
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
@@ -36,8 +35,7 @@ void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
 int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);
 int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, char *, const char *, const char *);
-double get_effects_chain_max_ratio(struct effects_chain *);
-double get_effects_chain_total_ratio(struct effects_chain *);
+ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);

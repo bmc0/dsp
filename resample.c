@@ -26,7 +26,8 @@ struct resample_state {
 sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
-	ssize_t i, k, iframes = 0, oframes = 0, max_oframes = (double) *frames * e->worst_case_ratio;
+	ssize_t i, k, iframes = 0, oframes = 0;
+	const ssize_t max_oframes = ratio_mult_ceil(*frames, state->ratio.n, state->ratio.d);
 
 	while (iframes < *frames) {
 		while (state->in_buf_pos < state->in_len && iframes < *frames) {
@@ -80,7 +81,7 @@ ssize_t resample_effect_delay(struct effect *e)
 		frames += state->out_delay;  /* filter delay */
 		frames += state->out_len - state->out_buf_pos;  /* pending output frames */
 	}
-	frames += state->in_buf_pos * state->ratio.n / state->ratio.d;  /* pending input frames */
+	frames += ratio_mult_ceil(state->in_buf_pos, state->ratio.n, state->ratio.d);  /* pending input frames */
 	return frames;
 }
 
@@ -105,7 +106,7 @@ void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 				state->drain_frames += state->out_delay;  /* filter delay */
 				state->drain_frames += state->out_len - state->out_buf_pos;  /* pending output frames */
 			}
-			state->drain_frames += state->in_buf_pos * state->ratio.n / state->ratio.d;  /* pending input frames */
+			state->drain_frames += ratio_mult_ceil(state->in_buf_pos, state->ratio.n, state->ratio.d);  /* pending input frames */
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
@@ -144,7 +145,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	struct effect *e;
 	struct resample_state *state;
 	char *endptr;
-	int rate, max_rate, min_rate, max_factor, gcd, rem, i;
+	int rate, max_rate, min_rate, max_factor, gcd, i;
 	double bw = default_bw;
 	sample_t *sinc, width, fc, m;
 	fftw_plan sinc_plan;
@@ -175,8 +176,6 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	e->istream.fs = istream->fs;
 	e->ostream.fs = rate;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->ratio = (double) rate / istream->fs;
-	e->worst_case_ratio = ceil((double) rate / istream->fs);
 	e->run = resample_effect_run;
 	e->delay = resample_effect_delay;
 	e->reset = resample_effect_reset;
@@ -186,17 +185,9 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	state = calloc(1, sizeof(struct resample_state));
 	e->data = state;
 
-	/* find greatest common divisor using Euclid's algorithm */
-	gcd = rate;
-	rem = istream->fs;
-	do {
-		i = rem;
-		rem = gcd % rem;
-		gcd = i;
-	} while (rem != 0);
-
 	max_rate = MAXIMUM(rate, istream->fs);
 	min_rate = MINIMUM(rate, istream->fs);
+	gcd = find_gcd(rate, istream->fs);
 	state->ratio.n = rate / gcd;
 	state->ratio.d = istream->fs / gcd;
 	max_factor = MAXIMUM(state->ratio.n, state->ratio.d);
@@ -207,8 +198,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	m = round(m_fact / (width / max_rate));
 
 	/* determine array lengths */
-	state->m = (size_t) (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
-	i = ceil((double) state->m / max_factor);  /* calculate multiplier */
+	state->m = (ssize_t) (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
+	i = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;  /* calculate multiplier */
 	state->sinc_len = max_factor * i;
 	state->in_len = state->ratio.d * i;
 	state->out_len = state->ratio.n * i;

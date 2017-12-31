@@ -65,4 +65,21 @@ static __inline__ sample_t tpdf_dither_sample(sample_t s, int prec)
 	return s + n1 - n2;
 }
 
+static __inline__ ssize_t ratio_mult_ceil(ssize_t v, int n, int d)
+{
+	long long int r = (long long int) v * n;
+	return (ssize_t) ((r % d != 0) ? r / d + 1 : r / d);
+}
+
+static __inline__ int find_gcd(int a, int b)
+{
+	int c;
+	while (b != 0) {
+		c = b;
+		b = a % b;
+		a = c;
+	}
+	return a;
+}
+
 #endif

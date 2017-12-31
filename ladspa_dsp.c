@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
-#include <math.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
@@ -19,10 +18,9 @@
 
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
-	size_t buf_frames;
+	size_t frames;
 	int input_channels, output_channels;
 	struct effects_chain chain;
-	double max_ratio;
 	LADSPA_Data **ports;
 };
 
@@ -220,7 +218,6 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 		LOG(LL_ERROR, "ladspa_dsp: error: sample rate mismatch\n");
 		goto fail;
 	}
-	d->max_ratio = get_effects_chain_max_ratio(&d->chain);
 	return d;
 
 	fail:
@@ -241,14 +238,16 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 {
 	unsigned long i, j, k;
 	sample_t *obuf;
-	ssize_t w = s;
+	ssize_t w = s, buf_len;
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 
-	if (s > d->buf_frames) {
-		d->buf_frames = s;
-		d->buf1 = realloc(d->buf1, (size_t) ceil(s * d->input_channels * d->max_ratio) * sizeof(sample_t));
-		d->buf2 = realloc(d->buf2, (size_t) ceil(s * d->input_channels * d->max_ratio) * sizeof(sample_t));
-		LOG(LL_VERBOSE, "ladspa_dsp: info: buf_frames=%zd\n", d->buf_frames);
+	if (s == 0) return;
+	if (s > d->frames) {
+		d->frames = s;
+		buf_len = get_effects_chain_buffer_len(&d->chain, s, d->input_channels);
+		d->buf1 = realloc(d->buf1, buf_len * sizeof(sample_t));
+		d->buf2 = realloc(d->buf2, buf_len * sizeof(sample_t));
+		LOG(LL_VERBOSE, "ladspa_dsp: info: frames=%zd\n", d->frames);
 	}
 
 	for (i = j = 0; i < s; i++)
