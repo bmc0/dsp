@@ -316,7 +316,7 @@ Apply effects from a file:
 .EE
 .SH LADSPA FRONTEND
 .SS Configuration
-The default search paths for the configuration directory are as follows:
+\fBladspa_dsp\fR looks for configuration files in the following directories:
 
 .IP *
 $XDG_CONFIG_HOME/ladspa_dsp
@@ -325,13 +325,12 @@ $HOME/.config/ladspa_dsp (if $XDG_CONFIG_HOME is not set)
 .IP *
 /etc/ladspa_dsp
 .PP
-To override the default search paths, set the `LADSPA_DSP_CONFIG' environment
-variable to the desired path.
+To override the default directories, set the `LADSPA_DSP_CONFIG_PATH'
+environment variable to the desired path(s) (colon-separated).
 .PP
-Each file in the configuration directory that is named either \fIconfig\fR or
-\fIconfig_<name>\fR (where `<name>' is any string) is loaded as a separate plugin
-type. The label is either \fIladspa_dsp\fR (for \fIconfig\fR) or \fIladspa_dsp:<name>\fR
-(for \fIconfig_<name>\fR).
+Each file that is named either \fIconfig\fR or \fIconfig_<name>\fR (where \fI<name>\fR is
+any string) is loaded as a separate plugin. The plugin label is either
+\fIladspa_dsp\fR (for \fIconfig\fR) or \fIladspa_dsp:<name>\fR (for \fIconfig_<name>\fR).
 .PP
 The config file is a simple key-value format. Leading whitespace is ignored.
 The valid keys are:
@@ -360,7 +359,7 @@ Example configuration:
 .EE
 .PP
 Relative file paths in the \fBeffects_chain\fR line are relative to the
-configuration directory.
+directory in which the configuration file resides.
 .PP
 The loglevel can be set to `VERBOSE', `NORMAL', or `SILENT' through the
 `LADSPA_DSP_LOGLEVEL' environment variable.

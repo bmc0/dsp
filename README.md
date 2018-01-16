@@ -306,19 +306,18 @@ Apply effects from a file:
 
 #### Configuration
 
-The default search paths for the configuration directory are as follows:
+`ladspa_dsp` looks for configuration files in the following directories:
 
 * `$XDG_CONFIG_HOME/ladspa_dsp`
 * `$HOME/.config/ladspa_dsp` (if `$XDG_CONFIG_HOME` is not set)
 * `/etc/ladspa_dsp`
 
-To override the default search paths, set the `LADSPA_DSP_CONFIG` environment
-variable to the desired path.
+To override the default directories, set the `LADSPA_DSP_CONFIG_PATH`
+environment variable to the desired path(s) (colon-separated).
 
-Each file in the configuration directory that is named either `config` or
-`config_<name>` (where `<name>` is any string) is loaded as a separate plugin
-type. The label is either `ladspa_dsp` (for `config`) or `ladspa_dsp:<name>`
-(for `config_<name>`).
+Each file that is named either `config` or `config_<name>` (where `<name>` is
+any string) is loaded as a separate plugin. The plugin label is either
+`ladspa_dsp` (for `config`) or `ladspa_dsp:<name>` (for `config_<name>`).
 
 The config file is a simple key-value format. Leading whitespace is ignored.
 The valid keys are:
@@ -343,7 +342,7 @@ Example configuration:
 	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
 
 Relative file paths in the `effects_chain` line are relative to the
-configuration directory.
+directory in which the configuration file resides.
 
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.
