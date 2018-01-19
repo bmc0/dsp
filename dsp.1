@@ -332,8 +332,8 @@ Each file that is named either \fIconfig\fR or \fIconfig_<name>\fR (where \fI<na
 any string) is loaded as a separate plugin. The plugin label is either
 \fIladspa_dsp\fR (for \fIconfig\fR) or \fIladspa_dsp:<name>\fR (for \fIconfig_<name>\fR).
 .PP
-The config file is a simple key-value format. Leading whitespace is ignored.
-The valid keys are:
+Configuration files are a simple key-value format. Leading whitespace is
+ignored. The valid keys are:
 .TP
 .B input_channels
 Number of input channels. Default value is 1. May be left unset unless
@@ -344,7 +344,10 @@ Number of output channels. Default value is 1. Initialization will fail
 if this value is set incorrectly.
 .TP
 .B LC_NUMERIC
-Set `LC_NUMERIC' to the given value while building the effects chain.
+Set `LC_NUMERIC' to the given value while building the effects chain. If
+the decimal separator defined by your system locale is something other than
+`.', you should set this to `C' (to use `.' as the decimal separator) or an
+empty value (to use the decimal separator defined by your locale).
 .TP
 .B effects_chain
 String to build the effects chain. The format is the same as an effects
@@ -355,6 +358,7 @@ Example configuration:
 	# This is a comment
 	input_channels=1
 	output_channels=1
+	LC_NUMERIC=C
 	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
 .EE
 .PP

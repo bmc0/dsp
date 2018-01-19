@@ -319,8 +319,8 @@ Each file that is named either `config` or `config_<name>` (where `<name>` is
 any string) is loaded as a separate plugin. The plugin label is either
 `ladspa_dsp` (for `config`) or `ladspa_dsp:<name>` (for `config_<name>`).
 
-The config file is a simple key-value format. Leading whitespace is ignored.
-The valid keys are:
+Configuration files are a simple key-value format. Leading whitespace is
+ignored. The valid keys are:
 
 * `input_channels`  
 	Number of input channels. Default value is `1`. May be left unset unless
@@ -329,7 +329,10 @@ The valid keys are:
 	Number of output channels. Default value is `1`. Initialization will fail
 	if this value is set incorrectly.
 * `LC_NUMERIC`  
-	Set `LC_NUMERIC` to the given value while building the effects chain.
+	Set `LC_NUMERIC` to the given value while building the effects chain. If
+	the decimal separator defined by your system locale is something other than
+	`.`, you should set this to `C` (to use `.` as the decimal separator) or an
+	empty value (to use the decimal separator defined by your locale).
 * `effects_chain`  
 	String to build the effects chain. The format is the same as an effects
 	file, but only a single line is interpreted.
@@ -339,6 +342,7 @@ Example configuration:
 	# This is a comment
 	input_channels=1
 	output_channels=1
+	LC_NUMERIC=C
 	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
 
 Relative file paths in the `effects_chain` line are relative to the
