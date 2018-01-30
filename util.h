@@ -9,7 +9,7 @@
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 #define CHECK_RANGE(cond, name, action) \
 	if (!(cond)) { \
-		LOG(LL_ERROR, "dsp: %s: error: %s out of range\n", argv[0], name); \
+		LOG(LL_ERROR, "%s: %s: error: %s out of range\n", dsp_globals.prog_name, argv[0], name); \
 		action; \
 	}
 #define CHECK_FREQ(var, fs, name, action) \

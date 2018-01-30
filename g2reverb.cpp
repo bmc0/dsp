@@ -280,7 +280,7 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
 	if (n_channels != 2) {
-		LOG(LL_ERROR, "dsp: %s: error: number of input channels must be 2\n", argv[0]);
+		LOG(LL_ERROR, "%s: %s: error: number of input channels must be 2\n", dsp_globals.prog_name, argv[0]);
 		return NULL;
 	}
 
@@ -322,14 +322,14 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 		CHECK_ENDPTR(argv[i], endptr, "tail_level", return NULL);
 	}
 	if (argc > 9 || (!wet_only && argc > 8)) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 
 	if (wet_only)
 		dryslev = 0.0;
-	LOG(LL_VERBOSE, "dsp: %s: info: wet_only=%s room_size=%.1f reverb_time=%.2f input_bandwidth=%.2f damping=%.2f dry_level=%.2f reflection_level=%.2f tail_level=%.2f\n",
-		argv[0], (wet_only) ? "true" : "false", roomsize, revbtime, ipbandw, damping, 20.0 * log10(dryslev), 20.0 * log10(refllev), 20.0 * log10(taillev));
+	LOG(LL_VERBOSE, "%s: %s: info: wet_only=%s room_size=%.1f reverb_time=%.2f input_bandwidth=%.2f damping=%.2f dry_level=%.2f reflection_level=%.2f tail_level=%.2f\n",
+		dsp_globals.prog_name, argv[0], (wet_only) ? "true" : "false", roomsize, revbtime, ipbandw, damping, 20.0 * log10(dryslev), 20.0 * log10(refllev), 20.0 * log10(taillev));
 
 	state = (struct g2reverb_state *) calloc(1, sizeof(struct g2reverb_state));
 	state->c1 = state->c2 = -1;

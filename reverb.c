@@ -344,18 +344,19 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 		CHECK_RANGE(wet_gain_dB >= -20.0 && wet_gain_dB <= 10.0, "wet_gain", return NULL);
 	}
 	if (argc > 8 || (!wet_only && argc > 7)) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 
-	LOG(LL_VERBOSE, "dsp: %s: info: wet_only=%s reverberance=%.1f hf_damping=%.1f room_scale=%.1f stereo_depth=%.1f pre_delay=%.4f wet_gain=%.2f\n", argv[0], (wet_only) ? "true" : "false", reverberance, hf_damping, room_scale, stereo_depth, pre_delay_ms / 1000.0, wet_gain_dB);
+	LOG(LL_VERBOSE, "%s: %s: info: wet_only=%s reverberance=%.1f hf_damping=%.1f room_scale=%.1f stereo_depth=%.1f pre_delay=%.4f wet_gain=%.2f\n",
+		dsp_globals.prog_name, argv[0], (wet_only) ? "true" : "false", reverberance, hf_damping, room_scale, stereo_depth, pre_delay_ms / 1000.0, wet_gain_dB);
 
 	state = calloc(1, sizeof(struct reverb_state));
 	for (i = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++state->n_channels;
 	if (state->n_channels != 2 && stereo_depth != 0.0) {
-		LOG(LL_NORMAL, "dsp: %s: warning: stereo_depth not applicable when channels != 2\n", argv[0]);
+		LOG(LL_NORMAL, "%s: %s: warning: stereo_depth not applicable when channels != 2\n", dsp_globals.prog_name, argv[0]);
 		stereo_depth = 0.0;
 	}
 	if (state->n_channels == 2) {

@@ -184,12 +184,12 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	info->channels = channels;
 	info->format = ((type == NULL) ? 0 : sndfile_get_type(type)) | sndfile_get_sf_enc(enc) | sndfile_get_endian(endian);
 	if (info->format == -1) {
-		LOG(LL_ERROR, "dsp: sndfile: error: bad format type or encoding: %s: type=%s enc=%s\n", path, type, enc);
+		LOG(LL_ERROR, "%s: sndfile: error: bad format type or encoding: %s: type=%s enc=%s\n", dsp_globals.prog_name, path, type, enc);
 		goto fail;
 	}
 	f = sf_open(path, (mode == CODEC_MODE_WRITE) ? SFM_WRITE : SFM_READ, info);
 	if (f == NULL) {
-		LOG(LL_OPEN_ERROR, "dsp: sndfile: error: failed to open file: %s: %s\n", path, sf_strerror(NULL));
+		LOG(LL_OPEN_ERROR, "%s: sndfile: error: failed to open file: %s: %s\n", dsp_globals.prog_name, path, sf_strerror(NULL));
 		goto fail;
 	}
 

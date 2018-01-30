@@ -141,7 +141,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	fftw_plan filter_plan;
 
 	if (argc != 2) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 	for (i = n_channels = 0; i < istream->channels; ++i)
@@ -150,27 +150,27 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	p = construct_full_path(dir, argv[1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG(LL_ERROR, "dsp: %s: error: failed to open impulse file: %s\n", argv[0], p);
+		LOG(LL_ERROR, "%s: %s: error: failed to open impulse file: %s\n", dsp_globals.prog_name, argv[0], p);
 		free(p);
 		return NULL;
 	}
 	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG(LL_ERROR, "dsp: %s: error: channel mismatch: channels=%d impulse_channels=%d\n", argv[0], n_channels, c_filter->channels);
+		LOG(LL_ERROR, "%s: %s: error: channel mismatch: channels=%d impulse_channels=%d\n", dsp_globals.prog_name, argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->fs != istream->fs) {
-		LOG(LL_ERROR, "dsp: %s: error: sample rate mismatch: fs=%d impulse_fs=%d\n", argv[0], istream->fs, c_filter->fs);
+		LOG(LL_ERROR, "%s: %s: error: sample rate mismatch: fs=%d impulse_fs=%d\n", dsp_globals.prog_name, argv[0], istream->fs, c_filter->fs);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->frames < 1) {
-		LOG(LL_ERROR, "dsp: %s: error: impulse length must be >= 1\n", argv[0]);
+		LOG(LL_ERROR, "%s: %s: error: impulse length must be >= 1\n", dsp_globals.prog_name, argv[0]);
 		destroy_codec(c_filter);
 		return NULL;
 	}
-	LOG(LL_VERBOSE, "dsp: %s: info: filter_frames=%zd\n", argv[0], c_filter->frames);
+	LOG(LL_VERBOSE, "%s: %s: info: filter_frames=%zd\n", dsp_globals.prog_name, argv[0], c_filter->frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -199,13 +199,13 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	filter_plan = fftw_plan_dft_r2c_1d(state->len * 2, filter, state->tmp_fr, FFTW_ESTIMATE);
 	if (c_filter->channels == 1) {
 		if (c_filter->read(c_filter, filter, state->len) != state->len)
-			LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
+			LOG(LL_ERROR, "%s: %s: warning: short read\n", dsp_globals.prog_name, argv[0]);
 		fftw_execute(filter_plan);
 	}
 	else {
 		tmp_buf = calloc(c_filter->frames * c_filter->channels, sizeof(sample_t));
 		if (c_filter->read(c_filter, tmp_buf, state->len) != state->len)
-			LOG(LL_ERROR, "dsp: %s: warning: short read\n", argv[0]);
+			LOG(LL_ERROR, "%s: %s: warning: short read\n", dsp_globals.prog_name, argv[0]);
 	}
 	for (i = k = 0; i < e->ostream.channels; ++i) {
 		state->output[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));

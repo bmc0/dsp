@@ -64,11 +64,11 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	double freq, sep_db, sep;
 
 	if (argc != 3) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 	if (istream->channels != 2) {
-		LOG(LL_ERROR, "dsp: %s: error: channels != 2\n", argv[0]);
+		LOG(LL_ERROR, "%s: %s: error: channels != 2\n", dsp_globals.prog_name, argv[0]);
 		return NULL;
 	}
 	freq = parse_freq(argv[1], &endptr);

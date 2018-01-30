@@ -158,18 +158,18 @@ struct codec * init_codec(const char *path, const char *type, const char *enc, i
 	if (type != NULL) {
 		info = get_codec_info_by_type(type);
 		if (info == NULL) {
-			LOG(LL_ERROR, "dsp: error: bad type: %s\n", type);
+			LOG(LL_ERROR, "%s: error: bad type: %s\n", dsp_globals.prog_name, type);
 			return NULL;
 		}
 		if (info->modes & mode)
 			return info->init(path, info->type, enc, fs, channels, endian, mode);
-		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
+		LOG(LL_ERROR, "%s: %s: error: mode '%c' not supported\n", dsp_globals.prog_name, info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
 	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
 		if (info->modes & mode)
 			return info->init(path, info->type, enc, fs, channels, endian, mode);
-		LOG(LL_ERROR, "dsp: %s: error: mode '%c' not supported\n", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
+		LOG(LL_ERROR, "%s: %s: error: mode '%c' not supported\n", dsp_globals.prog_name, info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
 	c = NULL;
@@ -177,7 +177,7 @@ struct codec * init_codec(const char *path, const char *type, const char *enc, i
 		dsp_globals.loglevel = LL_ERROR;
 	if (mode == CODEC_MODE_WRITE) {
 		if (LENGTH(fallback_output_codecs) == 0)
-			LOG(LL_ERROR, "dsp: error: no fallback output(s) available and no output given\n");
+			LOG(LL_ERROR, "%s: error: no fallback output(s) available and no output given\n", dsp_globals.prog_name);
 		for (i = 0; i < LENGTH(fallback_output_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_output_codecs[i]);
 			if (info != NULL && info->modes & mode && (c = info->init(path, info->type, enc, fs, channels, endian, mode)) != NULL)

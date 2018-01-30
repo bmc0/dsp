@@ -52,7 +52,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG(LL_ERROR, "dsp: pcm: read failed: %s\n", strerror(errno));
+		LOG(LL_ERROR, "%s: pcm: read failed: %s\n", dsp_globals.prog_name, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -71,7 +71,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
 		n = write(state->fd, state->buf, n * c->channels * state->enc_info->bytes);
 		if (n == -1) {
-			LOG(LL_ERROR, "dsp: pcm: write failed: %s\n", strerror(errno));
+			LOG(LL_ERROR, "%s: pcm: write failed: %s\n", dsp_globals.prog_name, strerror(errno));
 			state->pos += i;
 			return i;
 		}
@@ -130,17 +130,17 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	struct codec *c = NULL;
 
 	if ((enc_info = pcm_get_enc_info(enc)) == NULL) {
-		LOG(LL_ERROR, "dsp: pcm: error: bad encoding: %s\n", enc);
+		LOG(LL_ERROR, "%s: pcm: error: bad encoding: %s\n", dsp_globals.prog_name, enc);
 		goto fail;
 	}
 	if (!(endian == CODEC_ENDIAN_DEFAULT || endian == CODEC_ENDIAN_NATIVE)) {
-		LOG(LL_ERROR, "dsp: pcm: error: endian conversion not supported\n");
+		LOG(LL_ERROR, "%s: pcm: error: endian conversion not supported\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	if (strcmp(path, "-") == 0)
 		fd = (mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
 	else if ((fd = open(path, (mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
-		LOG(LL_OPEN_ERROR, "dsp: pcm: error: failed to open file: %s: %s\n", path, strerror(errno));
+		LOG(LL_OPEN_ERROR, "%s: pcm: error: failed to open file: %s: %s\n", dsp_globals.prog_name, path, strerror(errno));
 		goto fail;
 	}
 

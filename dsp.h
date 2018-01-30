@@ -28,6 +28,7 @@ struct dsp_globals {
 	int loglevel;
 	ssize_t buf_frames;
 	ssize_t max_buf_ratio;
+	const char *prog_name;
 };
 
 struct stream_info {

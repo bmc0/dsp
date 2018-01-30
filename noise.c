@@ -39,7 +39,7 @@ struct effect * noise_effect_init(struct effect_info *ei, struct stream_info *is
 	struct noise_state *state;
 
 	if (argc != 2) {
-		LOG(LL_ERROR, "dsp: %s: usage %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 

@@ -205,19 +205,19 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
 	if ((err = avformat_open_input(&state->container, path, NULL, NULL)) < 0) {
-		LOG(LL_OPEN_ERROR, "dsp: ffmpeg: error: failed to open %s: %s: %s\n",
+		LOG(LL_OPEN_ERROR, "%s: ffmpeg: error: failed to open %s: %s: %s\n", dsp_globals.prog_name,
 			(mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avformat_find_stream_info(state->container, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not find stream info: %s\n", av_err2str(err));
+		LOG(LL_ERROR, "%s: ffmpeg: error: could not find stream info: %s\n", dsp_globals.prog_name, av_err2str(err));
 		goto fail;
 	}
 
 	/* find audio stream */
 	state->stream_index = av_find_best_stream(state->container, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
 	if (state->stream_index < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not find an audio stream\n");
+		LOG(LL_ERROR, "%s: ffmpeg: error: could not find an audio stream\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	st = state->container->streams[state->stream_index];
@@ -225,26 +225,26 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	/* open codec */
 	codec = avcodec_find_decoder(st->codecpar->codec_id);
 	if (!codec) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to find decoder\n");
+		LOG(LL_ERROR, "%s: ffmpeg: error: failed to find decoder\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	state->cc = avcodec_alloc_context3(codec);
 	if (!state->cc) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to allocate codec context\n");
+		LOG(LL_ERROR, "%s: ffmpeg: error: failed to allocate codec context\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	if ((err = avcodec_parameters_to_context(state->cc, st->codecpar)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to copy codec parameters to decoder context: %s\n", av_err2str(err));
+		LOG(LL_ERROR, "%s: ffmpeg: error: failed to copy codec parameters to decoder context: %s\n", dsp_globals.prog_name, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avcodec_open2(state->cc, codec, NULL)) < 0) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: could not open required decoder: %s\n", av_err2str(err));
+		LOG(LL_ERROR, "%s: ffmpeg: error: could not open required decoder: %s\n", dsp_globals.prog_name, av_err2str(err));
 		goto fail;
 	}
 
 	state->frame = av_frame_alloc();
 	if (state->frame == NULL) {
-		LOG(LL_ERROR, "dsp: ffmpeg: error: failed to allocate frame\n");
+		LOG(LL_ERROR, "%s: ffmpeg: error: failed to allocate frame\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	state->planar = av_sample_fmt_is_planar(state->cc->sample_fmt);
@@ -293,7 +293,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		state->readp_func = read_buf_doublep;
 		break;
 	default:
-		LOG(LL_ERROR, "dsp: ffmpeg: error: unhandled sample format\n");
+		LOG(LL_ERROR, "%s: ffmpeg: error: unhandled sample format\n", dsp_globals.prog_name);
 		goto fail;
 	}
 	c->frames = st->duration * st->time_base.num * c->fs / st->time_base.den;

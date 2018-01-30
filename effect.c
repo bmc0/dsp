@@ -126,7 +126,7 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			if (last_selector_index == -1)
 				SET_SELECTOR(tmp_channel_selector, stream->channels);
 			else if (parse_selector(&argv[last_selector_index][1], tmp_channel_selector, stream->channels)) {
-				LOG(LL_VERBOSE, "dsp: note: the last effect changed the number of channels\n");
+				LOG(LL_VERBOSE, "%s: note: the last effect changed the number of channels\n", dsp_globals.prog_name);
 				free(tmp_channel_selector);
 				goto fail;
 			}
@@ -147,15 +147,15 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 		for (; i < argc && get_effect_info(argv[i]) == NULL && argv[i][0] != ':' && argv[i][0] != '@' && !(argv[i][0] == '!' && argv[i][1] == '\0'); ++i);
 		if (ei == NULL) {
 			if (allow_fail)
-				LOG(LL_VERBOSE, "dsp: warning: no such effect: %s\n", argv[k]);
+				LOG(LL_VERBOSE, "%s: warning: no such effect: %s\n", dsp_globals.prog_name, argv[k]);
 			else {
-				LOG(LL_ERROR, "dsp: error: no such effect: %s\n", argv[k]);
+				LOG(LL_ERROR, "%s: error: no such effect: %s\n", dsp_globals.prog_name, argv[k]);
 				goto fail;
 			}
 		}
 		else {
 			if (LOGLEVEL(LL_VERBOSE)) {
-				fprintf(stderr, "dsp: effect:");
+				fprintf(stderr, "%s: effect:", dsp_globals.prog_name);
 				for (j = 0; j < i - k; ++j)
 					fprintf(stderr, " %s", argv[k + j]);
 				fprintf(stderr, "; channels=%d [", stream->channels);
@@ -165,14 +165,14 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 			e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
 			if (e == NULL) {
 				if (allow_fail)
-					LOG(LL_VERBOSE, "dsp: warning: failed to initialize non-essential effect: %s\n", argv[k]);
+					LOG(LL_VERBOSE, "%s: warning: failed to initialize non-essential effect: %s\n", dsp_globals.prog_name, argv[k]);
 				else {
-					LOG(LL_ERROR, "dsp: error: failed to initialize effect: %s\n", argv[k]);
+					LOG(LL_ERROR, "%s: error: failed to initialize effect: %s\n", dsp_globals.prog_name, argv[k]);
 					goto fail;
 				}
 			}
 			else if (e->run == NULL) {
-				LOG(LL_VERBOSE, "dsp: info: not using effect: %s\n", argv[k]);
+				LOG(LL_VERBOSE, "%s: info: not using effect: %s\n", dsp_globals.prog_name, argv[k]);
 				destroy_effect(e);
 			}
 			else {
@@ -200,7 +200,7 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 
 	p = construct_full_path(dir, path);
 	if (!(c = get_file_contents(p))) {
-		LOG(LL_ERROR, "dsp: info: failed to load effects file: %s: %s\n", p, strerror(errno));
+		LOG(LL_ERROR, "%s: info: failed to load effects file: %s: %s\n", dsp_globals.prog_name, p, strerror(errno));
 		goto fail;
 	}
 	if (gen_argv_from_string(c, &argc, &argv))
@@ -213,10 +213,10 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 	}
 	else
 		*tmp = '\0';
-	LOG(LL_VERBOSE, "dsp: info: begin effects file: %s\n", p);
+	LOG(LL_VERBOSE, "%s: info: begin effects file: %s\n", dsp_globals.prog_name, p);
 	if (build_effects_chain(argc, argv, chain, stream, channel_selector, d))
 		goto fail;
-	LOG(LL_VERBOSE, "dsp: info: end effects file: %s\n", p);
+	LOG(LL_VERBOSE, "%s: info: end effects file: %s\n", dsp_globals.prog_name, p);
 	done:
 	free(c);
 	free(p);
@@ -289,13 +289,13 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs)
 	struct effect *e = chain->head;
 	while (e != NULL) {
 		if (e->plot == NULL) {
-			LOG(LL_ERROR, "dsp: plot: error: effect '%s' does not support plotting\n", e->name);
+			LOG(LL_ERROR, "%s: plot: error: effect '%s' does not support plotting\n", dsp_globals.prog_name, e->name);
 			return;
 		}
 		if (channels == -1)
 			channels = e->ostream.channels;
 		else if (channels != e->ostream.channels) {
-			LOG(LL_ERROR, "dsp: plot: error: number of channels cannot change: %s\n", e->name);
+			LOG(LL_ERROR, "%s: plot: error: number of channels cannot change: %s\n", dsp_globals.prog_name, e->name);
 			return;
 		}
 		e = e->next;

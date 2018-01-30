@@ -27,7 +27,7 @@ ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 	struct pulse_state *state = (struct pulse_state *) c->data;
 
 	if (pa_simple_read(state->s, (char *) buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
-		LOG(LL_ERROR, "dsp: pulse: read: error: %s\n", pa_strerror(err));
+		LOG(LL_ERROR, "%s: pulse: read: error: %s\n", dsp_globals.prog_name, pa_strerror(err));
 		return 0;
 	}
 	state->enc_info->read_func((char *) buf, buf, frames * c->channels);
@@ -44,7 +44,7 @@ ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
 		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
 		if (pa_simple_write(state->s, state->buf, n * c->channels * state->enc_info->bytes, &err) < 0) {
-			LOG(LL_ERROR, "dsp: pulse: write: error: %s\n", pa_strerror(err));
+			LOG(LL_ERROR, "%s: pulse: write: error: %s\n", dsp_globals.prog_name, pa_strerror(err));
 			return i;
 		}
 		i += n;
@@ -113,7 +113,7 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	struct pulse_enc_info *enc_info;
 
 	if ((enc_info = pulse_get_enc_info(enc)) == NULL) {
-		LOG(LL_ERROR, "dsp: pulse: error: bad encoding: %s\n", enc);
+		LOG(LL_ERROR, "%s: pulse: error: bad encoding: %s\n", dsp_globals.prog_name, enc);
 		return NULL;
 	}
 	ss.format = enc_info->fmt;
@@ -122,7 +122,7 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	s = pa_simple_new(NULL, "dsp", (mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD,
 		(strcmp(path, "default") == 0) ? NULL : path, "dsp", &ss, NULL, NULL, &err);
 	if (s == NULL) {
-		LOG(LL_OPEN_ERROR, "dsp: pulse: failed to open device: %s\n", pa_strerror(err));
+		LOG(LL_OPEN_ERROR, "%s: pulse: failed to open device: %s\n", dsp_globals.prog_name, pa_strerror(err));
 		return NULL;
 	}
 

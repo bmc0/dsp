@@ -63,7 +63,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 	char *endptr, *g;
 
 	if (argc != 2 && argc != 3) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 	if (argc == 3) {
@@ -84,7 +84,7 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 		CHECK_ENDPTR(g, endptr, "gain", return NULL);
 	}
 	else {
-		LOG(LL_ERROR, "dsp: gain.c: BUG: unknown effect: %s (%d)\n", argv[0], ei->effect_number);
+		LOG(LL_ERROR, "%s: gain.c: BUG: unknown effect: %s (%d)\n", dsp_globals.prog_name, argv[0], ei->effect_number);
 		return NULL;
 	}
 

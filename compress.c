@@ -58,7 +58,7 @@ struct effect * compress_effect_init(struct effect_info *ei, struct stream_info 
 	struct compress_state *state;
 
 	if (argc != 5) {
-		LOG(LL_ERROR, "dsp: %s: usage: %s\n", argv[0], ei->usage);
+		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
 
