@@ -22,10 +22,21 @@ struct alsa_state {
 	ssize_t buf_frames;
 };
 
+static int alsa_prepare_device(struct alsa_state *state)
+{
+	int err;
+	if ((err = snd_pcm_prepare(state->dev)) < 0)
+		LOG(LL_ERROR, "%s: alsa: error: failed to prepare device: %s\n", dsp_globals.prog_name, snd_strerror(err));
+	return err;
+}
+
 ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	ssize_t n;
 	struct alsa_state *state = (struct alsa_state *) c->data;
+
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
+		return 0;
 
 	try_again:
 	n = snd_pcm_readi(state->dev, (char *) buf, frames);
@@ -48,6 +59,9 @@ ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	ssize_t n, i = 0;
 	struct alsa_state *state = (struct alsa_state *) c->data;
+
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
+		return 0;
 
 	while (i < frames) {
 		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
@@ -88,7 +102,6 @@ void alsa_drop(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
 	snd_pcm_drop(state->dev);
-	snd_pcm_prepare(state->dev);
 	state->delay = 0;
 }
 
@@ -186,10 +199,6 @@ struct codec * alsa_codec_init(const char *path, const char *type, const char *e
 	}
 	if ((err = snd_pcm_hw_params(dev, p)) < 0) {
 		LOG(LL_ERROR, "%s: alsa: error: failed to set params: %s\n", dsp_globals.prog_name, snd_strerror(err));
-		goto fail;
-	}
-	if ((err = snd_pcm_prepare(dev)) < 0) {
-		LOG(LL_ERROR, "%s: alsa: error: failed to prepare device: %s\n", dsp_globals.prog_name, snd_strerror(err));
 		goto fail;
 	}
 
