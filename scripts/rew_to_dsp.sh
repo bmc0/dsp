@@ -12,6 +12,9 @@ AWK_SCRIPT='
 	if ($1=="Preamp:" && $2!=0) {
 		print "gain", $2
 	}
+	else if ($1=="Channel:") {
+		print ":" $2
+	}
 	else if ($1=="Filter" && $3=="ON") {
 		if ($4=="PK" && $9!=0) {
 			gsub(",", "", $6)
