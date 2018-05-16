@@ -18,6 +18,15 @@ AWK_SCRIPT='
 			printf(",%s", $i-1)
 		print ""
 	}
+	else if ($1=="Convolution:") {
+		print "zita_convolver", $2
+	}
+	else if ($1=="Delay:") {
+		printf("delay %s", $2)
+		if ($3=="ms") printf("m")
+		else if ($3=="samples") printf("S")
+		print ""
+	}
 	else if ($1=="Filter" && $3=="ON") {
 		if ($4=="PK" && $9!=0) {
 			gsub(",", "", $6)
