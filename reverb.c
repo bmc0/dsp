@@ -351,8 +351,19 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 	LOG(LL_VERBOSE, "%s: %s: info: wet_only=%s reverberance=%.1f hf_damping=%.1f room_scale=%.1f stereo_depth=%.1f pre_delay=%.4f wet_gain=%.2f\n",
 		dsp_globals.prog_name, argv[0], (wet_only) ? "true" : "false", reverberance, hf_damping, room_scale, stereo_depth, pre_delay_ms / 1000.0, wet_gain_dB);
 
+	e = calloc(1, sizeof(struct effect));
+	e->name = ei->name;
+	e->istream.fs = e->ostream.fs = istream->fs;
+	e->istream.channels = e->ostream.channels = istream->channels;
+	e->channel_selector = NEW_SELECTOR(istream->channels);
+	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	e->run = reverb_effect_run;
+	e->destroy = reverb_effect_destroy;
+
 	state = calloc(1, sizeof(struct reverb_state));
-	for (i = 0; i < istream->channels; ++i)
+	e->data = state;
+
+	for (i = 0; i < e->istream.channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++state->n_channels;
 	if (state->n_channels != 2 && stereo_depth != 0.0) {
@@ -361,7 +372,7 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 	}
 	if (state->n_channels == 2) {
 		state->c1 = state->c2 = -1;
-		for (i = 0; i < istream->channels; ++i) {
+		for (i = 0; i < e->istream.channels; ++i) {
 			if (GET_BIT(channel_selector, i)) {
 				if (state->c1 == -1)
 					state->c1 = i;
@@ -371,22 +382,12 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 		}
 	}
 	state->buf_size = dsp_globals.buf_frames;  /* input will be processed in blocks */
-	state->chan = calloc(istream->channels, sizeof(struct reverb_channel));
-	for (i = 0; i < istream->channels; ++i)
+	state->chan = calloc(e->istream.channels, sizeof(struct reverb_channel));
+	for (i = 0; i < e->istream.channels; ++i)
 		if (GET_BIT(channel_selector, i))
-			reverb_create(&state->chan[i].reverb, istream->fs, wet_gain_dB, room_scale, reverberance, hf_damping, pre_delay_ms, stereo_depth, state->buf_size, state->chan[i].wet);
+			reverb_create(&state->chan[i].reverb, e->istream.fs, wet_gain_dB, room_scale, reverberance, hf_damping, pre_delay_ms, stereo_depth, state->buf_size, state->chan[i].wet);
 	/* state->in_signal_mult = 1.0 / ((1 - state->wet_only) + 2.0 * pow(10.0, wet_gain_dB / 20.0)); */
 	state->wet_only = wet_only;
-
-	e = calloc(1, sizeof(struct effect));
-	e->name = ei->name;
-	e->istream.fs = e->ostream.fs = istream->fs;
-	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_SELECTOR(istream->channels);
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->run = reverb_effect_run;
-	e->destroy = reverb_effect_destroy;
-	e->data = state;
 
 	return e;
 }
