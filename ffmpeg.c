@@ -145,6 +145,8 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 	AVStream *st;
 	int64_t timestamp;
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
+	if (c->frames == -1)
+		return -1;
 	if (pos < 0)
 		pos = 0;
 	else if (pos >= c->frames)
@@ -296,7 +298,12 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		LOG(LL_ERROR, "%s: ffmpeg: error: unhandled sample format\n", dsp_globals.prog_name);
 		goto fail;
 	}
-	c->frames = st->duration * st->time_base.num * c->fs / st->time_base.den;
+	if (st->duration != AV_NOPTS_VALUE)
+		c->frames = (double) st->duration * st->time_base.num * c->fs / st->time_base.den;
+	else if (state->container->duration != AV_NOPTS_VALUE)
+		c->frames = (double) state->container->duration * c->fs / AV_TIME_BASE;
+	else
+		c->frames = -1;
 	c->read = ffmpeg_read;
 	c->write = ffmpeg_write;
 	c->seek = ffmpeg_seek;
