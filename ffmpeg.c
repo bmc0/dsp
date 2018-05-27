@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/opt.h>
+#include <libavutil/mathematics.h>
 #include "ffmpeg.h"
 #include "sampleconv.h"
 
@@ -94,6 +94,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 				av_frame_unref(state->frame);
 			state->got_frame = 0;
 			state->frame_pos = 0;
+			retry:
 			if ((r = avcodec_receive_frame(state->cc, state->frame)) < 0) {
 				switch (r) {
 				case AVERROR_EOF:
@@ -103,7 +104,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 					skip_packet:
 					if (av_read_frame(state->container, &packet) < 0) {
 						avcodec_send_packet(state->cc, NULL);  /* send flush packet */
-						continue;
+						goto retry;
 					}
 					if (packet.stream_index != state->stream_index) {
 						av_packet_unref(&packet);
@@ -152,8 +153,8 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 	else if (pos >= c->frames)
 		pos = c->frames - 1;
 	st = state->container->streams[state->stream_index];
-	timestamp = pos * st->time_base.den / st->time_base.num / c->fs;
-	if (av_seek_frame(state->container, state->stream_index, timestamp, AVSEEK_FLAG_FRAME) < 0)
+	timestamp = av_rescale(pos, st->time_base.den, st->time_base.num) / c->fs;
+	if (av_seek_frame(state->container, state->stream_index, timestamp, 0) < 0)
 		return -1;
 	avcodec_flush_buffers(state->cc);
 	if (state->got_frame)
@@ -299,9 +300,9 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 		goto fail;
 	}
 	if (st->duration != AV_NOPTS_VALUE)
-		c->frames = (double) st->duration * st->time_base.num * c->fs / st->time_base.den;
+		c->frames = av_rescale(st->duration, st->time_base.num * c->fs, st->time_base.den);
 	else if (state->container->duration != AV_NOPTS_VALUE)
-		c->frames = (double) state->container->duration * c->fs / AV_TIME_BASE;
+		c->frames = av_rescale(state->container->duration, c->fs, AV_TIME_BASE);
 	else
 		c->frames = -1;
 	c->read = ffmpeg_read;
