@@ -240,7 +240,7 @@ void Greverb::process (unsigned long n, sample_t *x0, sample_t *x1, sample_t *y0
 /* ----- dsp wrapper ----- */
 
 struct g2reverb_state {
-	int c1, c2;
+	int c0, c1;
 	Greverb *r;
 };
 
@@ -249,7 +249,7 @@ sample_t * g2reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 	ssize_t i, samples = *frames * e->ostream.channels;
 	struct g2reverb_state *state = (struct g2reverb_state *) e->data;
 	for (i = 0; i < samples; i += e->ostream.channels)
-		state->r->process(1, &ibuf[i + state->c1], &ibuf[i + state->c2], &ibuf[i + state->c1], &ibuf[i + state->c2]);
+		state->r->process(1, &ibuf[i + state->c0], &ibuf[i + state->c1], &ibuf[i + state->c0], &ibuf[i + state->c1]);
 	return ibuf;
 }
 
@@ -332,13 +332,13 @@ struct effect * g2reverb_effect_init(struct effect_info *ei, struct stream_info 
 		dsp_globals.prog_name, argv[0], (wet_only) ? "true" : "false", roomsize, revbtime, ipbandw, damping, 20.0 * log10(dryslev), 20.0 * log10(refllev), 20.0 * log10(taillev));
 
 	state = (struct g2reverb_state *) calloc(1, sizeof(struct g2reverb_state));
-	state->c1 = state->c2 = -1;
+	state->c0 = state->c1 = -1;
 	for (i = 0; i < istream->channels; ++i) {  /* find input channel numbers */
 		if (GET_BIT(channel_selector, i)) {
-			if (state->c1 == -1)
-				state->c1 = i;
+			if (state->c0 == -1)
+				state->c0 = i;
 			else
-				state->c2 = i;
+				state->c1 = i;
 		}
 	}
 	state->r = new Greverb(istream->fs, roomsize);

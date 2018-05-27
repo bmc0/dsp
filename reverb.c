@@ -244,7 +244,7 @@ struct reverb_channel {
 };
 
 struct reverb_state {
-	int n_channels, c1, c2, wet_only;
+	int n_channels, c0, c1, wet_only;
 	/* sample_t in_signal_mult; */
 	size_t buf_size;
 	struct reverb_channel *chan;
@@ -273,8 +273,8 @@ sample_t * reverb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, 
 				reverb_process(&state->chan[c].reverb, len);
 		if (state->n_channels == 2) {
 			for (i = 0; i < len; ++i) {
-				obuf[(f + i) * e->istream.channels + state->c1] = (1 - state->wet_only) * state->chan[state->c1].dry[i] + 0.5 * (state->chan[state->c1].wet[0][i] + state->chan[state->c2].wet[0][i]);
-				obuf[(f + i) * e->istream.channels + state->c2] = (1 - state->wet_only) * state->chan[state->c2].dry[i] + 0.5 * (state->chan[state->c1].wet[1][i] + state->chan[state->c2].wet[1][i]);
+				obuf[(f + i) * e->istream.channels + state->c0] = (1 - state->wet_only) * state->chan[state->c0].dry[i] + 0.5 * (state->chan[state->c0].wet[0][i] + state->chan[state->c1].wet[0][i]);
+				obuf[(f + i) * e->istream.channels + state->c1] = (1 - state->wet_only) * state->chan[state->c1].dry[i] + 0.5 * (state->chan[state->c0].wet[1][i] + state->chan[state->c1].wet[1][i]);
 			}
 		}
 		else {
@@ -371,13 +371,13 @@ struct effect * reverb_effect_init(struct effect_info *ei, struct stream_info *i
 		stereo_depth = 0.0;
 	}
 	if (state->n_channels == 2) {
-		state->c1 = state->c2 = -1;
+		state->c0 = state->c1 = -1;
 		for (i = 0; i < e->istream.channels; ++i) {
 			if (GET_BIT(channel_selector, i)) {
-				if (state->c1 == -1)
-					state->c1 = i;
+				if (state->c0 == -1)
+					state->c0 = i;
 				else
-					state->c2 = i;
+					state->c1 = i;
 			}
 		}
 	}
