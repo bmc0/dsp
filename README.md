@@ -166,7 +166,7 @@ and/or `remix` effects.
 	the `channel` argument is given.
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
-	crossfeed. Ignores the channel selector. Input must be 2 channels.
+	crossfeed.
 * `remix channel_selector|. ...`  
 	Select and mix input channels into output channels. Each channel selector
 	specifies the input channels to be mixed to produce each output channel.

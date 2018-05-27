@@ -7,41 +7,37 @@
 #include "util.h"
 
 struct crossfeed_state {
-	int type;
-	sample_t direct_gain;
-	sample_t cross_gain;
-	struct biquad_state f0_c0;  /* lowpass for channel 0 */
-	struct biquad_state f0_c1;  /* lowpass for channel 1 */
-	struct biquad_state f1_c0;  /* highpass for channel 0 */
-	struct biquad_state f1_c1;  /* highpass for channel 1 */
+	int c0, c1;
+	sample_t direct_gain, cross_gain;
+	struct biquad_state lp[2], hp[2];
 };
 
 sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t samples, i;
+	ssize_t i, samples = *frames * e->ostream.channels;
+	sample_t s0, s1;
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
 
-	samples = *frames * 2;
-	for (i = 0; i < samples; i += 2) {
-		obuf[i + 0] = (ibuf[i + 0] * state->direct_gain)
-			+ (biquad(&state->f0_c0, ibuf[i + 1]) * state->cross_gain)
-			+ (biquad(&state->f1_c0, ibuf[i + 0]) * state->cross_gain);
-		obuf[i + 0] *= state->direct_gain;
-		obuf[i + 1] = (ibuf[i + 1] * state->direct_gain)
-			+ (biquad(&state->f0_c1, ibuf[i + 0]) * state->cross_gain)
-			+ (biquad(&state->f1_c1, ibuf[i + 1]) * state->cross_gain);
-		obuf[i + 1] *= state->direct_gain;
+	for (i = 0; i < samples; i += e->ostream.channels) {
+		s0 = ibuf[i + state->c0];
+		s1 = ibuf[i + state->c1];
+		ibuf[i + state->c0] = state->direct_gain * ((s0 * state->direct_gain)
+			+ (biquad(&state->lp[0], s1) * state->cross_gain)
+			+ (biquad(&state->hp[0], s0) * state->cross_gain));
+		ibuf[i + state->c1] = state->direct_gain * ((s1 * state->direct_gain)
+			+ (biquad(&state->lp[1], s0) * state->cross_gain)
+			+ (biquad(&state->hp[1], s1) * state->cross_gain));
 	}
-	return obuf;
+	return ibuf;
 }
 
 void crossfeed_effect_reset(struct effect *e)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
-	biquad_reset(&state->f0_c0);
-	biquad_reset(&state->f0_c1);
-	biquad_reset(&state->f1_c0);
-	biquad_reset(&state->f1_c1);
+	biquad_reset(&state->lp[0]);
+	biquad_reset(&state->lp[1]);
+	biquad_reset(&state->hp[0]);
+	biquad_reset(&state->hp[1]);
 }
 
 void crossfeed_effect_plot(struct effect *e, int i)
@@ -62,15 +58,20 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	struct crossfeed_state *state;
 	char *endptr;
 	double freq, sep_db, sep;
+	int i, n_channels = 0;
 
 	if (argc != 3) {
 		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
 		return NULL;
 	}
-	if (istream->channels != 2) {
-		LOG(LL_ERROR, "%s: %s: error: channels != 2\n", dsp_globals.prog_name, argv[0]);
+	for (i = 0; i < istream->channels; ++i)
+		if (GET_BIT(channel_selector, i))
+			++n_channels;
+	if (n_channels != 2) {
+		LOG(LL_ERROR, "%s: %s: error: number of input channels must be 2\n", dsp_globals.prog_name, argv[0]);
 		return NULL;
 	}
+
 	freq = parse_freq(argv[1], &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
 	CHECK_FREQ(freq, istream->fs, "f0", return NULL);
@@ -88,14 +89,23 @@ struct effect * crossfeed_effect_init(struct effect_info *ei, struct stream_info
 	e->destroy = crossfeed_effect_destroy;
 	state = calloc(1, sizeof(struct crossfeed_state));
 
+	state->c0 = state->c1 = -1;
+	for (i = 0; i < istream->channels; ++i) {  /* find input channel numbers */
+		if (GET_BIT(channel_selector, i)) {
+			if (state->c0 == -1)
+				state->c0 = i;
+			else
+				state->c1 = i;
+		}
+	}
 	sep = pow(10, sep_db / 20);
 	state->direct_gain = sep / (1 + sep);
 	state->cross_gain = 1 / (1 + sep);
 
-	biquad_init_using_type(&state->f0_c0, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
-	biquad_init_using_type(&state->f0_c1, BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
-	biquad_init_using_type(&state->f1_c0, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
-	biquad_init_using_type(&state->f1_c1, BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->lp[0], BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->lp[1], BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->hp[0], BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&state->hp[1], BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
 	e->data = state;
 
 	return e;
