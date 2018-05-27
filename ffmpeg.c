@@ -145,6 +145,7 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 {
 	AVStream *st;
 	int64_t timestamp;
+	int seek_flags = 0;
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	if (c->frames == -1)
 		return -1;
@@ -154,12 +155,15 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 		pos = c->frames - 1;
 	st = state->container->streams[state->stream_index];
 	timestamp = av_rescale(pos, st->time_base.den, st->time_base.num) / c->fs;
-	if (av_seek_frame(state->container, state->stream_index, timestamp, 0) < 0)
+	if (timestamp < st->cur_dts)
+		seek_flags |= AVSEEK_FLAG_BACKWARD;
+	if (av_seek_frame(state->container, state->stream_index, timestamp, seek_flags) < 0)
 		return -1;
 	avcodec_flush_buffers(state->cc);
 	if (state->got_frame)
 		av_frame_unref(state->frame);
 	state->got_frame = 0;
+	pos = av_rescale(st->cur_dts, st->time_base.num * c->fs, st->time_base.den);
 	return pos;
 }
 
