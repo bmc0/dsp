@@ -93,11 +93,20 @@ endif
 install_dsp: dsp
 	install -Dm755 dsp ${DESTDIR}${PREFIX}${BINDIR}/dsp
 
+uninstall_dsp:
+	rm -f ${DESTDIR}${PREFIX}${BINDIR}/dsp
+
 install_ladspa_dsp: ladspa_dsp.so
 	install -Dm755 ladspa_dsp.so ${DESTDIR}${PREFIX}${LIBDIR}/ladspa/ladspa_dsp.so
 
+uninstall_ladspa_dsp:
+	rm -f ${DESTDIR}${PREFIX}${LIBDIR}/ladspa/ladspa_dsp.so
+
 install_manual:
 	install -Dm644 dsp.1 ${DESTDIR}${PREFIX}${DATADIR}${MANDIR}/man1/dsp.1
+
+uninstall_manual:
+	rm -f ${DESTDIR}${PREFIX}${DATADIR}${MANDIR}/man1/dsp.1
 
 clean:
 	rm -f dsp ladspa_dsp.so ${DSP_OBJ} ${DSP_CPP_OBJ} ${DSP_DEPFILES} ${LADSPA_DSP_OBJ} ${LADSPA_DSP_CPP_OBJ} ${LADSPA_DSP_DEPFILES}
@@ -106,6 +115,6 @@ distclean: clean
 	rm -f config.mk
 	rm -rf ${OBJDIR}
 
-.PHONY: all install ladspa_dsp install_dsp install_ladspa_dsp clean distclean
+.PHONY: all install uninstall ladspa_dsp install_dsp uninstall_dsp install_ladspa_dsp uninstall_ladspa_dsp install_manual uninstall_manual clean distclean
 
 -include ${DSP_DEPFILES} ${LADSPA_DSP_DEPFILES}
