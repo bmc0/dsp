@@ -141,6 +141,7 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	c->fs = fs;
 	c->channels = channels;
 	c->prec = enc_info->prec;
+	c->can_dither = enc_info->can_dither;
 	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
 	c->frames = -1;
 	c->read = pulse_read;
