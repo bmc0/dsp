@@ -186,7 +186,7 @@ void ffmpeg_destroy(struct codec *c)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	av_frame_free(&state->frame);
-	avcodec_close(state->cc);
+	avcodec_free_context(&state->cc);
 	avformat_close_input(&state->container);
 	free(state);
 	free((char *) c->type);
