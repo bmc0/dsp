@@ -134,7 +134,8 @@ void ladspa_host_effect_destroy(struct effect *e)
 
 struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
-	char *search_path, *path, *endptr;
+	const char *search_path;
+	char *path, *endptr;
 	LADSPA_Descriptor_Function descriptor_fn;
 	const LADSPA_Descriptor *desc;
 	struct effect *e;
@@ -147,7 +148,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 		return NULL;
 	}
 
-	if ((search_path = getenv("LADSPA_PATH")) == NULL) search_path = (char *) "/usr/lib/ladspa";
+	if ((search_path = getenv("LADSPA_PATH")) == NULL) search_path = "/usr/local/lib/ladspa:/usr/lib/ladspa";
 	if (lt_dlinit() || lt_dlsetsearchpath(search_path)) {
 		LOG(LL_ERROR, "%s: %s: error: failed to initialize libltdl: %s\n", dsp_globals.prog_name, argv[0], lt_dlerror());
 		return NULL;
