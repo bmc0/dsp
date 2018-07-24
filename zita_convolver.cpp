@@ -190,7 +190,11 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 		return NULL;
 	}
 	cproc = new Convproc;
+#if ZITA_CONVOLVER_MAJOR_VERSION >= 4
+	if (cproc->configure(n_channels, n_channels, c_filter->frames, min_part_len, min_part_len, max_part_len, 0.0f)) {
+#else
 	if (cproc->configure(n_channels, n_channels, c_filter->frames, min_part_len, min_part_len, max_part_len)) {
+#endif
 		LOG(LL_ERROR, "%s: %s: error: failed to configure convolution engine\n", dsp_globals.prog_name, argv[0]);
 		destroy_codec(c_filter);
 		delete cproc;
