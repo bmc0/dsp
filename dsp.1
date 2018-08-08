@@ -186,14 +186,6 @@ Latency is equal to \fImin_part_len\fR (64 samples by default).
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
 (dBFS).
 .TP
-\fBreverb\fR [\fB-w\fR] [\fIreverberance\fR [\fIhf_damping\fR [\fIroom_scale\fR [\fIstereo_depth\fR [\fIpre_delay\fR [\fIwet_gain\fR]]]]]]
-Add reverberation using the freeverb algorithm. Effect ported from libSoX.
-\fIreverberance\fR, \fIhf_damping\fR, \fIroom_scale\fR, and \fIstereo_depth\fR are in
-percent. \fIpre_delay\fR is in seconds.
-.TP
-\fBg2reverb\fR [\fB-w\fR] [\fIroom_size\fR [\fIreverb_time\fR [\fIinput_bandwidth\fR [\fIdamping\fR [\fIdry_level\fR [\fIreflection_level\fR [\fItail_level\fR]]]]]]]
-Add reverberation using Fons Adriaensen's g2reverb algorithm.
-.TP
 \fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
 the exception of zero output ports). Plugins with zero input ports will
@@ -370,8 +362,4 @@ No support for metadata.
 .PP
 Some effects do not support plotting.
 .SH LICENSE
-This software is released under the ISC license, except for the \fBreverb\fR
-effect, which is under the LGPLv2.1 license (copyright
-robs@users.sourceforge.net), and the \fBg2reverb\fR effect, which is under the
-GPLv2 license (copyright Fons Adriaensen <fons@linuxaudio.org>). See the
-LICENSE files for more details.
+This software is released under the ISC license.

@@ -14,8 +14,6 @@
 #include "fir.h"
 #include "zita_convolver.h"
 #include "noise.h"
-#include "reverb.h"
-#include "g2reverb.h"
 #include "ladspa_host.h"
 #include "stats.h"
 
@@ -49,10 +47,6 @@ static struct effect_info effects[] = {
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init, 0 },
 #endif
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
-#ifdef ENABLE_GPL_CODE
-	{ "reverb",             "reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]", reverb_effect_init, 0 },
-	{ "g2reverb",           "g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]", g2reverb_effect_init, 0 },
-#endif
 #ifdef ENABLE_LADSPA_HOST
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
 #endif

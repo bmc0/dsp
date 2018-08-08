@@ -189,12 +189,6 @@ and/or `remix` effects.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
-* `reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]`  
-	Add reverberation using the freeverb algorithm. Effect ported from libSoX.
-	`reverberance`, `hf_damping`, `room_scale`, and `stereo_depth` are in
-	percent. `pre_delay` is in seconds.
-* `g2reverb [-w] [room_size [reverb_time [input_bandwidth [damping [dry_level [reflection_level [tail_level]]]]]]]`  
-	Add reverberation using Fons Adriaensen's g2reverb algorithm.
 * `ladspa_host module_path plugin_label [control ...]`  
 	Apply a LADSPA plugin. Supports any number of input/output ports (with
 	the exception of zero output ports). Plugins with zero input ports will
@@ -419,8 +413,4 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 
 ### License
 
-This software is released under the ISC license, except for the `reverb`
-effect, which is under the LGPLv2.1 license (copyright
-robs@users.sourceforge.net), and the `g2reverb` effect, which is under the
-GPLv2 license (copyright Fons Adriaensen \<fons@linuxaudio.org>). See the
-LICENSE files for more details.
+This software is released under the ISC license.

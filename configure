@@ -21,7 +21,6 @@ Options:
   --disable-mad
   --disable-pulse
   --disable-ladspa_dsp
-  --disable-gpl-code
   --debug-build
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
@@ -51,7 +50,6 @@ for i in "$@"; do
 		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
 		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
-		--disable-gpl-code)       CONFIG_DISABLE_GPL_CODE=y ;;
 		--debug-build)            CONFIG_DEBUG_BUILD=y ;;
 		--prefix=*)               PREFIX="${i#--prefix=}" ;;
 		--bindir=*)               BINDIR="${i#--bindir=}" ;;
@@ -104,14 +102,6 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	TARGETS="$TARGETS dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_dsp"
-	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
-		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS reverb.o"
-		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
-		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DENABLE_GPL_CODE"
-		echo "[dsp] enabled gpl code (reverb.o g2reverb.o)"
-	else
-		echo "[dsp] disabled gpl code (reverb.o g2reverb.o)"
-	fi
 	if check_header $CC ladspa.h && check_header $CC ltdl.h; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lltdl"
@@ -145,14 +135,6 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header $CC ladspa.h; then
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_ladspa_dsp"
 	unset INCLUDE_CODECS
-	if [ "$CONFIG_DISABLE_GPL_CODE" != "y" ]; then
-		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS reverb.o"
-		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS g2reverb.o"
-		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DENABLE_GPL_CODE"
-		echo "[ladspa_dsp] enabled gpl code (reverb.o g2reverb.o)"
-	else
-		echo "[ladspa_dsp] disabled gpl code (reverb.o g2reverb.o)"
-	fi
 	if check_header $CC ladspa.h && check_header $CC ltdl.h; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lltdl"
