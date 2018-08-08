@@ -189,11 +189,6 @@ and/or `remix` effects.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
-* `compress thresh ratio attack release`  
-	Compress or expand the dynamic range. This effect peak-sensing and input
-	channels are linked. If the ratio is in (1,inf), the dynamic range will be
-	compressed. If the ratio is in (0,1), the dynamic range will be expanded.
-	Attack refers to decreases in gain and release refers to increases in gain.
 * `reverb [-w] [reverberance [hf_damping [room_scale [stereo_depth [pre_delay [wet_gain]]]]]]`  
 	Add reverberation using the freeverb algorithm. Effect ported from libSoX.
 	`reverberance`, `hf_damping`, `room_scale`, and `stereo_depth` are in

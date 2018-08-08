@@ -13,7 +13,6 @@ DSP_OBJ := dsp.o \
 	remix.o \
 	delay.o \
 	noise.o \
-	compress.o \
 	stats.o \
 	null.o \
 	pcm.o
@@ -27,7 +26,6 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	remix.o \
 	delay.o \
 	noise.o \
-	compress.o \
 	stats.o
 LADSPA_DSP_CPP_OBJ :=
 
