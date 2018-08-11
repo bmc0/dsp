@@ -34,6 +34,7 @@ static struct effect_info effects[] = {
 	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",                biquad_effect_init,    BIQUAD_BIQUAD },
 	{ "gain",               "gain [channel] gain",                     gain_effect_init,      GAIN_EFFECT_NUMBER_GAIN },
 	{ "mult",               "mult [channel] multiplier",               gain_effect_init,      GAIN_EFFECT_NUMBER_MULT },
+	{ "add",                "add [channel] value",                     gain_effect_init,      GAIN_EFFECT_NUMBER_ADD },
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
 	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init,     0 },

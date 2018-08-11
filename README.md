@@ -164,6 +164,9 @@ and/or `remix` effects.
 * `mult [channel] multiplier`  
 	Multiplies each sample by `multiplier`. Ignores the channel selector when
 	the `channel` argument is given.
+* `add [channel] value`  
+	Applies a DC shift. Ignores the channel selector when the `channel`
+	argument is given.
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
