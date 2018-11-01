@@ -5,6 +5,7 @@
 #include "codec.h"
 
 #include "null.h"
+#include "sgen.h"
 #include "sndfile.h"
 #include "ffmpeg.h"
 #include "alsa.h"
@@ -56,6 +57,7 @@ static const char *mp3_ext[]   = { ".mp3", NULL };
 struct codec_info codecs[] = {
 #ifndef LADSPA_FRONTEND
 	{ "null",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, null_codec_init,    null_codec_print_encodings },
+	{ "sgen",    NULL,      CODEC_MODE_READ,                  sgen_codec_init,    sgen_codec_print_encodings },
 #endif
 #ifdef HAVE_SNDFILE
 	{ "sndfile", NULL,      CODEC_MODE_READ,                  sndfile_codec_init, sndfile_codec_print_encodings },
@@ -92,7 +94,7 @@ struct codec_info codecs[] = {
 	{ "alsa",    NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, alsa_codec_init,    alsa_codec_print_encodings },
 #endif
 #ifdef HAVE_AO
-	{ "ao",      NULL,      CODEC_MODE_WRITE,                 ao_codec_init,      ao_codec_print_encodings },
+	{ "ao",      NULL,                      CODEC_MODE_WRITE, ao_codec_init,      ao_codec_print_encodings },
 #endif
 #ifdef HAVE_MAD
 	{ "mp3",     mp3_ext,   CODEC_MODE_READ,                  mp3_codec_init,     mp3_codec_print_encodings },

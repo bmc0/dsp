@@ -35,11 +35,13 @@
 
 int check_endptr(const char *, const char *, const char *, const char *);
 double parse_freq(const char *, char **);
+ssize_t parse_len(const char *, int, char **);
 int parse_selector(const char *, char *, int);
 void print_selector(const char *, int);
 int gen_argv_from_string(const char *, int *, char ***);
 char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *);
+char * isolate(char *, char);
 
 static __inline__ long unsigned int pm_rand(void)
 {

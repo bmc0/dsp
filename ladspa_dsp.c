@@ -42,13 +42,6 @@ static int n_configs = 0;
 static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
 
-static char * isolate(char *s, char c)
-{
-	while (*s && *s != c) ++s;
-	if (*s != '\0') *s++ = '\0';
-	return s;
-}
-
 static void init_config(struct ladspa_dsp_config *config, const char *file_name, const char *dir_path)
 {
 	memset(config, 0, sizeof(struct ladspa_dsp_config));

@@ -10,28 +10,6 @@ struct delay_state {
 	ssize_t len, p;
 };
 
-static ssize_t parse_delay(const char *s, int fs, char **endptr)
-{
-	double d = strtod(s, endptr);
-	ssize_t samples = lround(d * fs);
-	if (*endptr != NULL && *endptr != s) {
-		switch (**endptr) {
-		case 'm':
-			d /= 1000.0;
-		case 's':
-			samples = lround(d * fs);
-			++(*endptr);
-			break;
-		case 'S':
-			samples = lround(d);
-			++(*endptr);
-			break;
-		}
-		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_delay(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
-	}
-	return samples;
-}
-
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	int i, k;
@@ -90,7 +68,7 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 		return NULL;
 	}
 
-	samples = parse_delay(argv[1], istream->fs, &endptr);
+	samples = parse_len(argv[1], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
 	CHECK_RANGE(samples >= 0, "delay", return NULL);
 	LOG(LL_VERBOSE, "%s: %s: info: actual delay is %gs (%zd sample%s)\n", dsp_globals.prog_name, argv[0], (double) samples / istream->fs, samples, (samples == 1) ? "" : "s");

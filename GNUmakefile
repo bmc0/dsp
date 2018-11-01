@@ -15,6 +15,7 @@ DSP_OBJ := dsp.o \
 	noise.o \
 	stats.o \
 	null.o \
+	sgen.o \
 	pcm.o
 DSP_CPP_OBJ :=
 LADSPA_DSP_OBJ := ladspa_dsp.o \

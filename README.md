@@ -78,6 +78,7 @@ Flag              | Description
 Type    | Modes | Encodings
 ------- | ----- | -------------------------------------------------------------------------------------
 null    | rw    | sample_t
+sgen    | r     | sample_t
 sndfile | r     | autodetected
 wav     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
 aiff    | rw    | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
@@ -125,6 +126,26 @@ is reopened. This mode is most useful when the output is an audio device, but
 can also be used to concatenate inputs with different sample rates and/or
 numbers of channels into a single output file when used with the `resample`
 and/or `remix` effects.
+
+#### Signal generator
+
+The `sgen` input type is a basic (for now, at least) signal generator that can
+generate impulses and exponential sine sweeps. The syntax for the `path`
+argument is as follows:
+
+	[type[@channel_selector][:arg[=value]...]][/type...][+len[s|m|S]]
+
+`type` may be `sine` for sine sweeps or tones, or `delta` for a delta function
+(impulse). `sine` accepts the following arguments:
+
+* `freq=f0[k][-f1[k]]`
+	Frequency. If `len` is set and `f1` is given, an exponential sine sweep
+	is generated.
+
+The arguments for `delta` are:
+
+* `offset=time[s|m|S]`
+	Offset in seconds, miliseconds or samples.
 
 ### Effects
 

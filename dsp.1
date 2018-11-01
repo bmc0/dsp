@@ -95,6 +95,24 @@ is reopened. This mode is most useful when the output is an audio device, but
 can also be used to concatenate inputs with different sample rates and/or
 numbers of channels into a single output file when used with the \fBresample\fR
 and/or \fBremix\fR effects.
+.SS Signal generator
+The \fBsgen\fR input type is a basic (for now, at least) signal generator that can
+generate impulses and exponential sine sweeps. The syntax for the \fIpath\fR
+argument is as follows:
+.PP
+[\fItype\fR[@\fIchannel_selector\fR][:\fIarg\fR[=\fIvalue\fR]...]][/\fItype\fR...][+\fIlen\fR[\fBs\fR|\fBm\fR|\fBS\fR]]
+.PP
+\fItype\fR may be `sine' for sine sweeps or tones, or `delta' for a delta function
+(impulse). `sine' accepts the following arguments:
+.TP
+\fBfreq\fR=\fIf0\fR[\fBk\fR][-\fIf1\fR[\fBk\fR]]
+Frequency. If \fIlen\fR is set and \fIf1\fR is given, an exponential sine sweep
+is generated.
+.PP
+The arguments for `delta' are:
+.TP
+\fBoffset\fR=\fItime\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Offset in seconds, miliseconds or samples.
 .SH EFFECTS
 .SS Full effects list
 .TP

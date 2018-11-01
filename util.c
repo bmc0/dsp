@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "util.h"
@@ -27,6 +28,28 @@ double parse_freq(const char *s, char **endptr)
 		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_freq(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
 	}
 	return f;
+}
+
+ssize_t parse_len(const char *s, int fs, char **endptr)
+{
+	double d = strtod(s, endptr);
+	ssize_t samples = lround(d * fs);
+	if (*endptr != NULL && *endptr != s) {
+		switch (**endptr) {
+		case 'm':
+			d /= 1000.0;
+		case 's':
+			samples = lround(d * fs);
+			++(*endptr);
+			break;
+		case 'S':
+			samples = lround(d);
+			++(*endptr);
+			break;
+		}
+		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_len(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
+	}
+	return samples;
 }
 
 static void set_range(char *b, int n, int start, int end, int dash)
@@ -238,4 +261,11 @@ char * construct_full_path(const char *dir, const char *path)
 		snprintf(p, i, "%s/%s", dir, path);
 	}
 	return p;
+}
+
+char * isolate(char *s, char c)
+{
+	while (*s && *s != c) ++s;
+	if (*s != '\0') *s++ = '\0';
+	return s;
 }
