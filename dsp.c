@@ -625,7 +625,7 @@ int main(int argc, char *argv[])
 				}
 				w = r = in_codecs.head->read(in_codecs.head, buf1, dsp_globals.buf_frames);
 				pos += r;
-				obuf = run_effects_chain(&chain, &w, buf1, buf2);
+				obuf = run_effects_chain(chain.head, &w, buf1, buf2);
 				write_out(w, obuf, do_dither);
 				k += w;
 				if (show_progress && k >= out_codec->fs) {

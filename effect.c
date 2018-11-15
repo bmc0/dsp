@@ -241,10 +241,9 @@ ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_fra
 	return max_len;
 }
 
-sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
-	struct effect *e = chain->head;
 	while (e != NULL && *frames > 0) {
 		tmp = e->run(e, frames, ibuf, obuf);
 		if (tmp == obuf) {
@@ -325,11 +324,10 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 {
 	int gcd;
 	ssize_t ftmp = *frames, dframes = -1;
-	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == -1) {
 		dframes = ftmp;
-		if (e->drain != NULL) e->drain(e, &dframes, ibuf);
+		if (e->drain != NULL) e->drain(e, &dframes, buf1);
 		else dframes = -1;
 		if (e->ostream.fs != e->istream.fs) {
 			gcd = find_gcd(e->ostream.fs, e->istream.fs);
@@ -338,15 +336,7 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 		e = e->next;
 	}
 	*frames = dframes;
-	while (e != NULL && *frames > 0) {
-		tmp = e->run(e, frames, ibuf, obuf);
-		if (tmp == obuf) {
-			obuf = ibuf;
-			ibuf = tmp;
-		}
-		e = e->next;
-	}
-	return ibuf;
+	return run_effects_chain(e, frames, buf1, buf2);
 }
 
 void destroy_effects_chain(struct effects_chain *chain)

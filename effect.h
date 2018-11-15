@@ -36,7 +36,7 @@ void append_effect(struct effects_chain *, struct effect *);
 int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);
 int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, char *, const char *, const char *);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
-sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
+sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
 void plot_effects_chain(struct effects_chain *, int);
