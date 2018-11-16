@@ -12,7 +12,7 @@ struct delay_state {
 
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	int i, k;
+	ssize_t i, k;
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (i = 0; i < *frames; ++i) {
 		for (k = 0; k < e->istream.channels; ++k) {
