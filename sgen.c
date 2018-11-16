@@ -27,7 +27,7 @@ void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf
 {
 	sample_t s;
 	double t;
-	ssize_t i, k, samples = frames * c->channels;
+	ssize_t i, k, samples;
 	switch (g->type) {
 	case SGEN_TYPE_DELTA:
 		if (g->offset >= 0) {
