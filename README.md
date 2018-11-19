@@ -198,6 +198,10 @@ The arguments for `delta` are:
 	channels 0 and 1 into output channel 0, and input channels 2 and 3 into
 	output channel 1. `remix -` mixes all input channels into a single
 	output channel.
+* `st2ms`
+	Convert stereo to mid/side.
+* `ms2st`
+	Convert mid/side to stereo.
 * `delay delay[s|m|S]`  
 	Delay line. The unit for the delay argument depends on the suffix used:
 	`s` is seconds (the default), `m` is milliseconds, and `S` is samples.

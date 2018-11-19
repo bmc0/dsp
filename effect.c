@@ -9,6 +9,7 @@
 #include "gain.h"
 #include "crossfeed.h"
 #include "remix.h"
+#include "st2ms.h"
 #include "delay.h"
 #include "resample.h"
 #include "fir.h"
@@ -37,6 +38,8 @@ static struct effect_info effects[] = {
 	{ "add",                "add [channel] value",                     gain_effect_init,      GAIN_EFFECT_NUMBER_ADD },
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
+	{ "st2ms",              "st2ms",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_ST2MS },
+	{ "ms2st",              "ms2st",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_MS2ST },
 	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init,     0 },
 #ifdef HAVE_FFTW3
 #ifndef SYMMETRIC_IO
