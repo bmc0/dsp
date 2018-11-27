@@ -17,8 +17,6 @@ struct pulse_enc_info {
 struct pulse_state {
 	pa_simple *s;
 	struct pulse_enc_info *enc_info;
-	char *buf;
-	ssize_t buf_frames;
 };
 
 ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
@@ -36,20 +34,15 @@ ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n, i = 0;
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
 
-	while (i < frames) {
-		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
-		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
-		if (pa_simple_write(state->s, state->buf, n * c->channels * state->enc_info->bytes, &err) < 0) {
-			LOG(LL_ERROR, "%s: pulse: write: error: %s\n", dsp_globals.prog_name, pa_strerror(err));
-			return i;
-		}
-		i += n;
+	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	if (pa_simple_write(state->s, buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
+		LOG(LL_ERROR, "%s: pulse: write: error: %s\n", dsp_globals.prog_name, pa_strerror(err));
+		return 0;
 	}
-	return i;
+	return frames;
 }
 
 ssize_t pulse_seek(struct codec *c, ssize_t pos)
@@ -79,7 +72,6 @@ void pulse_destroy(struct codec *c)
 	struct pulse_state *state = (struct pulse_state *) c->data;
 	pa_simple_drain(state->s, NULL);
 	pa_simple_free(state->s);
-	free(state->buf);
 	free(state);
 }
 
@@ -129,10 +121,6 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	state = calloc(1, sizeof(struct pulse_state));
 	state->s = s;
 	state->enc_info = enc_info;
-	if (mode == CODEC_MODE_WRITE) {
-		state->buf = calloc(dsp_globals.buf_frames * channels, enc_info->bytes);
-		state->buf_frames = dsp_globals.buf_frames;
-	}
 
 	c = calloc(1, sizeof(struct codec));
 	c->path = path;

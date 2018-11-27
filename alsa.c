@@ -18,8 +18,6 @@ struct alsa_state {
 	snd_pcm_t *dev;
 	struct alsa_enc_info *enc_info;
 	snd_pcm_sframes_t delay;
-	char *buf;
-	ssize_t buf_frames;
 };
 
 static int alsa_prepare_device(struct alsa_state *state)
@@ -57,31 +55,27 @@ ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n, i = 0;
+	ssize_t n;
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
 		return 0;
 
-	while (i < frames) {
-		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
-		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
-		try_again:
-		n = snd_pcm_writei(state->dev, state->buf, n);
+	state->enc_info->write_func(buf, (char * ) buf, frames * c->channels);
+	try_again:
+	n = snd_pcm_writei(state->dev, buf, frames);
+	if (n < 0) {
+		if (n == -EPIPE)
+			LOG(LL_ERROR, "%s: alsa: warning: underrun occurred\n", dsp_globals.prog_name);
+		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			if (n == -EPIPE)
-				LOG(LL_ERROR, "%s: alsa: warning: underrun occurred\n", dsp_globals.prog_name);
-			n = snd_pcm_recover(state->dev, n, 1);
-			if (n < 0) {
-				LOG(LL_ERROR, "%s: alsa: error: write failed\n", dsp_globals.prog_name);
-				return i;
-			}
-			else
-				goto try_again;
+			LOG(LL_ERROR, "%s: alsa: error: write failed\n", dsp_globals.prog_name);
+			return 0;
 		}
-		i += n;
+		else
+			goto try_again;
 	}
-	return i;
+	return n;
 }
 
 ssize_t alsa_seek(struct codec *c, ssize_t pos)
@@ -119,7 +113,6 @@ void alsa_destroy(struct codec *c)
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING)
 		snd_pcm_drain(state->dev);
 	snd_pcm_close(state->dev);
-	free(state->buf);
 	free(state);
 }
 
@@ -206,10 +199,6 @@ struct codec * alsa_codec_init(const char *path, const char *type, const char *e
 	state->dev = dev;
 	state->enc_info = enc_info;
 	state->delay = 0;
-	if (mode == CODEC_MODE_WRITE) {
-		state->buf = calloc(dsp_globals.buf_frames * channels, enc_info->bytes);
-		state->buf_frames = dsp_globals.buf_frames;
-	}
 
 	c = calloc(1, sizeof(struct codec));
 	c->path = path;

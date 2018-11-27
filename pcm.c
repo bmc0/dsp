@@ -12,8 +12,6 @@
 struct pcm_state {
 	int fd;
 	struct pcm_enc_info *enc_info;
-	char *buf;
-	ssize_t buf_frames;
 	ssize_t pos;
 };
 
@@ -63,22 +61,18 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n, i = 0;
+	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
 
-	while (i < frames) {
-		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
-		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
-		n = write(state->fd, state->buf, n * c->channels * state->enc_info->bytes);
-		if (n == -1) {
-			LOG(LL_ERROR, "%s: pcm: write failed: %s\n", dsp_globals.prog_name, strerror(errno));
-			state->pos += i;
-			return i;
-		}
-		i += n / state->enc_info->bytes / c->channels;
+	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
+	if (n == -1) {
+		LOG(LL_ERROR, "%s: pcm: write failed: %s\n", dsp_globals.prog_name, strerror(errno));
+		return 0;
 	}
-	state->pos += i;
-	return i;
+	n = n / state->enc_info->bytes / c->channels;
+	state->pos += n;
+	return n;
 }
 
 ssize_t pcm_seek(struct codec *c, ssize_t pos)
@@ -117,7 +111,6 @@ void pcm_destroy(struct codec *c)
 {
 	struct pcm_state *state = (struct pcm_state *) c->data;
 	close(state->fd);
-	free(state->buf);
 	free(state);
 }
 
@@ -147,10 +140,6 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	state = calloc(1, sizeof(struct pcm_state));
 	state->fd = fd;
 	state->enc_info = enc_info;
-	if (mode == CODEC_MODE_WRITE) {
-		state->buf = calloc(dsp_globals.buf_frames * channels, enc_info->bytes);
-		state->buf_frames = dsp_globals.buf_frames;
-	}
 
 	c = calloc(1, sizeof(struct codec));
 	c->path = path;

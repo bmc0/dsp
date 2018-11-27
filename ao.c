@@ -9,8 +9,6 @@
 struct ao_state {
 	ao_device *dev;
 	struct ao_enc_info *enc_info;
-	char *buf;
-	ssize_t buf_frames;
 };
 
 struct ao_enc_info {
@@ -45,19 +43,14 @@ ssize_t ao_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n, i = 0;
 	struct ao_state *state = (struct ao_state *) c->data;
 
-	while (i < frames) {
-		n = (frames - i > state->buf_frames) ? state->buf_frames : frames - i;
-		state->enc_info->write_func(&buf[i * c->channels], state->buf, n * c->channels);
-		if (ao_play(state->dev, state->buf, n * c->channels * state->enc_info->bytes) == 0) {
-			LOG(LL_ERROR, "%s: ao: ao_play: write failed\n", dsp_globals.prog_name);
-			return i;
-		}
-		i += n;
+	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	if (ao_play(state->dev, (char *) buf, frames * c->channels * state->enc_info->bytes) == 0) {
+		LOG(LL_ERROR, "%s: ao: ao_play: write failed\n", dsp_globals.prog_name);
+		return 0;
 	}
-	return i;
+	return frames;
 }
 
 ssize_t ao_seek(struct codec *c, ssize_t pos)
@@ -87,7 +80,6 @@ void ao_destroy(struct codec *c)
 	--ao_open_count;
 	if (ao_open_count == 0)
 		ao_shutdown();
-	free(state->buf);
 	free(state);
 }
 
@@ -123,10 +115,6 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	state = calloc(1, sizeof(struct ao_state));
 	state->dev = dev;
 	state->enc_info = enc_info;
-	if (mode == CODEC_MODE_WRITE) {
-		state->buf = calloc(dsp_globals.buf_frames * channels, enc_info->bytes);
-		state->buf_frames = dsp_globals.buf_frames;
-	}
 
 	c = calloc(1, sizeof(struct codec));
 	c->path = path;
