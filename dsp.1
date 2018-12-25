@@ -113,6 +113,11 @@ The arguments for `delta' are:
 .TP
 \fBoffset\fR=\fItime\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Offset in seconds, miliseconds or samples.
+.PP
+Example:
+.EX
+	$ dsp -t sgen -c 2 sine@0:freq=500-1k/sine@1:freq=300-800+2 gain -10
+.EE
 .SH EFFECTS
 .SS Full effects list
 .TP

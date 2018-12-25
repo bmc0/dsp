@@ -147,6 +147,10 @@ The arguments for `delta` are:
 * `offset=time[s|m|S]`
 	Offset in seconds, miliseconds or samples.
 
+Example:
+
+	$ dsp -t sgen -c 2 sine@0:freq=500-1k/sine@1:freq=300-800+2 gain -10
+
 ### Effects
 
 #### Full effects list
