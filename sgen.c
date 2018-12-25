@@ -223,7 +223,7 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 		if (strcmp(gen_type, "delta") == 0)     g->type = SGEN_TYPE_DELTA;
 		else if (strcmp(gen_type, "sine") == 0) g->type = SGEN_TYPE_SINE;
 		else {
-			LOG(LL_VERBOSE, "%s: %s: error: illegal type: %s\n", dsp_globals.prog_name, type, gen_type);
+			LOG(LL_ERROR, "%s: %s: error: illegal type: %s\n", dsp_globals.prog_name, type, gen_type);
 			goto fail;
 		}
 		sgen_init_generator(g, c);
@@ -237,7 +237,7 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 			/* LOG(LL_VERBOSE, "%s: %s: %s: arg: key=%s value=%s\n", dsp_globals.prog_name, type, gen_type, arg, value); */
 			parse_ret = sgen_parse_param(g, c, type, arg, value);
 			if (parse_ret == 1) {
-				LOG(LL_VERBOSE, "%s: %s: %s: error: illegal parameter: %s\n", dsp_globals.prog_name, type, gen_type, arg);
+				LOG(LL_ERROR, "%s: %s: %s: error: illegal parameter: %s\n", dsp_globals.prog_name, type, gen_type, arg);
 				goto fail;
 			}
 			else if (parse_ret == -1)
