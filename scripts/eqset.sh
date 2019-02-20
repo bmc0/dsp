@@ -18,17 +18,17 @@ configtext="load-module module-ladspa-sink sink_name=dsp master=$master plugin=l
 set-default-sink dsp"
 
 # begin doing stuff
-cd $dspconfig
-if [ -z $1 ]; then
-	if [ -f config ]; then
+cd "$dspconfig" || exit
+if [[ -z $1 ]]; then
+	if [[ -f config ]]; then
 		rm config
 	fi
 	echo "EQ disabled"
-elif [ -f $1 ]; then
+elif [[ -f $1 ]]; then
 	ln -sf $1 config
 	echo "config $1 linked"
-elif [ $1 = "--help" ]; then
-	echo "Usage: `basename $0` [config]
+elif [[ $1 = "--help" ]]; then
+	echo "Usage: $( basename $0 ) [config]
 	If no config argument is passed, the EQ configuration will be removed.
 	Otherwise, if the file exists, it will be linked and the DSP module configured."
 	exit
@@ -37,23 +37,24 @@ else
 	exit
 fi
 
-cd $pulseconfig
-if [ -f $dspconfig/config ] && ! grep -qs "$configtext" default.pa; then
+cd "$pulseconfig" || exit
+if [[ -f $dspconfig/config ]] && ! grep -qsF "$configtext" default.pa; then
 	echo "$configtext" >> default.pa
-elif [ -z $1 ]; then
-	if grep -qs "$configtext" default.pa; then
-		grep -v "$configtext" default.pa > temp
+elif [[ -z $1 ]]; then
+	if grep -qsF "$configtext" default.pa; then
+		grep -vF "$configtext" default.pa > temp
 		mv temp default.pa
-	elif [ -f default.pa ] && cat default.pa | wc -c; then
+	fi
+	if [[ -f default.pa && ! -s default.pa ]]; then
 		rm default.pa
 	fi
 fi
 
 if pulseaudio --check; then
-	if pacmd list-sinks | grep -q "name: <dsp>"; then
+	if pacmd list-sinks | grep -qF "name: <dsp>"; then
 		pacmd unload-module module-ladspa-sink
 	fi
-	if [ -f $dspconfig/$1 ]; then
+	if [[ -f $dspconfig/$1 ]]; then
 		pacmd load-module module-ladspa-sink sink_name=dsp master=$master plugin=ladspa_dsp label=ladspa_dsp
 		pacmd set-default-sink dsp
 	fi
