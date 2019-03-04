@@ -8,55 +8,45 @@
 # be multiple pairs of headphones that you swap out with the same amp/output. Basically
 # any time that the computer doesn't know you switched hardware.
 
-
-# you'll probably need to change this
+# Configuration
 master="alsa_output.pci-0000_00_1f.3.iec958-stereo"
-# these are probably fine
 dspconfig="$HOME/.config/ladspa_dsp"
-pulseconfig="$HOME/.config/pulse"
-configtext="load-module module-ladspa-sink sink_name=dsp master=$master plugin=ladspa_dsp
-set-default-sink dsp"
+configfiles=($(cd $dspconfig && ls config_* | grep -oE "[^config_]+$"))
 
-# begin doing stuff
-cd "$dspconfig" || exit
-if [[ -z $1 ]]; then
-	if [[ -f config ]]; then
-		rm config
-	fi
+# Actual stuff happening
+if ! pulseaudio --check; then
+	pulseaudio --start
+fi
+
+if [[ $1 = "--none" ]]; then
+	pacmd set-default-sink $master
 	echo "EQ disabled"
-elif [[ -f $1 ]]; then
-	ln -sf $1 config
-	echo "config $1 linked"
-elif [[ $1 = "--help" ]]; then
-	echo "Usage: $( basename $0 ) [config]
-	If no config argument is passed, the EQ configuration will be removed.
-	Otherwise, if the file exists, it will be linked and the DSP module configured."
-	exit
+elif [[ $1 = "--config" ]]; then
+	for config in ${configfiles[@]}; do
+		echo "load-module module-ladspa-sink sink_name=dsp_$config sink_master=$master plugin=ladspa_dsp label=ladspa_dsp:$config"
+	done
+elif [[ $1 = "--list" ]]; then
+	for config in ${configfiles[@]}; do
+		echo $config
+	done
+elif [[ $1 = "--current" ]]; then
+	pacmd list-sinks | awk '/* index/{getline; print}'
+	# TODO make this better
+elif [[ -f "$dspconfig/config_$1" ]]; then
+	if ! pacmd list-sinks | grep -qo "name: <dsp_$1>"; then
+		pacmd load-module module-ladspa-sink sink_name=dsp_$1 sink_master=$master plugin=ladspa_dsp label=ladspa_dsp:$1
+	fi
+	pacmd set-default-sink dsp_$1
+	echo "Set config $1"
+	pacmd list-sink-inputs | grep index | while read line; do
+		echo $line | cut -f2 -d' '
+		pacmd move-sink-input $(echo $line | cut -f2 -d' ') dsp_$1
+	done
 else
-	echo "specified config doesn't exist"
+	echo "Usage: $( basename $0 ) [config name or options]
+	--list		Show available config files
+	--current	Show current default sink
+	--none		Set default sink to master
+	--config	Print PulseAudio configuration for available configs"
 	exit
 fi
-
-cd "$pulseconfig" || exit
-if [[ -f $dspconfig/config ]] && ! grep -qsF "$configtext" default.pa; then
-	echo "$configtext" >> default.pa
-elif [[ -z $1 ]]; then
-	if grep -qsF "$configtext" default.pa; then
-		grep -vF "$configtext" default.pa > temp
-		mv temp default.pa
-	fi
-	if [[ -f default.pa && ! -s default.pa ]]; then
-		rm default.pa
-	fi
-fi
-
-if pulseaudio --check; then
-	if pacmd list-sinks | grep -qF "name: <dsp>"; then
-		pacmd unload-module module-ladspa-sink
-	fi
-	if [[ -f $dspconfig/$1 ]]; then
-		pacmd load-module module-ladspa-sink sink_name=dsp master=$master plugin=ladspa_dsp label=ladspa_dsp
-		pacmd set-default-sink dsp
-	fi
-fi
-
