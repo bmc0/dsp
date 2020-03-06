@@ -214,6 +214,11 @@ Example:
 * `fir [~/]impulse_path`  
 	Non-partitioned 64-bit FFT convolution. Latency is equal to the length
 	of the impulse.
+* `fir_p [min_part_len [max_part_len]] [~/]impulse_path`  
+	Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
+	`zita_convolver` effect, but potentially useful if you need more precision
+	and/or lower latency. Latency is equal to `min_part_len` (16 samples by
+	default). `{min,max}_part_len` must be powers of 2.
 * `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).

@@ -31,6 +31,7 @@
 #define NEW_SELECTOR(n) calloc(n, sizeof(char))
 #define COPY_SELECTOR(dest, src, n) memcpy(dest, src, n)
 #endif
+#define IS_POWER_OF_2(x) ((x) && !((x)&((x)-1)))
 #define PM_RAND_MAX 2147483647
 
 int check_endptr(const char *, const char *, const char *, const char *);

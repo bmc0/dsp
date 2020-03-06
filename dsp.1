@@ -210,6 +210,12 @@ Sinc resampler. Ignores the channel selector.
 Non-partitioned 64-bit FFT convolution. Latency is equal to the length
 of the impulse.
 .TP
+\fBfir_p\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIimpulse_path\fR
+Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
+\fBzita_convolver\fR effect, but potentially useful if you need more precision
+and/or lower latency. Latency is equal to \fImin_part_len\fR (16 samples by
+default). \fI{min,max}_part_len\fR must be powers of 2.
+.TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIimpulse_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.
 Latency is equal to \fImin_part_len\fR (64 samples by default).
