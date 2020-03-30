@@ -380,9 +380,10 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 				}
 			}
 		}
-		if (state->part[k].len > MAX_DIRECT_LEN)
+		if (state->part[k].len > MAX_DIRECT_LEN) {
 			fftw_destroy_plan(filter_plan);
-		memset(filter, 0, state->part[k].len * sizeof(sample_t));
+			memset(filter, 0, state->part[k].len * sizeof(sample_t));
+		}
 		filter_pos += state->part[k].len;
 		state->part[k].in_pos = (state->part[k].delay == 0) ? 0 : state->in_len - state->part[k].delay;
 	}
