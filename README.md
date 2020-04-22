@@ -443,6 +443,40 @@ To make `dsp` the default device, append this to `~/.asoundrc`:
 
 **Note:** The resample effect cannot be used with the LADSPA frontend.
 
+#### Usage example: Route pulseaudio audio through ladspa_dsp (tested with Ubuntu 18.04)
+
+1. Prepare .asoundrc as stated above.
+2. Determine pulseaudio master sink using `pacmd list sinks`. Use attribute `name` of the pulseaudio sink you plan to use (e.g. alsa_output.pci-0000_00_14.2.analog-stereo).
+3. Execute `analyseplugin <path to LADSPA plugin>/ladspa_dsp.so` to determine plugin name and label.  
+4. Run `pacmd load-module module-ladspa-sink sink_name=ladspa_out sink_master=<master_sink> plugin=<plugin name> label=<plugin label>`.
+5. Select new LADSPA sink as system sink (Ubuntu 18.04 Desktop: Settings > Sound > Output > LADSPA_Plugin <plugin label>  on <master sink selected above>).
+
+Example:
+
+	pacmd list sinks
+	analyseplugin /usr/local/lib/ladspa/ladspa_dsp.so
+	pacmd load-module module-ladspa-sink sink_name=ladspa_out sink_master=alsa_output.pci-0000_00_14.2.analog-stereo plugin=ladspa_dsp label=ladspa_dsp
+
+##### Load LADSPA plugin as system default
+To load the LADSPA module at system startup for all users include settings in `/etc/pulse/default.pa`:
+
+	.ifexists module-ladspa-sink.so
+	.nofail
+	load-module module-ladspa-sink sink_name=ladspa_out sink_master=<master_sink> plugin=<plugin name> label=<plugin label>
+	.fail
+	.endif
+
+##### Load LADSPA plugin as user default
+To load the LADSPA module at user login include settings in `~/.config/pulse/default.pa`:
+
+	#!/usr/bin/pulseaudio -nF
+	.include /etc/pulse/default.pa
+	.ifexists module-ladspa-sink.so
+	.nofail
+	load-module module-ladspa-sink sink_name=ladspa_out sink_master=<master_sink> plugin=<plugin name> label=<plugin label>
+	.fail
+	.endif
+
 ### Bugs
 
 * No support for metadata.
