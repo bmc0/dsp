@@ -93,8 +93,10 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 				free(config->chain_argv);
 				gen_argv_from_string(value, &config->chain_argc, &config->chain_argv);
 			}
-			else
-				LOG(LL_ERROR, "%s: warning: line %d: invalid option: %s\n", dsp_globals.prog_name, i, key);
+			else {
+				LOG(LL_ERROR, "%s: error: line %d: invalid option: %s\n", dsp_globals.prog_name, i, key);
+				goto parse_fail;
+			}
 		}
 		key = next;
 	}
@@ -128,7 +130,7 @@ static void load_configs_in_path(char *path)
 					init_config(&configs[n_configs], d_ent->d_name, path);
 					if ((err = read_config(&configs[n_configs], c_path))) {
 						if (err == 2) LOG(LL_ERROR, "%s: warning: failed to read config file: %s: %s\n", dsp_globals.prog_name, c_path, strerror(errno));
-						else LOG(LL_ERROR, "%s: warning: failed to read config file: %s\n", dsp_globals.prog_name, c_path);
+						else LOG(LL_ERROR, "%s: warning: failed to parse config file: %s\n", dsp_globals.prog_name, c_path);
 					}
 					else {
 						LOG(LL_VERBOSE, "%s: info: read config file: %s\n", dsp_globals.prog_name, c_path);
