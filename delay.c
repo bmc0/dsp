@@ -64,14 +64,14 @@ struct effect * delay_effect_init(struct effect_info *ei, struct stream_info *is
 	ssize_t samples;
 
 	if (argc != 2) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 
 	samples = parse_len(argv[1], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
 	CHECK_RANGE(samples >= 0, "delay", return NULL);
-	LOG(LL_VERBOSE, "%s: %s: info: actual delay is %gs (%zd sample%s)\n", dsp_globals.prog_name, argv[0], (double) samples / istream->fs, samples, (samples == 1) ? "" : "s");
+	LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd sample%s)", argv[0], (double) samples / istream->fs, samples, (samples == 1) ? "" : "s");
 	state = calloc(1, sizeof(struct delay_state));
 	state->len = samples;
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));

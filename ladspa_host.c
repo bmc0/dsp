@@ -144,13 +144,13 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	int selected_channel_count = 0, total_output_channels;
 
 	if (argc < 3) {
-		LOG(LL_ERROR, "%s: %s: usage %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage %s", argv[0], ei->usage);
 		return NULL;
 	}
 
 	if ((search_path = getenv("LADSPA_PATH")) == NULL) search_path = "/usr/local/lib/ladspa:/usr/lib/ladspa";
 	if (lt_dlinit() || lt_dlsetsearchpath(search_path)) {
-		LOG(LL_ERROR, "%s: %s: error: failed to initialize libltdl: %s\n", dsp_globals.prog_name, argv[0], lt_dlerror());
+		LOG_FMT(LL_ERROR, "%s: error: failed to initialize libltdl: %s", argv[0], lt_dlerror());
 		return NULL;
 	}
 
@@ -164,13 +164,13 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	if (argv[1][0] == '.' && argv[1][1] == '/') path = construct_full_path(dir, argv[1]);
 	else path = strdup(argv[1]);
 	if ((state->lt_handle = lt_dlopenext(path)) == NULL) {
-		LOG(LL_ERROR, "%s: %s: error: failed to open LADSPA plugin: %s: %s\n", dsp_globals.prog_name, argv[0], path, lt_dlerror());
+		LOG_FMT(LL_ERROR, "%s: error: failed to open LADSPA plugin: %s: %s", argv[0], path, lt_dlerror());
 		goto fail;
 	}
 
 	/* Get address of ladspa_descriptor() */
 	if ((descriptor_fn = lt_dlsym(state->lt_handle, "ladspa_descriptor")) == NULL) {
-		LOG(LL_ERROR, "%s: %s: %s: error: could not find ladspa_descriptor()\n", dsp_globals.prog_name, argv[0], path);
+		LOG_FMT(LL_ERROR, "%s: %s: error: could not find ladspa_descriptor()", argv[0], path);
 		goto fail;
 	}
 
@@ -182,7 +182,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 		}
 	}
 	if (state->desc == NULL) {
-		LOG(LL_ERROR, "%s: %s: %s: error: could not find plugin: %s\n", dsp_globals.prog_name, argv[0], path, argv[2]);
+		LOG_FMT(LL_ERROR, "%s: %s: error: could not find plugin: %s", argv[0], path, argv[2]);
 		goto fail;
 	}
 	desc = state->desc;
@@ -191,11 +191,11 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	for (unsigned long i = 0; i < desc->PortCount; ++i) {
 		LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
 		if (LADSPA_IS_PORT_INPUT(pd) && LADSPA_IS_PORT_OUTPUT(pd)) {
-			LOG(LL_ERROR, "%s: %s: %s: %s: error: port '%s' (%lu) is both an input and an output\n", dsp_globals.prog_name, argv[0], path, argv[2], desc->PortNames[i], i);
+			LOG_FMT(LL_ERROR, "%s: %s: %s: error: port '%s' (%lu) is both an input and an output", argv[0], path, argv[2], desc->PortNames[i], i);
 			goto fail;
 		}
 		if (LADSPA_IS_PORT_AUDIO(pd) && LADSPA_IS_PORT_CONTROL(pd)) {
-			LOG(LL_ERROR, "%s: %s: %s: %s: error: port '%s' (%lu) is both audio and control\n", dsp_globals.prog_name, argv[0], path, argv[2], desc->PortNames[i], i);
+			LOG_FMT(LL_ERROR, "%s: %s: %s: error: port '%s' (%lu) is both audio and control", argv[0], path, argv[2], desc->PortNames[i], i);
 			goto fail;
 		}
 		if (LADSPA_IS_PORT_INPUT(pd) && LADSPA_IS_PORT_AUDIO(pd)) ++state->n_in;
@@ -208,11 +208,11 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	if (state->n_in <= 1)
 		state->n_handles = selected_channel_count;
 	else if (state->n_in != selected_channel_count) {
-		LOG(LL_ERROR, "%s: %s: %s: %s: error: expected %d input channels, got %d\n", dsp_globals.prog_name, argv[0], path, argv[2], state->n_in, selected_channel_count);
+		LOG_FMT(LL_ERROR, "%s: %s: %s: error: expected %d input channels, got %d", argv[0], path, argv[2], state->n_in, selected_channel_count);
 		goto fail;
 	}
 	if (state->n_out < 1) {
-		LOG(LL_ERROR, "%s: %s: %s: %s: error: plugin has no outputs\n", dsp_globals.prog_name, argv[0], path, argv[2]);
+		LOG_FMT(LL_ERROR, "%s: %s: %s: error: plugin has no audio outputs", argv[0], path, argv[2]);
 		goto fail;
 	}
 
@@ -230,7 +230,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 
 	/* Set input control port values */
 	if (argc > 3 + in_control_port_count) {
-		LOG(LL_ERROR, "%s: %s: %s: %s: error: plugin expects %d controls, got %d\n", dsp_globals.prog_name, argv[0], path, argv[2], in_control_port_count, argc - 3);
+		LOG_FMT(LL_ERROR, "%s: %s: %s: error: plugin expects %d controls, got %d", argv[0], path, argv[2], in_control_port_count, argc - 3);
 		goto fail;
 	}
 	if (in_control_port_count > 0) {
@@ -271,7 +271,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 							state->control[cport] = 440.0;
 					}
 					else {
-						LOG(LL_ERROR, "%s: %s: %s: %s: error: control \"%s\" has no default value and is not set\n", dsp_globals.prog_name, argv[0], path, argv[2], desc->PortNames[i]);
+						LOG_FMT(LL_ERROR, "%s: %s: %s: error: control \"%s\" has no default value and is not set", argv[0], path, argv[2], desc->PortNames[i]);
 						goto fail;
 					}
 					if (LADSPA_IS_HINT_INTEGER(pr->HintDescriptor))
@@ -290,7 +290,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	/* Instantiate plugins, connect ports, and activate plugins (if required) */
 	for (int i = 0; i < state->n_handles; ++i) {
 		if ((state->handles[i] = desc->instantiate(desc, istream->fs)) == NULL) {
-			LOG(LL_ERROR, "%s: %s: %s: %s: error: instantiate() failed\n", dsp_globals.prog_name, argv[0], path, argv[2]);
+			LOG_FMT(LL_ERROR, "%s: %s: %s: error: instantiate() failed", argv[0], path, argv[2]);
 			goto fail;
 		}
 		int iport = 0, oport = 0, cport = 0;
@@ -309,16 +309,16 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	/* Print input control port names and values */
 	if (in_control_port_count > 0 && LOGLEVEL(LL_VERBOSE)) {
 		int cport = 0;
-		LOG(LL_VERBOSE, "%s: %s: %s: %s: info: controls:", dsp_globals.prog_name, argv[0], path, argv[2]);
+		LOG_FMT(LL_VERBOSE, "%s: %s: %s: info: controls:", argv[0], path, argv[2]);
 		for (unsigned long i = 0; i < desc->PortCount; ++i) {
 			LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
 			if (LADSPA_IS_PORT_CONTROL(pd)) {
 				if (LADSPA_IS_PORT_INPUT(pd))
-					LOG(LL_VERBOSE, " \"%s\"=%g", desc->PortNames[i], state->control[cport]);
+					fprintf(stderr, " \"%s\"=%g", desc->PortNames[i], state->control[cport]);
 				++cport;
 			}
 		}
-		LOG(LL_VERBOSE, "\n");
+		fputc('\n', stderr);
 	}
 
 	e->name = ei->name;

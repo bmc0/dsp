@@ -137,7 +137,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	char *endptr, *p;
 
 	if (argc > 4 || argc < 2) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 	if (argc > 2) {
@@ -151,11 +151,11 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	min_part_len = (min_part_len == 0) ? Convproc::MINPART : min_part_len;
 	max_part_len = (max_part_len == 0) ? Convproc::MAXPART : max_part_len;
 	if (min_part_len < Convproc::MINPART || min_part_len > Convproc::MAXPART || max_part_len < Convproc::MINPART || max_part_len > Convproc::MAXPART) {
-		LOG(LL_ERROR, "%s: %s: error: partition lengths must be within [%d,%d] or 0 for default\n", dsp_globals.prog_name, argv[0], Convproc::MINPART, Convproc::MAXPART);
+		LOG_FMT(LL_ERROR, "%s: error: partition lengths must be within [%d,%d] or 0 for default", argv[0], Convproc::MINPART, Convproc::MAXPART);
 		return NULL;
 	}
 	if (max_part_len < min_part_len) {
-		LOG(LL_ERROR, "%s: %s: warning: max_part_len < min_part_len\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: max_part_len < min_part_len", argv[0]);
 		max_part_len = min_part_len;
 	}
 
@@ -163,29 +163,29 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
 	if (n_channels > MINIMUM(Convproc::MAXINP, Convproc::MAXOUT)) {
-		LOG(LL_ERROR, "%s: %s: error: number of channels must not exceed %d\n", dsp_globals.prog_name, argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
+		LOG_FMT(LL_ERROR, "%s: error: number of channels must not exceed %d", argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
 		return NULL;
 	}
 	p = construct_full_path(dir, argv[argc - 1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG(LL_ERROR, "%s: %s: error: failed to open impulse file: %s\n", dsp_globals.prog_name, argv[0], p);
+		LOG_FMT(LL_ERROR, "%s: error: failed to open impulse file: %s", argv[0], p);
 		free(p);
 		return NULL;
 	}
 	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG(LL_ERROR, "%s: %s: error: channel mismatch: channels=%d impulse_channels=%d\n", dsp_globals.prog_name, argv[0], n_channels, c_filter->channels);
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d impulse_channels=%d", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->fs != istream->fs) {
-		LOG(LL_ERROR, "%s: %s: error: sample rate mismatch: fs=%d impulse_fs=%d\n", dsp_globals.prog_name, argv[0], istream->fs, c_filter->fs);
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d impulse_fs=%d", argv[0], istream->fs, c_filter->fs);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->frames < 1) {
-		LOG(LL_ERROR, "%s: %s: error: impulse length must be >= 1\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: impulse length must be >= 1", argv[0]);
 		destroy_codec(c_filter);
 		return NULL;
 	}
@@ -195,12 +195,12 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 #else
 	if (cproc->configure(n_channels, n_channels, c_filter->frames, min_part_len, min_part_len, max_part_len)) {
 #endif
-		LOG(LL_ERROR, "%s: %s: error: failed to configure convolution engine\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: failed to configure convolution engine", argv[0]);
 		destroy_codec(c_filter);
 		delete cproc;
 		return NULL;
 	}
-	LOG(LL_VERBOSE, "%s: %s: info: filter_frames=%zd min_part_len=%d max_part_len=%d\n", dsp_globals.prog_name, argv[0], c_filter->frames, min_part_len, max_part_len);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd min_part_len=%d max_part_len=%d", argv[0], c_filter->frames, min_part_len, max_part_len);
 
 	e = (struct effect *) calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -225,7 +225,7 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 
 	buf_interleaved = (sample_t *) calloc(c_filter->frames * c_filter->channels, sizeof(sample_t));
 	if (c_filter->read(c_filter, buf_interleaved, c_filter->frames) != c_filter->frames)
-		LOG(LL_ERROR, "%s: %s: warning: short read\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: short read", argv[0]);
 	buf_planar = (float **) calloc(c_filter->channels, sizeof(float *));
 	for (i = 0; i < c_filter->channels; ++i)
 		buf_planar[i] = (float *) calloc(c_filter->frames, sizeof(float));

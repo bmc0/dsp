@@ -224,7 +224,7 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	fftw_plan filter_plan;
 
 	if (argc > 4 || argc < 2) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 	if (argc > 2) {
@@ -238,15 +238,15 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	min_part_len = (min_part_len == 0) ? DEFAULT_MIN_PART_LEN : min_part_len;
 	max_part_len = (max_part_len == 0) ? DEFAULT_MAX_PART_LEN : max_part_len;
 	if (!(IS_POWER_OF_2(min_part_len) && IS_POWER_OF_2(max_part_len))) {
-		LOG(LL_ERROR, "%s: %s: error: partition lengths must be powers of 2\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: partition lengths must be powers of 2", argv[0]);
 		return NULL;
 	}
 	if (min_part_len < MIN_PART_LEN || min_part_len > MAX_PART_LEN || max_part_len > MAX_PART_LEN) {
-		LOG(LL_ERROR, "%s: %s: error: partition lengths must be within [%d,%d] or 0 for default\n", dsp_globals.prog_name, argv[0], MIN_PART_LEN, MAX_PART_LEN);
+		LOG_FMT(LL_ERROR, "%s: error: partition lengths must be within [%d,%d] or 0 for default", argv[0], MIN_PART_LEN, MAX_PART_LEN);
 		return NULL;
 	}
 	if (max_part_len < min_part_len) {
-		LOG(LL_ERROR, "%s: %s: warning: max_part_len < min_part_len\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: max_part_len < min_part_len", argv[0]);
 		max_part_len = min_part_len;
 	}
 
@@ -256,27 +256,27 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	p = construct_full_path(dir, argv[argc - 1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG(LL_ERROR, "%s: %s: error: failed to open impulse file: %s\n", dsp_globals.prog_name, argv[0], p);
+		LOG_FMT(LL_ERROR, "%s: error: failed to open impulse file: %s", argv[0], p);
 		free(p);
 		return NULL;
 	}
 	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG(LL_ERROR, "%s: %s: error: channel mismatch: channels=%d impulse_channels=%d\n", dsp_globals.prog_name, argv[0], n_channels, c_filter->channels);
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d impulse_channels=%d", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->fs != istream->fs) {
-		LOG(LL_ERROR, "%s: %s: error: sample rate mismatch: fs=%d impulse_fs=%d\n", dsp_globals.prog_name, argv[0], istream->fs, c_filter->fs);
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d impulse_fs=%d", argv[0], istream->fs, c_filter->fs);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->frames < 1) {
-		LOG(LL_ERROR, "%s: %s: error: impulse length must be >= 1\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: impulse length must be >= 1", argv[0]);
 		destroy_codec(c_filter);
 		return NULL;
 	}
-	LOG(LL_VERBOSE, "%s: %s: info: filter_frames=%zd\n", dsp_globals.prog_name, argv[0], c_filter->frames);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", argv[0], c_filter->frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -315,7 +315,7 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 			k *= 2;
 		else
 			delay += state->part[i].len;
-		LOG(LL_VERBOSE, "%s: %s: info: partition %d: len=%zd delay=%zd total=%d\n", dsp_globals.prog_name, argv[0], i, state->part[i].len, state->part[i].delay, j);
+		LOG_FMT(LL_VERBOSE, "%s: info: partition %d: len=%zd delay=%zd total=%d", argv[0], i, state->part[i].len, state->part[i].delay, j);
 	}
 	state->in_len = max_delay + 1;
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -329,7 +329,7 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	}
 	tmp_buf = calloc(c_filter->frames * c_filter->channels, sizeof(sample_t));
 	if (c_filter->read(c_filter, tmp_buf, c_filter->frames) != c_filter->frames)
-		LOG(LL_ERROR, "%s: %s: warning: short read\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: short read", argv[0]);
 
 	for (k = 0; k < state->nparts; ++k) {
 		if (state->part[k].len > MAX_DIRECT_LEN) {

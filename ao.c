@@ -17,6 +17,7 @@ struct ao_enc_info {
 	void (*write_func)(sample_t *, char *, ssize_t);
 };
 
+static const char codec_name[] = "ao";
 static int ao_open_count = 0;
 
 static struct ao_enc_info encodings[] = {
@@ -47,7 +48,7 @@ ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
 	if (ao_play(state->dev, (char *) buf, frames * c->channels * state->enc_info->bytes) == 0) {
-		LOG(LL_ERROR, "%s: ao: ao_play: write failed\n", dsp_globals.prog_name);
+		LOG_FMT(LL_ERROR, "%s: ao_play(): write failed", codec_name);
 		return 0;
 	}
 	return frames;
@@ -95,11 +96,11 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	if (ao_open_count == 0)
 		ao_initialize();
 	if ((driver = ao_default_driver_id()) == -1) {
-		LOG(LL_OPEN_ERROR, "%s: ao: error: failed get default driver id\n", dsp_globals.prog_name);
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed get default driver id", codec_name);
 		goto fail;
 	}
 	if ((enc_info = ao_get_enc_info(enc)) == NULL) {
-		LOG(LL_ERROR, "%s: ao: error: bad encoding: %s\n", dsp_globals.prog_name, enc);
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, enc);
 		goto fail;
 	}
 	format.bits = enc_info->prec;
@@ -108,7 +109,7 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	format.byte_format = AO_FMT_NATIVE;
 	format.matrix = NULL;
 	if ((dev = ao_open_live(driver, &format, NULL)) == NULL) {
-		LOG(LL_OPEN_ERROR, "%s: ao: error: could not open device\n", dsp_globals.prog_name);
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: could not open device", codec_name);
 		goto fail;
 	}
 

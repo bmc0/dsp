@@ -12,7 +12,8 @@ enum {
 	LL_VERBOSE,
 };
 #define LOGLEVEL(l) (dsp_globals.loglevel >= (l))
-#define LOG(l, ...) do { if (LOGLEVEL(l)) fprintf(stderr, __VA_ARGS__); } while (0)
+#define LOG_FMT(l, fmt, ...) do { if (LOGLEVEL(l)) fprintf(stderr, "%s: " fmt "\n", dsp_globals.prog_name, __VA_ARGS__); } while (0)
+#define LOG_S(l, s) do { if (LOGLEVEL(l)) fprintf(stderr, "%s: %s\n", dsp_globals.prog_name, s); } while (0)
 
 #define DEFAULT_FS            44100
 #define DEFAULT_CHANNELS      1

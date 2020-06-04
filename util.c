@@ -10,8 +10,8 @@
 int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
 {
 	if (endptr == str || *endptr != '\0') {
-		if (name == NULL) LOG(LL_ERROR, "%s: failed to parse %s: %s\n", dsp_globals.prog_name, param_name, str);
-		else LOG(LL_ERROR, "%s: %s: failed to parse %s: %s\n", dsp_globals.prog_name, name, param_name, str);
+		if (name == NULL) LOG_FMT(LL_ERROR, "failed to parse %s: %s", param_name, str);
+		else LOG_FMT(LL_ERROR, "%s: failed to parse %s: %s", name, param_name, str);
 		return 1;
 	}
 	return 0;
@@ -25,7 +25,7 @@ double parse_freq(const char *s, char **endptr)
 			f *= 1000.0;
 			++(*endptr);
 		}
-		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_freq(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
+		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
 	}
 	return f;
 }
@@ -47,7 +47,7 @@ ssize_t parse_len(const char *s, int fs, char **endptr)
 			++(*endptr);
 			break;
 		}
-		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_len(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
+		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
 	}
 	return samples;
 }
@@ -82,12 +82,12 @@ int parse_selector(const char *s, char *b, int n)
 		if (*s >= '0' && *s <= '9') {
 			v = atoi(s);
 			if (v > n - 1 || v < 0) {
-				LOG(LL_ERROR, "%s: parse_selector: error: value out of range: %d\n", dsp_globals.prog_name, v);
+				LOG_FMT(LL_ERROR, "%s(): error: value out of range: %d", __func__, v);
 				return 1;
 			}
 			if (dash) {
 				if (v < start) {
-					LOG(LL_ERROR, "%s: parse_selector: error: malformed range: %d-%d\n", dsp_globals.prog_name, (start == -1) ? 0 : start, v);
+					LOG_FMT(LL_ERROR, "%s(): error: malformed range: %d-%d", __func__, (start == -1) ? 0 : start, v);
 					return 1;
 				}
 				end = v;
@@ -99,7 +99,7 @@ int parse_selector(const char *s, char *b, int n)
 		}
 		else if (*s == '-') {
 			if (dash) {
-				LOG(LL_ERROR, "%s: parse_selector: syntax error: '-' unexpected\n", dsp_globals.prog_name);
+				LOG_FMT(LL_ERROR, "%s(): syntax error: '-' unexpected", __func__);
 				return 1;
 			}
 			dash = 1;
@@ -107,7 +107,7 @@ int parse_selector(const char *s, char *b, int n)
 		}
 		else if (*s == ',' || *s == '\0' ) {
 			if (start == -1 && end == -1 && !dash) {
-				LOG(LL_ERROR, "%s: parse_selector: syntax error: ',' unexpected\n", dsp_globals.prog_name);
+				LOG_FMT(LL_ERROR, "%s(): syntax error: ',' unexpected", __func__);
 				return 1;
 			}
 			set_range(b, n, start, end, dash);
@@ -117,12 +117,12 @@ int parse_selector(const char *s, char *b, int n)
 				++s;
 		}
 		else {
-			LOG(LL_ERROR, "%s: parse_selector: syntax error: invalid character: %c\n", dsp_globals.prog_name, *s);
+			LOG_FMT(LL_ERROR, "%s(): syntax error: invalid character: %c", __func__, *s);
 			return 1;
 		}
 	}
 	if (start == -1 && end == -1 && !dash) {
-		LOG(LL_ERROR, "%s: parse_selector: syntax error: ',' unexpected\n", dsp_globals.prog_name);
+		LOG_FMT(LL_ERROR, "%s(): syntax error: ',' unexpected", __func__);
 		return 1;
 	}
 	set_range(b, n, start, end, dash);

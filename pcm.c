@@ -22,6 +22,8 @@ struct pcm_enc_info {
 	void (*write_func)(sample_t *, char *, ssize_t);
 };
 
+static const char codec_name[] = "pcm";
+
 static struct pcm_enc_info encodings[] = {
 	{ "s16",    2, 16, 1, read_buf_s16,    write_buf_s16 },
 	{ "u8",     1, 8,  1, read_buf_u8,     write_buf_u8 },
@@ -50,7 +52,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG(LL_ERROR, "%s: pcm: read failed: %s\n", dsp_globals.prog_name, strerror(errno));
+		LOG_FMT(LL_ERROR, "%s: read failed: %s", codec_name, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -67,7 +69,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
 	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG(LL_ERROR, "%s: pcm: write failed: %s\n", dsp_globals.prog_name, strerror(errno));
+		LOG_FMT(LL_ERROR, "%s: write failed: %s", codec_name, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -123,17 +125,17 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	struct codec *c = NULL;
 
 	if ((enc_info = pcm_get_enc_info(enc)) == NULL) {
-		LOG(LL_ERROR, "%s: pcm: error: bad encoding: %s\n", dsp_globals.prog_name, enc);
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, enc);
 		goto fail;
 	}
 	if (!(endian == CODEC_ENDIAN_DEFAULT || endian == CODEC_ENDIAN_NATIVE)) {
-		LOG(LL_ERROR, "%s: pcm: error: endian conversion not supported\n", dsp_globals.prog_name);
+		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", codec_name);
 		goto fail;
 	}
 	if (strcmp(path, "-") == 0)
 		fd = (mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
 	else if ((fd = open(path, (mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
-		LOG(LL_OPEN_ERROR, "%s: pcm: error: failed to open file: %s: %s\n", dsp_globals.prog_name, path, strerror(errno));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, path, strerror(errno));
 		goto fail;
 	}
 

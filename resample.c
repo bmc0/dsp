@@ -151,7 +151,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	fftw_plan sinc_plan;
 
 	if (argc < 2 || argc > 3) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 	if (argc == 3) {
@@ -169,7 +169,7 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 
 	e = calloc(1, sizeof(struct effect));
 	if (rate == istream->fs) {
-		LOG(LL_VERBOSE, "%s: %s: info: sample rates match; no proccessing will be done\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_VERBOSE, "%s: info: sample rates match; no proccessing will be done", argv[0]);
 		return e;  /* Note: the effect will not be used because run() is unset */
 	}
 	e->name = ei->name;
@@ -259,8 +259,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
-	LOG(LL_VERBOSE, "%s: %s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd\n",
-		dsp_globals.prog_name, argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
+	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd",
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
 
 	return e;
 }

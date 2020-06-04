@@ -119,7 +119,7 @@ static void sgen_init_generator(struct sgen_generator *g, struct codec *c)
 	if (check_endptr(type, value, endptr, key)) \
 		return -1; \
 	if ((dest) <= 0.0 || (dest) >= (double) (fs) / 2.0) { \
-		LOG(LL_ERROR, "%s: %s: error: %s out of range\n", dsp_globals.prog_name, type, key); \
+		LOG_FMT(LL_ERROR, "%s: error: %s out of range", type, key); \
 		return -1; \
 	} \
 } while(0)
@@ -134,7 +134,7 @@ static int sgen_parse_param(struct sgen_generator *g, struct codec *c, const cha
 			if (check_endptr(type, value, endptr, key))
 				return -1;
 			if (g->offset < 0 || (c->frames > 0 && g->offset >= c->frames)) {
-				LOG(LL_ERROR, "%s: %s: error: %s out of range\n", dsp_globals.prog_name, type, key);
+				LOG_FMT(LL_ERROR, "%s: error: %s out of range", type, key);
 				return -1;
 			}
 		}
@@ -202,16 +202,16 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 		if (check_endptr(type, len_str, endptr, "length"))
 			goto fail;
 		if (c->frames <= 0) {
-			LOG(LL_ERROR, "%s: %s: error: length cannot be <= 0\n", dsp_globals.prog_name, type);
+			LOG_FMT(LL_ERROR, "%s: error: length cannot be <= 0", type);
 			goto fail;
 		}
-		/* LOG(LL_VERBOSE, "%s: %s: info: length=%zd\n", dsp_globals.prog_name, type, c->frames); */
+		/* LOG_FMT(LL_VERBOSE, "%s: info: length=%zd", type, c->frames); */
 	}
 	while (*arg != '\0') {
 		next_type = isolate(arg, '/');
 		next_arg = isolate(arg, ':');
 		value = isolate(arg, '@');
-		/* LOG(LL_VERBOSE, "%s: %s: info: type=%s channel_selector=%s\n", dsp_globals.prog_name, type, arg, value); */
+		/* LOG_FMT(LL_VERBOSE, "%s: info: type=%s channel_selector=%s", type, arg, value); */
 		state->g = realloc(state->g, (state->n + 1) * sizeof(struct sgen_generator));
 		g = &state->g[state->n];
 		memset(g, 0, sizeof(struct sgen_generator));
@@ -223,7 +223,7 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 		if (strcmp(gen_type, "delta") == 0)     g->type = SGEN_TYPE_DELTA;
 		else if (strcmp(gen_type, "sine") == 0) g->type = SGEN_TYPE_SINE;
 		else {
-			LOG(LL_ERROR, "%s: %s: error: illegal type: %s\n", dsp_globals.prog_name, type, gen_type);
+			LOG_FMT(LL_ERROR, "%s: error: illegal type: %s", type, gen_type);
 			goto fail;
 		}
 		sgen_init_generator(g, c);
@@ -234,10 +234,10 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 		while (*arg != '\0') {
 			next_arg = isolate(arg, ':');
 			value = isolate(arg, '=');
-			/* LOG(LL_VERBOSE, "%s: %s: %s: arg: key=%s value=%s\n", dsp_globals.prog_name, type, gen_type, arg, value); */
+			/* LOG_FMT(LL_VERBOSE, "%s: %s: arg: key=%s value=%s", type, gen_type, arg, value); */
 			parse_ret = sgen_parse_param(g, c, type, arg, value);
 			if (parse_ret == 1) {
-				LOG(LL_ERROR, "%s: %s: %s: error: illegal parameter: %s\n", dsp_globals.prog_name, type, gen_type, arg);
+				LOG_FMT(LL_ERROR, "%s: %s: error: illegal parameter: %s", type, gen_type, arg);
 				goto fail;
 			}
 			else if (parse_ret == -1)

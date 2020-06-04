@@ -71,7 +71,7 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 				config->input_channels = strtol(value, &endptr, 10);
 				if (check_endptr(path, value, endptr, "input_channels")) goto parse_fail;
 				if (config->input_channels <= 0) {
-					LOG(LL_ERROR, "%s: error: input_channels must be > 0\n", dsp_globals.prog_name);
+					LOG_S(LL_ERROR, "error: input_channels must be > 0");
 					goto parse_fail;
 				}
 			}
@@ -79,7 +79,7 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 				config->output_channels = strtol(value, &endptr, 10);
 				if (check_endptr(path, value, endptr, "output_channels")) goto parse_fail;
 				if (config->output_channels <= 0) {
-					LOG(LL_ERROR, "%s: error: output_channels must be > 0\n", dsp_globals.prog_name);
+					LOG_S(LL_ERROR, "error: output_channels must be > 0");
 					goto parse_fail;
 				}
 			}
@@ -94,7 +94,7 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 				gen_argv_from_string(value, &config->chain_argc, &config->chain_argv);
 			}
 			else {
-				LOG(LL_ERROR, "%s: error: line %d: invalid option: %s\n", dsp_globals.prog_name, i, key);
+				LOG_FMT(LL_ERROR, "error: line %d: invalid option: %s", i, key);
 				goto parse_fail;
 			}
 		}
@@ -119,7 +119,7 @@ static void load_configs_in_path(char *path)
 		next = isolate(path, ':');
 		d = opendir(path);
 		if (d) {
-			LOG(LL_VERBOSE, "%s: info: opened config dir: %s\n", dsp_globals.prog_name, path);
+			LOG_FMT(LL_VERBOSE, "info: opened config dir: %s", path);
 			while((d_ent = readdir(d))) {
 				if (strcmp(d_ent->d_name, "config") == 0
 						|| (strncmp(d_ent->d_name, "config_", 7) == 0 && strlen(d_ent->d_name) > 7)) {
@@ -129,11 +129,11 @@ static void load_configs_in_path(char *path)
 					configs = realloc(configs, (n_configs + 1) * sizeof(struct ladspa_dsp_config));
 					init_config(&configs[n_configs], d_ent->d_name, path);
 					if ((err = read_config(&configs[n_configs], c_path))) {
-						if (err == 2) LOG(LL_ERROR, "%s: warning: failed to read config file: %s: %s\n", dsp_globals.prog_name, c_path, strerror(errno));
-						else LOG(LL_ERROR, "%s: warning: failed to parse config file: %s\n", dsp_globals.prog_name, c_path);
+						if (err == 2) LOG_FMT(LL_ERROR, "warning: failed to read config file: %s: %s", c_path, strerror(errno));
+						else LOG_FMT(LL_ERROR, "warning: failed to parse config file: %s", c_path);
 					}
 					else {
-						LOG(LL_VERBOSE, "%s: info: read config file: %s\n", dsp_globals.prog_name, c_path);
+						LOG_FMT(LL_VERBOSE, "info: read config file: %s", c_path);
 						++n_configs;
 					}
 					free(c_path);
@@ -142,7 +142,7 @@ static void load_configs_in_path(char *path)
 			closedir(d);
 		}
 		else {
-			LOG(LL_VERBOSE, "%s: info: failed to open config dir: %s: %s\n", dsp_globals.prog_name, path, strerror(errno));
+			LOG_FMT(LL_VERBOSE, "info: failed to open config dir: %s: %s", path, strerror(errno));
 		}
 		path = next;
 	}
@@ -168,7 +168,7 @@ static void load_configs(void)
 			snprintf(path, i, "%s%s%s:%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_DIR, GLOBAL_CONFIG_DIR);
 		}
 	}
-	LOG(LL_VERBOSE, "%s: info: config path: %s\n", dsp_globals.prog_name, path);
+	LOG_FMT(LL_VERBOSE, "info: config path: %s", path);
 	load_configs_in_path(path);
 	free(path);
 }
@@ -181,41 +181,41 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 	struct ladspa_dsp_config *config = (struct ladspa_dsp_config *) desc->ImplementationData;
 	struct ladspa_dsp *d = calloc(1, sizeof(struct ladspa_dsp));
 
-	LOG(LL_VERBOSE, "%s: info: using label: %s\n", dsp_globals.prog_name, desc->Label);
+	LOG_FMT(LL_VERBOSE, "info: using label: %s", desc->Label);
 	d->input_channels = config->input_channels;
 	d->output_channels = config->output_channels;
 	d->ports = calloc(d->input_channels + d->output_channels, sizeof(LADSPA_Data *));
 	stream.fs = fs;
 	stream.channels = d->input_channels;
-	LOG(LL_VERBOSE, "%s: info: begin effects chain\n", dsp_globals.prog_name);
+	LOG_S(LL_VERBOSE, "info: begin effects chain");
 	if (config->lc_n != NULL) {
-		LOG(LL_VERBOSE, "%s: info: setting LC_NUMERIC to \"%s\"\n", dsp_globals.prog_name, config->lc_n);
+		LOG_FMT(LL_VERBOSE, "info: setting LC_NUMERIC to \"%s\"", config->lc_n);
 		new_locale = duplocale(uselocale((locale_t) 0));
 		if (new_locale == (locale_t) 0) {
-			LOG(LL_ERROR, "%s: error: duplocale() failed\n", dsp_globals.prog_name);
+			LOG_S(LL_ERROR, "error: duplocale() failed");
 			goto fail;
 		}
 		new_locale = newlocale(LC_NUMERIC_MASK, config->lc_n, new_locale);
 		if (new_locale == (locale_t) 0) {
-			LOG(LL_ERROR, "%s: error: newlocale() failed\n", dsp_globals.prog_name);
+			LOG_S(LL_ERROR, "error: newlocale() failed");
 			goto fail;
 		}
 		old_locale = uselocale(new_locale);
 	}
 	r = build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config->dir_path);
 	if (old_locale != (locale_t) 0) {
-		LOG(LL_VERBOSE, "%s: info: resetting locale\n", dsp_globals.prog_name);
+		LOG_S(LL_VERBOSE, "info: resetting locale");
 		uselocale(old_locale);
 	}
 	if (new_locale != (locale_t) 0) freelocale(new_locale);
 	if (r) goto fail;
-	LOG(LL_VERBOSE, "%s: info: end effects chain\n", dsp_globals.prog_name);
+	LOG_S(LL_VERBOSE, "info: end effects chain");
 	if (stream.channels != d->output_channels) {
-		LOG(LL_ERROR, "%s: error: output channels mismatch\n", dsp_globals.prog_name);
+		LOG_S(LL_ERROR, "error: output channels mismatch");
 		goto fail;
 	}
 	if (stream.fs != fs) {
-		LOG(LL_ERROR, "%s: error: sample rate mismatch\n", dsp_globals.prog_name);
+		LOG_S(LL_ERROR, "error: sample rate mismatch");
 		goto fail;
 	}
 	return d;
@@ -247,7 +247,7 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 		buf_len = get_effects_chain_buffer_len(&d->chain, s, d->input_channels);
 		d->buf1 = realloc(d->buf1, buf_len * sizeof(sample_t));
 		d->buf2 = realloc(d->buf2, buf_len * sizeof(sample_t));
-		LOG(LL_VERBOSE, "%s: info: frames=%zd\n", dsp_globals.prog_name, d->frames);
+		LOG_FMT(LL_VERBOSE, "info: frames=%zd", d->frames);
 	}
 
 	for (i = j = 0; i < s; i++)
@@ -264,7 +264,7 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 static void cleanup_dsp(LADSPA_Handle inst)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
-	LOG(LL_VERBOSE, "%s: info: cleaning up...\n", dsp_globals.prog_name);
+	LOG_S(LL_VERBOSE, "info: cleaning up...");
 	free(d->buf1);
 	free(d->buf2);
 	destroy_effects_chain(&d->chain);
@@ -288,14 +288,14 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 		else if (strcmp(env, "SILENT") == 0)
 			dsp_globals.loglevel = LL_SILENT;
 		else
-			LOG(LL_ERROR, "%s: warning: unrecognized loglevel: %s\n", dsp_globals.prog_name, env);
+			LOG_FMT(LL_ERROR, "warning: unrecognized loglevel: %s", env);
 	}
 
 	load_configs();
 	if (n_configs > 0)
 		descriptors = calloc(n_configs, sizeof(LADSPA_Descriptor));
 	else {
-		LOG(LL_ERROR, "%s: error: no config files found\n", dsp_globals.prog_name);
+		LOG_S(LL_ERROR, "error: no config files found");
 		return;
 	}
 	for (k = 0; k < n_configs; ++k) {

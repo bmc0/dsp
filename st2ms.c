@@ -49,14 +49,14 @@ struct effect * st2ms_effect_init(struct effect_info *ei, struct stream_info *is
 	int i, n_channels = 0;
 
 	if (argc != 1) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 	for (i = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
 	if (n_channels != 2) {
-		LOG(LL_ERROR, "%s: %s: error: number of input channels must be 2\n", dsp_globals.prog_name, argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
 		return NULL;
 	}
 
@@ -72,7 +72,7 @@ struct effect * st2ms_effect_init(struct effect_info *ei, struct stream_info *is
 		e->run = ms2st_effect_run;
 		break;
 	default:
-		LOG(LL_ERROR, "%s: st2ms.c: BUG: unknown effect: %s (%d)\n", dsp_globals.prog_name, argv[0], ei->effect_number);
+		LOG_FMT(LL_ERROR, "%s: BUG: unknown effect: %s (%d)", __FILE__, argv[0], ei->effect_number);
 		free(e);
 		return NULL;
 	}

@@ -33,7 +33,7 @@ static double parse_width(const char *s, int *type, char **endptr)
 			++(*endptr);
 			break;
 		}
-		if (**endptr != '\0') LOG(LL_ERROR, "%s: parse_width(): trailing characters: %s\n", dsp_globals.prog_name, *endptr);
+		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
 	}
 	return w;
 }
@@ -303,14 +303,14 @@ void biquad_effect_destroy(struct effect *e)
 #define BIQUAD_WIDTH_TEST_NO_SLOPE (width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB)
 #define CHECK_WIDTH_TYPE(cond) \
 	if (!(cond)) { \
-		LOG(LL_ERROR, "%s: %s: error: invalid width type\n", dsp_globals.prog_name, argv[0]); \
+		LOG_FMT(LL_ERROR, "%s: error: invalid width type", argv[0]); \
 		return NULL; \
 	}
 
 #define INIT_COMMON(n_args, b_type) \
 	do { \
 		if (argc != (n_args) + 1) { \
-			LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage); \
+			LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage); \
 			return NULL; \
 		} \
 		type = b_type; \
@@ -375,7 +375,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 			arg2 = -9.62;
 			break;
 		default:
-			LOG(LL_ERROR, "%s: %s: error: sample rate must be 44100 or 48000\n", dsp_globals.prog_name, argv[0]);
+			LOG_FMT(LL_ERROR, "%s: error: sample rate must be 44100 or 48000", argv[0]);
 			return NULL;
 		}
 		break;
@@ -389,7 +389,7 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 		GET_ARG(a2, argv[6], "a2");
 		break;
 	default:
-		LOG(LL_ERROR, "%s: biquad.c: BUG: unknown filter type: %s (%d)\n", dsp_globals.prog_name, argv[0], ei->effect_number);
+		LOG_FMT(LL_ERROR, "%s: BUG: unknown filter type: %s (%d)", __FILE__, argv[0], ei->effect_number);
 		return NULL;
 	}
 

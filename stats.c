@@ -100,7 +100,7 @@ struct effect * stats_effect_init(struct effect_info *ei, struct stream_info *is
 		CHECK_ENDPTR(argv[1], endptr, "ref_level", return NULL);
 	}
 	else if (argc != 1) {
-		LOG(LL_ERROR, "%s: %s: usage: %s\n", dsp_globals.prog_name, argv[0], ei->usage);
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 
