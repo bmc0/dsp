@@ -40,6 +40,14 @@ AWK_SCRIPT='
 			gsub(",", "", $6)
 			print "highpass", $6, "0.7071"
 		}
+		else if ($4=="LP1") {
+			gsub(",", "", $6)
+			print "lowpass_1", $6
+		}
+		else if ($4=="HP1") {
+			gsub(",", "", $6)
+			print "highpass_1", $6
+		}
 		else if ($4=="LPQ") {
 			gsub(",", "", $6)
 			print "lowpass", $6, $9
@@ -67,6 +75,14 @@ AWK_SCRIPT='
 		else if ($4=="HS" && $5~/[0-9]+dB/ && $10!=0) {
 			gsub(",", "", $7)
 			print "highshelf", $7, substr($5, 1, length($5)-2)"d", $10
+		}
+		else if ($4=="LSQ" && $9!=0) {
+			gsub(",", "", $6)
+			print "lowshelf", $6, $12, $9
+		}
+		else if ($4=="HSQ" && $9!=0) {
+			gsub(",", "", $6)
+			print "highshelf", $6, $12, $9
 		}
 		else if ($4=="AP") {
 			gsub(",", "", $6)
