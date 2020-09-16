@@ -195,6 +195,38 @@ Example:
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
+* `matrix4 [[options] surround_level]`  
+	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
+	plain (i.e. unencoded) stereo material. It is based on David Griesinger's
+	work on matrix surround.
+
+	The intended speaker configuration is fronts at ±30° and surrounds between
+	±60° and ±120°. The surround speakers must be calibrated correctly in
+	level and frequency response for best results. No frequency contouring or
+	delay is done internally, so it is highly recommended to apply `delay` and
+	`lowpass_1` effects to the surround outputs:
+
+	```
+	matrix4 -6 :2,3 delay 15m lowpass_1 6k :
+	```
+
+	The settings shown above (-6dB surround level, 15ms delay, and 6kHz rolloff)
+	are a good starting point, but may be adjusted to taste. The default
+	`surround_level` is -6dB.
+
+	The front outputs replace the original input channels and the surround
+	outputs are appended to the end of the channel list.
+
+	Options are given as a comma-separated list. Recognized options are:
+
+	* `no_dir_boost`  
+		Disable directional boost of front channels.
+	* `show_status`  
+		Show a status line (slightly broken currently, but still useful for
+		debugging).
+	* `signal`  
+		Toggle the effect when `effect.signal()` is called.
+
 * `remix channel_selector|. ...`  
 	Select and mix input channels into output channels. Each channel selector
 	specifies the input channels to be mixed to produce each output channel.

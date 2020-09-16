@@ -179,6 +179,40 @@ argument is given.
 Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 crossfeed.
 .TP
+\fBmatrix4\fR [[\fIoptions\fR] \fIsurround_level\fR]
+2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
+plain (i.e. unencoded) stereo material. It is based on David Griesinger's
+work on matrix surround.
+
+The intended speaker configuration is fronts at ±30° and surrounds between
+±60° and ±120°. The surround speakers must be calibrated correctly in
+level and frequency response for best results. No frequency contouring or
+delay is done internally, so it is highly recommended to apply \fBdelay\fR and
+\fBlowpass_1\fR effects to the surround outputs:
+.EX
+	matrix4 -6 :2,3 delay 15m lowpass_1 6k :
+.EE
+The settings shown above (-6dB surround level, 15ms delay, and 6kHz rolloff)
+are a good starting point, but may be adjusted to taste. The default
+\fIsurround_level\fR is -6dB.
+
+The front outputs replace the original input channels and the surround
+outputs are appended to the end of the channel list.
+
+Options are given as a comma-separated list. Recognized options are:
+.RS
+.TP
+\fIno_dir_boost\fR
+Disable directional boost of front channels.
+.TP
+\fIshow_status\fR
+Show a status line (slightly broken currently, but still useful for
+debugging).
+.TP
+\fIsignal\fR
+Toggle the effect when `effect.signal()' is called.
+.RE
+.TP
 \fBremix\fR \fIchannel_selector\fR|. ...
 Select and mix input channels into output channels. Each channel selector
 specifies the input channels to be mixed to produce each output channel.
