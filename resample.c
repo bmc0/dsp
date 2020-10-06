@@ -26,7 +26,7 @@ struct resample_state {
 sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
-	ssize_t i, k, iframes = 0, oframes = 0;
+	ssize_t i, k, j, d, iframes = 0, oframes = 0;
 	const ssize_t max_oframes = ratio_mult_ceil(*frames, state->ratio.n, state->ratio.d);
 
 	while (iframes < *frames) {
@@ -48,9 +48,27 @@ sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 			for (i = 0; i < e->ostream.channels; ++i) {
 				/* FFT(state->input[i]) -> state->tmp_fr */
 				fftw_execute(state->r2c_plan[i]);
+				/* upsampling; reflect */
+				if (state->in_len < state->out_len) {
+					for (k = state->in_len + 1, j = state->in_len - 1, d = -1; k < state->sinc_fr_len; ++k) {
+						state->tmp_fr[k] = (d == 1) ? state->tmp_fr[j] : conj(state->tmp_fr[j]);
+						j += d;
+						if (j == 0) d = 1;
+						else if (j == state->in_len) d = -1;
+					}
+				}
 				/* convolve input with sinc filter */
 				for (k = 0; k < state->sinc_fr_len; ++k)
 					state->tmp_fr[k] *= state->sinc_fr[k];
+				/* downsampling; fold */
+				if (state->in_len > state->out_len) {
+					for (k = state->out_len, j = state->out_len, d = -1; k < state->sinc_fr_len; ++k) {
+						state->tmp_fr[j] += (d == 1) ? state->tmp_fr[k] : conj(state->tmp_fr[k]);
+						j += d;
+						if (j == 0) d = 1;
+						else if (j == state->out_len) d = -1;
+					}
+				}
 				/* IFFT(state->tmp_fr) -> state->output[i] */
 				fftw_execute(state->c2r_plan[i]);
 				/* normalize */
