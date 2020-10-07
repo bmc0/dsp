@@ -9,7 +9,8 @@
 
 /* Tunables */
 static const double default_bw = 0.95;  /* default bandwidth */
-static const double m_fact = 8;         /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
+#define M_FACT 8                        /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
+#define SINC_MAX_OVERSAMPLE 8
 
 struct resample_state {
 	struct {
@@ -17,7 +18,7 @@ struct resample_state {
 	} ratio;
 	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos, drain_pos, drain_frames, out_delay;
 	fftw_complex *sinc_fr;
-	fftw_complex *tmp_fr;
+	fftw_complex *tmp_fr, *tmp_fr_2;
 	sample_t **input, **output, **overlap;
 	fftw_plan *r2c_plan, *c2r_plan;
 	int has_output, is_draining;
@@ -26,7 +27,7 @@ struct resample_state {
 sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
-	ssize_t i, k, j, d, iframes = 0, oframes = 0;
+	ssize_t i, k, j, l, d1, d2, iframes = 0, oframes = 0;
 	const ssize_t max_oframes = ratio_mult_ceil(*frames, state->ratio.n, state->ratio.d);
 
 	while (iframes < *frames) {
@@ -48,28 +49,25 @@ sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 			for (i = 0; i < e->ostream.channels; ++i) {
 				/* FFT(state->input[i]) -> state->tmp_fr */
 				fftw_execute(state->r2c_plan[i]);
-				/* upsampling; reflect */
-				if (state->in_len < state->out_len) {
-					for (k = state->in_len + 1, j = state->in_len - 1, d = -1; k < state->sinc_fr_len; ++k) {
-						state->tmp_fr[k] = (d == 1) ? state->tmp_fr[j] : conj(state->tmp_fr[j]);
-						j += d;
-						if (j == 0) d = 1;
-						else if (j == state->in_len) d = -1;
-					}
-				}
+				memset(state->tmp_fr_2, 0, state->tmp_fr_len * sizeof(fftw_complex));
 				/* convolve input with sinc filter */
-				for (k = 0; k < state->sinc_fr_len; ++k)
-					state->tmp_fr[k] *= state->sinc_fr[k];
-				/* downsampling; fold */
-				if (state->in_len > state->out_len) {
-					for (k = state->out_len, j = state->out_len, d = -1; k < state->sinc_fr_len; ++k) {
-						state->tmp_fr[j] += (d == 1) ? state->tmp_fr[k] : conj(state->tmp_fr[k]);
-						j += d;
-						if (j == 0) d = 1;
-						else if (j == state->out_len) d = -1;
-					}
+				state->tmp_fr_2[0] = state->tmp_fr[0] * state->sinc_fr[0];
+				for (k = 1, j = 1, l = 1, d1 = 1, d2 = 1;; ++k) {
+					fftw_complex s = (d1 == 1) ? state->tmp_fr[j] : conj(state->tmp_fr[j]);
+					state->tmp_fr_2[l] += (d2 == 1) ? s * state->sinc_fr[k] : conj(s * state->sinc_fr[k]);
+					if (k + 1 == state->sinc_fr_len) break;
+					if (l == state->out_len)
+						state->tmp_fr_2[l] += s * state->sinc_fr[k];
+					else if (l == 0)
+						state->tmp_fr_2[l] += conj(s * state->sinc_fr[k]);
+					j += d1;
+					l += d2;
+					if (j == 0) d1 = 1;
+					else if (j == state->in_len) d1 = -1;
+					if (l == 0) d2 = 1;
+					else if (l == state->out_len) d2 = -1;
 				}
-				/* IFFT(state->tmp_fr) -> state->output[i] */
+				/* IFFT(state->tmp_fr_2) -> state->output[i] */
 				fftw_execute(state->c2r_plan[i]);
 				/* normalize */
 				for (k = 0; k < state->out_len * 2; ++k)
@@ -143,6 +141,7 @@ void resample_effect_destroy(struct effect *e)
 	struct resample_state *state = (struct resample_state *) e->data;
 	fftw_free(state->sinc_fr);
 	fftw_free(state->tmp_fr);
+	fftw_free(state->tmp_fr_2);
 	for (i = 0; i < e->ostream.channels; ++i) {
 		fftw_free(state->input[i]);
 		fftw_free(state->output[i]);
@@ -163,9 +162,9 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	struct effect *e;
 	struct resample_state *state;
 	char *endptr;
-	int rate, max_rate, min_rate, max_factor, gcd, i;
+	int rate, max_rate, min_rate, max_factor, gcd, i, sinc_oversample;
 	double bw = default_bw;
-	sample_t *sinc, width, fc, m;
+	sample_t *sinc, width, fc, m, ov_fc, ov_m;
 	fftw_plan sinc_plan;
 
 	if (argc < 2 || argc > 3) {
@@ -212,16 +211,20 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 
 	/* calulate params for windowed sinc function */
 	width = (min_rate - min_rate * bw) / 2;
-	fc = (min_rate - width) / max_rate;
-	m = round(m_fact / (width / max_rate));
+	fc = ((double) min_rate - width) / max_rate;
+	m = round((double) M_FACT / (width / max_rate));
+	sinc_oversample = MINIMUM(state->ratio.n, SINC_MAX_OVERSAMPLE);
+	ov_fc = fc / sinc_oversample;
+	ov_m = m * sinc_oversample;
 
 	/* determine array lengths */
 	state->m = (ssize_t) (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
 	i = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;  /* calculate multiplier */
-	state->sinc_len = max_factor * i;
+	state->sinc_len = max_factor * i * sinc_oversample;
 	state->in_len = state->ratio.d * i;
 	state->out_len = state->ratio.n * i;
-	state->tmp_fr_len = state->sinc_fr_len = state->sinc_len + 1;
+	state->tmp_fr_len = max_factor * i + 1;
+	state->sinc_fr_len = state->sinc_len + 1;
 
 	/* calculate output delay */
 	if (rate == max_rate)
@@ -238,6 +241,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 
 	state->tmp_fr = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
 	memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
+	state->tmp_fr_2 = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
+	memset(state->tmp_fr_2, 0, state->tmp_fr_len * sizeof(fftw_complex));
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->output = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->overlap = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -251,22 +256,22 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 		state->overlap[i] = fftw_malloc(state->out_len * sizeof(sample_t));
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 		state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->in_len * 2, state->input[i], state->tmp_fr, FFTW_ESTIMATE);
-		state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->out_len * 2, state->tmp_fr, state->output[i], FFTW_ESTIMATE);
+		state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->out_len * 2, state->tmp_fr_2, state->output[i], FFTW_ESTIMATE);
 	}
 
 	/* generate windowed sinc function */
-	for (i = 0; i < (int) m + 1; ++i) {
+	for (i = 0; i < (int) ov_m + 1; ++i) {
 		/* calculate scaled sinc() value */
-		if ((double) i == m / 2)
-			sinc[i] = fc;
+		if ((double) i == ov_m / 2)
+			sinc[i] = ov_fc;
 		else
-			sinc[i] = sin(M_PI * fc * (i - m / 2)) / (M_PI * (i - m / 2));
+			sinc[i] = sin(M_PI * ov_fc * (i - ov_m / 2)) / (M_PI * (i - ov_m / 2));
 		/* apply Blackman window (~75dB stopband attenuation) */
-		/* sinc[i] *= 0.42 - 0.5 * cos(2 * M_PI * i / m) + 0.08 * cos(4 * M_PI * i / m); */
+		/* sinc[i] *= 0.42 - 0.5 * cos(2 * M_PI * i / ov_m) + 0.08 * cos(4 * M_PI * i / ov_m); */
 		/* apply Nuttall window (continuous first derivative) (~112dB stopband attenuation) */
-		sinc[i] *= 0.355768 - 0.487396 * cos(2 * M_PI * i / m) + 0.144232 * cos(4 * M_PI * i / m) - 0.012604 * cos(6 * M_PI * i / m);
+		sinc[i] *= 0.355768 - 0.487396 * cos(2 * M_PI * i / ov_m) + 0.144232 * cos(4 * M_PI * i / ov_m) - 0.012604 * cos(6 * M_PI * i / ov_m);
 		/* apply Blackman-Nuttall window (~114dB stopband attenuation) */
-		/* sinc[i] *= 0.3635819 - 0.4891775 * cos(2 * M_PI * i / m) + 0.1365995 * cos(4 * M_PI * i / m) - 0.0106411 * cos(6 * M_PI * i / m); */
+		/* sinc[i] *= 0.3635819 - 0.4891775 * cos(2 * M_PI * i / ov_m) + 0.1365995 * cos(4 * M_PI * i / ov_m) - 0.0106411 * cos(6 * M_PI * i / ov_m); */
 	}
 
 	fftw_execute(sinc_plan);
@@ -277,8 +282,8 @@ struct effect * resample_effect_init(struct effect_info *ei, struct stream_info 
 	for (i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
-	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd",
-		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len);
+	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd sinc_oversample=%d",
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len, sinc_oversample);
 
 	return e;
 }
