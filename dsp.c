@@ -96,6 +96,7 @@ static const char interactive_help[] =
 	"  c : pause\n"
 	"  e : rebuild effects chain\n"
 	"  v : toggle verbose progress display\n"
+	"  s : send signal to effects chain\n"
 	"  q : quit\n";
 
 struct dsp_globals dsp_globals = {
@@ -628,6 +629,9 @@ int main(int argc, char *argv[])
 						break;
 					case 'v':
 						verbose_progress = !verbose_progress;
+						break;
+					case 's':
+						signal_effects_chain(&chain);
 						break;
 					case 'q':
 						out_codec->drop(out_codec);

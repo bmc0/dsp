@@ -286,6 +286,15 @@ void reset_effects_chain(struct effects_chain *chain)
 	}
 }
 
+void signal_effects_chain(struct effects_chain *chain)
+{
+	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (e->signal != NULL) e->signal(e);
+		e = e->next;
+	}
+}
+
 void plot_effects_chain(struct effects_chain *chain, int input_fs)
 {
 	int i = 0, k, j, max_fs = -1, channels = -1;

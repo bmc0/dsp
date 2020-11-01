@@ -19,6 +19,7 @@ struct effect {
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
 	void (*reset)(struct effect *);
+	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);
 	void (*drain)(struct effect *, ssize_t *, sample_t *);
 	void (*destroy)(struct effect *);
@@ -39,6 +40,7 @@ ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
+void signal_effects_chain(struct effects_chain *);
 void plot_effects_chain(struct effects_chain *, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
