@@ -447,9 +447,10 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 	if (opt) {
 		while (*opt != '\0') {
 			next_opt = isolate(opt, ',');
-			if      (strcmp(opt, "show_status") == 0)   state->show_status = 1;
-			else if (strcmp(opt, "no_dir_boost") == 0)  state->do_dir_boost = 0;
-			else if (strcmp(opt, "signal") == 0)        e->signal = matrix4_effect_signal;
+			if (*opt == '\0') /* do nothing */;
+			else if (strcmp(opt, "show_status")  == 0) state->show_status = 1;
+			else if (strcmp(opt, "no_dir_boost") == 0) state->do_dir_boost = 0;
+			else if (strcmp(opt, "signal")       == 0) e->signal = matrix4_effect_signal;
 			else {
 				LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
 				goto opt_fail;
