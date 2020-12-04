@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -38,14 +39,19 @@ enum {
 	INPUT_MODE_SEQUENCE,
 };
 
+#define PROGRESS_MAX_LEN 1024
+#define CLEAR_PROGRESS   "\033[1K\r"
+
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, input_mode = INPUT_MODE_CONCAT,
-	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0;
+	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0,
+	progress_cleared = 0;
 static volatile sig_atomic_t term_sig = 0, tstp_sig = 0;
 static struct effects_chain chain = { NULL, NULL };
 static struct codec_list in_codecs = { NULL, NULL };
 static struct codec *out_codec = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL, *obuf;
+static char *progress_line = NULL;
 
 static const char help_text[] =
 	"Usage: %s [options] path ... [!] [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
@@ -101,6 +107,20 @@ struct dsp_globals dsp_globals = {
 	"dsp",                  /* prog_name */
 };
 
+int dsp_log_printf(const char *fmt, ...)
+{
+	int r;
+	if (progress_line && !progress_cleared)
+		fputs(CLEAR_PROGRESS, stderr);
+	va_list v;
+	va_start(v, fmt);
+	r = vfprintf(stderr, fmt, v);
+	va_end(v);
+	if (progress_line && !progress_cleared)
+		fputs(progress_line, stderr);
+	return r;
+}
+
 static sample_t clip(sample_t s)
 {
 	if (s > 1.0) {
@@ -123,6 +143,8 @@ static void cleanup_and_exit(int s)
 	destroy_effects_chain(&chain);
 	free(buf1);
 	free(buf2);
+	free(progress_line);
+	progress_line = NULL;
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (dsp_globals.clip_count > 0)
@@ -309,6 +331,8 @@ static int has_elapsed(struct timespec *then, double s)
 
 static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int is_paused, int force)
 {
+	if (!show_progress)
+		return;
 #ifdef HAVE_CLOCK_GETTIME
 	static struct timespec then;
 	if (has_elapsed(&then, 0.1) || force) {
@@ -319,15 +343,18 @@ static void print_progress(struct codec *in, struct codec *out, ssize_t pos, int
 		ssize_t delay = lround((out_delay_s + effects_chain_delay_s) * in->fs);
 		ssize_t p = (pos > delay) ? pos - delay : 0;
 		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
-		fprintf(stderr, "\r%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
+		if (progress_line == NULL)
+			progress_line = calloc(PROGRESS_MAX_LEN, sizeof(char));
+		int pl = snprintf(progress_line, PROGRESS_MAX_LEN, "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
-		if (verbose_progress)
-			fprintf(stderr, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
+		if (pl < PROGRESS_MAX_LEN - 1 && verbose_progress)
+			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
 				in_delay_s * 1000.0, effects_chain_delay_s * 1000.0, out_delay_s * 1000.0, (in_delay_s + effects_chain_delay_s + out_delay_s) * 1000.0);
-		if (verbose_progress || dsp_globals.clip_count != 0)
-			fprintf(stderr, "peak:%.2fdBFS  clip:%ld  ", log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
-		fprintf(stderr, "\033[K");
+		if (pl < PROGRESS_MAX_LEN - 1 && (verbose_progress || dsp_globals.clip_count != 0))
+			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%ld  ",
+				log10(dsp_globals.peak) * 20, dsp_globals.clip_count);
+		fprintf(stderr, "\r%s\033[K", progress_line);
 #ifdef HAVE_CLOCK_GETTIME
 	}
 #endif
@@ -518,23 +545,19 @@ int main(int argc, char *argv[])
 			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
 			LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
-			if (show_progress)
-				print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
+			print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 			do {
 				if (term_sig) goto got_term_sig;
 				if (tstp_sig) {
 					handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, is_paused);
-					if (show_progress)
-						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
+					print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
 				}
 				while (interactive && (input_pending() || is_paused)) {
 					delay = lround(((double) out_codec->delay(out_codec) / out_codec->fs + get_effects_chain_delay(&chain)) * in_codecs.head->fs);
 					ch = getchar();
 					switch (ch) {
 					case 'h':
-						if (show_progress)
-							fputs("\033[1K\r", stderr);
-						fprintf(stderr, "\n%s\n", interactive_help);
+						dsp_log_printf("\n%s\n", interactive_help);
 						break;
 					case ',':
 						pos = do_seek(in_codecs.head, out_codec, pos, delay, lround(in_codecs.head->fs * -5), SEEK_CUR);
@@ -561,7 +584,8 @@ int main(int argc, char *argv[])
 						break;
 					case 'e':
 						if (show_progress)
-							fputs("\033[1K\r", stderr);
+							fputs(CLEAR_PROGRESS, stderr);
+						progress_cleared = 1;
 						LOG_S(LL_NORMAL, "info: rebuilding effects chain");
 						if (!is_paused && drain_effects) {
 							do {
@@ -605,7 +629,7 @@ int main(int argc, char *argv[])
 					case 'q':
 						out_codec->drop(out_codec);
 						if (show_progress)
-							fputs("\033[1K\r", stderr);
+							fputs(CLEAR_PROGRESS, stderr);
 						goto end_rw_loop;
 					default:
 						if (term_attrs_saved) {
@@ -616,15 +640,15 @@ int main(int argc, char *argv[])
 					}
 					if (term_sig) goto got_term_sig;
 					if (tstp_sig) handle_tstp(&old_sigtstp_sa, &new_sigtstp_sa, is_paused);
-					if (show_progress)
-						print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
+					print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
+					progress_cleared = 0;
 				}
 				w = r = in_codecs.head->read(in_codecs.head, buf1, dsp_globals.buf_frames);
 				pos += r;
 				obuf = run_effects_chain(chain.head, &w, buf1, buf2);
 				write_out(w, obuf, do_dither);
 				k += w;
-				if (show_progress && k >= out_codec->fs) {
+				if (k >= out_codec->fs) {
 					print_progress(in_codecs.head, out_codec, pos, is_paused, 0);
 					k -= out_codec->fs;
 				}
@@ -635,7 +659,7 @@ int main(int argc, char *argv[])
 			stream.channels = in_codecs.head->channels;
 			destroy_codec_list_head(&in_codecs);
 			if (show_progress)
-				fputs("\033[1K\r", stderr);
+				fputs(CLEAR_PROGRESS, stderr);
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
 				LOG_S(LL_NORMAL, "info: input sample rate and/or channels changed; rebuilding effects chain");
 				if (!is_paused && drain_effects) {
