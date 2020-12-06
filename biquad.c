@@ -135,7 +135,7 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 			break;
 		case BIQUAD_HIGHPASS_1:
 			a0 = 1.0;
-			a1 = (-1.0 + sin_w0) / cos_w0;
+			a1 = (w0 == M_PI_2) ? 0.0 : (-1.0 + sin_w0) / cos_w0;
 			a2 = 0.0;
 			b0 = (1.0 - a1) / 2.0;
 			b1 = -b0;
