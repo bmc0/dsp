@@ -126,15 +126,16 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 		switch (type) {
 		case BIQUAD_LOWPASS_1:
-			a0 = 1.0;
-			a1 = -exp(-w0);
-			a2 = 0.0;
-			b0 = 1.0 + a1;
+			c = 1.0 - cos_w0;
+			b0 = -c + sqrt(c*c + 2.0*c);
 			b1 = b2 = 0.0;
+			a0 = 1.0;
+			a1 = -1.0 + b0;
+			a2 = 0.0;
 			break;
 		case BIQUAD_HIGHPASS_1:
 			a0 = 1.0;
-			a1 = -exp(-w0);
+			a1 = (-1.0 + sin_w0) / cos_w0;
 			a2 = 0.0;
 			b0 = (1.0 - a1) / 2.0;
 			b1 = -b0;
