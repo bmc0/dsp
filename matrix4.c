@@ -414,6 +414,10 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 			LOG_FMT(LL_ERROR, "%s: warning: surround_level probably shouldn't be greater than 0", argv[0]);
 	}
 
+	if (istream->fs < 32000) {
+		LOG_FMT(LL_ERROR, "%s: error: sample rate out of range", argv[0]);
+		return NULL;
+	}
 	for (i = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
