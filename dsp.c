@@ -699,6 +699,7 @@ int main(int argc, char *argv[])
 
 	got_term_sig:
 	fputc('\n', stderr);
+	progress_cleared = 1;
 	LOG_FMT(LL_NORMAL, "info: signal %d: terminating...", term_sig);
 	if (out_codec != NULL) out_codec->drop(out_codec);
 	goto end_rw_loop;
