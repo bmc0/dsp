@@ -46,11 +46,11 @@ static struct effect_info effects[] = {
 #ifndef SYMMETRIC_IO
 	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init,  0 },
 #endif
-	{ "fir",                "fir [~/]impulse_path",                    fir_effect_init,       0 },
-	{ "fir_p",              "fir_p [min_part_len [max_part_len]] [~/]impulse_path", fir_p_effect_init, 0 },
+	{ "fir",                "fir [~/]filter_path",                     fir_effect_init,       0 },
+	{ "fir_p",              "fir_p [min_part_len [max_part_len]] [~/]filter_path", fir_p_effect_init, 0 },
 #endif
 #ifdef HAVE_ZITA_CONVOLVER
-	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]impulse_path", zita_convolver_effect_init, 0 },
+	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]filter_path", zita_convolver_effect_init, 0 },
 #endif
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
 #ifdef ENABLE_LADSPA_HOST

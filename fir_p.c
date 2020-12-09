@@ -33,7 +33,7 @@ struct partition {
 };
 
 struct fir_p_state {
-	ssize_t nparts, in_len, in_pos, impulse_len, drain_frames, drain_pos;
+	ssize_t nparts, in_len, in_pos, filter_len, drain_frames, drain_pos;
 	fftw_complex *tmp_fr;
 	sample_t **input;
 	struct partition *part;
@@ -158,7 +158,7 @@ void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		*frames = -1;
 	else {
 		if (!state->is_draining) {
-			state->drain_frames = state->impulse_len;
+			state->drain_frames = state->filter_len;
 			if (state->part[0].has_output)
 				state->drain_frames += state->part[0].len - state->part[0].pos;
 			state->drain_frames += state->part[0].pos;
@@ -256,23 +256,23 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	p = construct_full_path(dir, argv[argc - 1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open impulse file: %s", argv[0], p);
+		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
 		free(p);
 		return NULL;
 	}
 	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d impulse_channels=%d", argv[0], n_channels, c_filter->channels);
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d impulse_fs=%d", argv[0], istream->fs, c_filter->fs);
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->frames < 1) {
-		LOG_FMT(LL_ERROR, "%s: error: impulse length must be >= 1", argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", argv[0]);
 		destroy_codec(c_filter);
 		return NULL;
 	}
@@ -387,7 +387,7 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 		filter_pos += state->part[k].len;
 		state->part[k].in_pos = (state->part[k].delay == 0) ? 0 : state->in_len - state->part[k].delay;
 	}
-	state->impulse_len = c_filter->frames;
+	state->filter_len = c_filter->frames;
 	destroy_codec(c_filter);
 	free(tmp_buf);
 	fftw_free(filter);

@@ -211,15 +211,15 @@ Example:
 	`s` is seconds (the default), `m` is milliseconds, and `S` is samples.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
-* `fir [~/]impulse_path`  
+* `fir [~/]filter_path`  
 	Non-partitioned 64-bit FFT convolution. Latency is equal to the length
-	of the impulse.
-* `fir_p [min_part_len [max_part_len]] [~/]impulse_path`  
+	of the filter.
+* `fir_p [min_part_len [max_part_len]] [~/]filter_path`  
 	Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
 	`zita_convolver` effect, but potentially useful if you need more precision
 	and/or lower latency. Latency is equal to `min_part_len` (16 samples by
 	default). `{min,max}_part_len` must be powers of 2.
-* `zita_convolver [min_part_len [max_part_len]] [~/]impulse_path`  
+* `zita_convolver [min_part_len [max_part_len]] [~/]filter_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192.

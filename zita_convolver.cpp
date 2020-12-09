@@ -169,23 +169,23 @@ struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream
 	p = construct_full_path(dir, argv[argc - 1]);
 	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
 	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open impulse file: %s", argv[0], p);
+		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
 		free(p);
 		return NULL;
 	}
 	free(p);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d impulse_channels=%d", argv[0], n_channels, c_filter->channels);
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d impulse_fs=%d", argv[0], istream->fs, c_filter->fs);
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
 		destroy_codec(c_filter);
 		return NULL;
 	}
 	if (c_filter->frames < 1) {
-		LOG_FMT(LL_ERROR, "%s: error: impulse length must be >= 1", argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", argv[0]);
 		destroy_codec(c_filter);
 		return NULL;
 	}

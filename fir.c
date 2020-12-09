@@ -130,47 +130,27 @@ void fir_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv, sample_t *filter_data, int filter_channels, int filter_frames)
 {
 	int i, k, j, n_channels;
 	struct effect *e;
 	struct fir_state *state;
-	struct codec *c_filter;
-	sample_t *tmp_buf = NULL, *filter;
-	char *p;
+	sample_t *filter;
 	fftw_plan filter_plan;
 
-	if (argc != 2) {
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
-		return NULL;
-	}
 	for (i = n_channels = 0; i < istream->channels; ++i)
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
-	p = construct_full_path(dir, argv[1]);
-	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
-	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open impulse file: %s", argv[0], p);
-		free(p);
+
+	if (filter_channels != 1 && filter_channels != n_channels) {
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, filter_channels);
 		return NULL;
 	}
-	free(p);
-	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d impulse_channels=%d", argv[0], n_channels, c_filter->channels);
-		destroy_codec(c_filter);
+	if (filter_frames < 1) {
+		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", argv[0]);
 		return NULL;
 	}
-	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d impulse_fs=%d", argv[0], istream->fs, c_filter->fs);
-		destroy_codec(c_filter);
-		return NULL;
-	}
-	if (c_filter->frames < 1) {
-		LOG_FMT(LL_ERROR, "%s: error: impulse length must be >= 1", argv[0]);
-		destroy_codec(c_filter);
-		return NULL;
-	}
-	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", argv[0], c_filter->frames);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", argv[0], filter_frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -185,7 +165,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	state = calloc(1, sizeof(struct fir_state));
 	e->data = state;
 
-	state->len = c_filter->frames;
+	state->len = filter_frames;
 	state->fr_len = state->len + 1;
 	state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -197,15 +177,9 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	filter = fftw_malloc(state->len * 2 * sizeof(sample_t));
 	memset(filter, 0, state->len * 2 * sizeof(sample_t));
 	filter_plan = fftw_plan_dft_r2c_1d(state->len * 2, filter, state->tmp_fr, FFTW_ESTIMATE);
-	if (c_filter->channels == 1) {
-		if (c_filter->read(c_filter, filter, state->len) != state->len)
-			LOG_FMT(LL_ERROR, "%s: warning: short read", argv[0]);
+	if (filter_channels == 1) {
+		memcpy(filter, filter_data, state->len * sizeof(sample_t));
 		fftw_execute(filter_plan);
-	}
-	else {
-		tmp_buf = calloc(c_filter->frames * c_filter->channels, sizeof(sample_t));
-		if (c_filter->read(c_filter, tmp_buf, state->len) != state->len)
-			LOG_FMT(LL_ERROR, "%s: warning: short read", argv[0]);
 	}
 	for (i = k = 0; i < e->ostream.channels; ++i) {
 		state->output[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));
@@ -218,21 +192,59 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 			state->filter_fr[i] = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 			state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->len * 2, state->input[i], state->tmp_fr, FFTW_ESTIMATE);
 			state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, state->output[i], FFTW_ESTIMATE);
-			if (c_filter->channels == 1)
+			if (filter_channels == 1)
 				memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
 			else {
 				for (j = 0; j < state->len; ++j)
-					filter[j] = tmp_buf[j * c_filter->channels + k];
+					filter[j] = filter_data[j * filter_channels + k];
 				fftw_execute(filter_plan);
 				memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
 				++k;
 			}
 		}
 	}
-	destroy_codec(c_filter);
 	fftw_destroy_plan(filter_plan);
-	free(tmp_buf);
 	fftw_free(filter);
 
+	return e;
+}
+
+struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+{
+	int filter_channels, filter_frames;
+	struct effect *e;
+	struct codec *c_filter;
+	sample_t *filter_data;
+	char *p;
+
+	if (argc != 2) {
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		return NULL;
+	}
+	p = construct_full_path(dir, argv[1]);
+	c_filter = init_codec(p, NULL, NULL, istream->fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+	if (c_filter == NULL) {
+		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
+		free(p);
+		return NULL;
+	}
+	free(p);
+	filter_channels = c_filter->channels;
+	filter_frames = c_filter->frames;
+	if (c_filter->fs != istream->fs) {
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
+		destroy_codec(c_filter);
+		return NULL;
+	}
+	filter_data = calloc(filter_frames * filter_channels, sizeof(sample_t));
+	if (c_filter->read(c_filter, filter_data, filter_frames) != filter_frames) {
+		LOG_FMT(LL_ERROR, "%s: error: short read", argv[0]);
+		destroy_codec(c_filter);
+		free(filter_data);
+		return NULL;
+	}
+	destroy_codec(c_filter);
+	e = fir_effect_init_with_filter(ei, istream, channel_selector, argc, argv, filter_data, filter_channels, filter_frames);
+	free(filter_data);
 	return e;
 }
