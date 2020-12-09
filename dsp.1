@@ -220,6 +220,11 @@ default). \fI{min,max}_part_len\fR must be powers of 2.
 Simple FIR approximation of a Hilbert transform. The number of taps must be
 odd. Bandwidth is controlled by the number of taps.
 .TP
+\fBdecorrelate\fR [\fIstages\fR]
+Allpass decorrelator as described in ``Frequency-Dependent Schroeder
+Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
+Default number of stages is 5.
+.TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.
 Latency is equal to \fImin_part_len\fR (64 samples by default).

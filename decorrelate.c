@@ -1,0 +1,147 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include "decorrelate.h"
+#include "util.h"
+
+/* This is an implementation of the allpass decorrelator described in
+ * "Frequency-Dependent Schroeder Allpass Filters" by Sebastian J. Schlecht
+ * (doi:10.3390/app10010187) https://www.mdpi.com/2076-3417/10/1/187
+*/
+
+#define FILTER_FC 1100.0
+#define RT60_LF   0.1
+#define RT60_HF   0.008
+
+struct sch_ap_state {
+	ssize_t len, p;
+	sample_t *mx, *my;
+	sample_t b0, b1, a0, a1;
+};
+
+struct decorrelate_state {
+	int n_stages;
+	struct sch_ap_state **ap;
+};
+
+static void sch_ap_init(struct sch_ap_state *ap, int fs, double delay)
+{
+	const ssize_t delay_samples = round(delay*fs);
+	ap->len = delay_samples+1;
+	ap->p = 0;
+	ap->mx = calloc(ap->len, sizeof(sample_t));
+	ap->my = calloc(ap->len, sizeof(sample_t));
+
+	const double gain_lf = -60.0/(RT60_LF * fs) * delay_samples;
+	const double gain_hf = -60.0/(RT60_HF * fs) * delay_samples;
+	const double w0 = 2.0 * M_PI * FILTER_FC / fs;
+	const double t = tan(w0/2.0);
+	const double g_hf = pow(10.0, gain_hf/20.0);
+	const double gd = pow(10.0, (gain_lf-gain_hf)/20.0);
+	const double sgd = sqrt(gd);
+	ap->a0 = t + sgd;
+	ap->a1 = (t - sgd) / ap->a0;
+	ap->b0 = (gd*t - sgd) / ap->a0 * g_hf;
+	ap->b1 = (gd*t + sgd) / ap->a0 * g_hf;
+	ap->a0 = 1.0;
+}
+
+static sample_t sch_ap_run(struct sch_ap_state *ap, sample_t x)
+{
+	const ssize_t i0 = ((ap->p < 1) ? ap->len : ap->p)-1, i_n1 = ap->p, i_n2 = (ap->p+1 >= ap->len) ? 0 : ap->p+1;
+	const sample_t r = ap->b1*x + ap->b0*ap->mx[i0] + ap->a1*ap->mx[i_n2] + ap->a0*ap->mx[i_n1]
+		- ap->a1*ap->my[i0] - ap->b0*ap->my[i_n2] - ap->b1*ap->my[i_n1];
+	ap->mx[ap->p] = x;
+	ap->my[ap->p] = r;
+	ap->p = (ap->p+1 >= ap->len) ? 0 : ap->p+1;
+	return r;
+}
+
+static void sch_ap_reset(struct sch_ap_state *ap)
+{
+	ap->p = 0;
+	memset(ap->mx, 0, ap->len * sizeof(sample_t));
+	memset(ap->my, 0, ap->len * sizeof(sample_t));
+}
+
+static void sch_ap_destroy(struct sch_ap_state *ap)
+{
+	free(ap->mx);
+	free(ap->my);
+}
+
+sample_t * decorrelate_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+{
+	ssize_t i, samples = *frames * e->ostream.channels;
+	int k, j;
+	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
+	for (i = 0; i < samples; i += e->ostream.channels)
+		for (k = 0; k < e->ostream.channels; ++k)
+			if (state->ap[k])
+				for (j = 0; j < state->n_stages; ++j)
+					ibuf[i + k] = sch_ap_run(&state->ap[k][j], ibuf[i + k]);
+	return ibuf;
+}
+
+void decorrelate_effect_reset(struct effect *e)
+{
+	int k, j;
+	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
+	for (k = 0; k < e->ostream.channels; ++k)
+		if (state->ap[k])
+			for (j = 0; j < state->n_stages; ++j)
+				sch_ap_reset(&state->ap[k][j]);
+}
+
+void decorrelate_effect_destroy(struct effect *e)
+{
+	int k, j;
+	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
+	for (k = 0; k < e->ostream.channels; ++k) {
+		if (state->ap[k]) {
+			for (j = 0; j < state->n_stages; ++j)
+				sch_ap_destroy(&state->ap[k][j]);
+			free(state->ap[k]);
+		}
+	}
+	free(state->ap);
+	free(state);
+}
+
+struct effect * decorrelate_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+{
+	int k, j, n_stages = 5;
+	struct decorrelate_state *state;
+	struct effect *e;
+	char *endptr;
+
+	if (argc > 2) {
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		return NULL;
+	}
+	if (argc == 2) {
+		n_stages = strtol(argv[1], &endptr, 10);
+		CHECK_ENDPTR(argv[1], endptr, "stages", return NULL);
+		CHECK_RANGE(n_stages > 0, "stages", return NULL);
+	}
+
+	e = calloc(1, sizeof(struct effect));
+	e->name = ei->name;
+	e->istream.fs = e->ostream.fs = istream->fs;
+	e->istream.channels = e->ostream.channels = istream->channels;
+	e->run = decorrelate_effect_run;
+	e->reset = decorrelate_effect_reset;
+	e->destroy = decorrelate_effect_destroy;
+	state = calloc(1, sizeof(struct decorrelate_state));
+	state->n_stages = n_stages;
+	state->ap = calloc(istream->channels, sizeof(struct sch_ap_state *));
+	for (k = 0; k < istream->channels; ++k) {
+		if (GET_BIT(channel_selector, k)) {
+			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
+			for (j = 0; j < n_stages; ++j)
+				sch_ap_init(&state->ap[k][j], istream->fs, (double)pm_rand()/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3);
+		}
+	}
+	e->data = state;
+	return e;
+}
