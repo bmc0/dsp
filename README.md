@@ -223,6 +223,9 @@ Example:
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192.
+* `hilbert taps`  
+	Simple FIR approximation of a Hilbert transform. The number of taps must be
+	odd. Bandwidth is controlled by the number of taps.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).

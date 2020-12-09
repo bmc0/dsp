@@ -15,6 +15,7 @@
 #include "fir.h"
 #include "fir_p.h"
 #include "zita_convolver.h"
+#include "hilbert.h"
 #include "noise.h"
 #include "ladspa_host.h"
 #include "stats.h"
@@ -51,6 +52,9 @@ static struct effect_info effects[] = {
 #endif
 #ifdef HAVE_ZITA_CONVOLVER
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]filter_path", zita_convolver_effect_init, 0 },
+#endif
+#ifdef HAVE_FFTW3
+	{ "hilbert",            "hilbert taps",                            hilbert_effect_init,   0 },
 #endif
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
 #ifdef ENABLE_LADSPA_HOST

@@ -216,6 +216,10 @@ Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
 and/or lower latency. Latency is equal to \fImin_part_len\fR (16 samples by
 default). \fI{min,max}_part_len\fR must be powers of 2.
 .TP
+\fBhilbert\fR \fItaps\fR
+Simple FIR approximation of a Hilbert transform. The number of taps must be
+odd. Bandwidth is controlled by the number of taps.
+.TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.
 Latency is equal to \fImin_part_len\fR (64 samples by default).
