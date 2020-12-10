@@ -223,7 +223,8 @@ odd. Bandwidth is controlled by the number of taps.
 \fBdecorrelate\fR [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder
 Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
-Default number of stages is 5.
+Default number of stages is 5. The average group delay with the default
+settings is about 8.5ms at high frequencies.
 .TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.

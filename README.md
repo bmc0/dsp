@@ -229,7 +229,8 @@ Example:
 * `decorrelate [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
-	Default number of stages is 5.
+	Default number of stages is 5. The average group delay with the default
+	settings is about 8.5ms at high frequencies.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
