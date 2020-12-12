@@ -247,26 +247,35 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		lr_m = 0.0;
 		rl_m = 0.0;
 		rr_m = 1.0 + fr_boost;
+
+		/* The matrix coefficients for the surround channels are from
+		   "Multichannel matrix surround decoders for two-eared listeners" by
+		   David Griesinger (http://www.davidgriesinger.com/sur.pdf). I've
+		   corrected gsl so there is full cancellation when |lr|+|cs|=45°.
+		*/
+		const double gl = (cos(M_PI/4-abs_lr)-sin(M_PI/4-abs_lr))/cos(M_PI/4-abs_lr);
+		const double gsl = gl*gl;
 		if (cs >= 0.0) {
-			const sample_t abs_ax_min = MINIMUM(abs_lr, abs_cs);
+			const double cf = cos(cs)+sin(cs);
+			const double gc = 2.0*sin(cs)/(cos(cs)+sin(cs));
 			if (lr <= 0.0) {
-				lsl_m = (cos(cs)+cos(2.0*lr)-1.0-0.18*sin(4.0*abs_ax_min))/(1.0+0.09*sin(4.0*abs_ax_min));
-				lsr_m = (-sin(cs)+sin(2.0*lr))/(1.0+0.09*sin(4.0*abs_ax_min));
+				lsl_m = cf*(1.0-gsl-0.5*gc);
+				lsr_m = cf*(-0.5*gc-gl);
 				rsl_m = -sin(cs);
 				rsr_m = cos(cs);
 			}
 			else {
 				lsl_m = cos(cs);
 				lsr_m = -sin(cs);
-				rsl_m = (-sin(cs)+sin(-2.0*lr))/(1.0+0.09*sin(4.0*abs_ax_min));
-				rsr_m = (cos(cs)+cos(2.0*lr)-1.0-0.18*sin(4.0*abs_ax_min))/(1.0+0.09*sin(4.0*abs_ax_min));
+				rsl_m = cf*(-0.5*gc-gl);
+				rsr_m = cf*(1.0-gsl-0.5*gc);
 			}
 		}
 		else {
 			if (lr <= 0.0) {
 				if (cs > -M_PI_4/2) {
-					lsl_m = 1.0+(cos(2.0*lr)-1.0)*(1.0+sin(4.0*cs));
-					lsr_m = sin(2.0*lr)*cos(4.0*cs);
+					lsl_m = 1.0-gsl*(1.0+sin(4.0*cs));
+					lsr_m = -gl*cos(4.0*cs);
 				}
 				else {
 					lsl_m = 1.0;
@@ -279,8 +288,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				lsl_m = 1.0;
 				lsr_m = 0.0;
 				if (cs > -M_PI_4/2) {
-					rsl_m = sin(-2.0*lr)*cos(4.0*cs);
-					rsr_m = 1.0+(cos(2.0*lr)-1.0)*(1.0+sin(4.0*cs));
+					rsl_m = -gl*cos(4.0*cs);
+					rsr_m = 1.0-gsl*(1.0+sin(4.0*cs));
 				}
 				else {
 					rsl_m = 0.0;
@@ -288,6 +297,13 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				}
 			}
 		}
+
+		const sample_t ls_m_pwr = sqrt(lsl_m*lsl_m + lsr_m*lsr_m);
+		const sample_t rs_m_pwr = sqrt(rsl_m*rsl_m + rsr_m*rsr_m);
+		lsl_m /= ls_m_pwr;
+		lsr_m /= ls_m_pwr;
+		rsl_m /= rs_m_pwr;
+		rsr_m /= rs_m_pwr;
 
 		const sample_t out_l = (s0_d*ll_m + s1_d*lr_m) * norm_mult;
 		const sample_t out_r = (s0_d*rl_m + s1_d*rr_m) * norm_mult;
