@@ -371,6 +371,8 @@ static void write_out(ssize_t frames, sample_t *buf, int do_dither)
 		buf[i] = clip(buf[i]);
 	}
 	if (frames != 0 && out_codec->write(out_codec, buf, frames) != frames) {
+		fputc('\n', stderr);
+		progress_cleared = 1;
 		LOG_S(LL_ERROR, "error: short write");
 		cleanup_and_exit(1);
 	}
@@ -546,6 +548,7 @@ int main(int argc, char *argv[])
 			LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
 			print_progress(in_codecs.head, out_codec, pos, is_paused, 1);
+			progress_cleared = 0;
 			do {
 				if (term_sig) goto got_term_sig;
 				if (tstp_sig) {
@@ -660,6 +663,7 @@ int main(int argc, char *argv[])
 			destroy_codec_list_head(&in_codecs);
 			if (show_progress)
 				fputs(CLEAR_PROGRESS, stderr);
+			progress_cleared = 1;
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
 				LOG_S(LL_NORMAL, "info: input sample rate and/or channels changed; rebuilding effects chain");
 				if (!is_paused && drain_effects) {
