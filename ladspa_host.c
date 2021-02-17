@@ -309,7 +309,7 @@ struct effect * ladspa_host_effect_init(struct effect_info *ei, struct stream_in
 	/* Print input control port names and values */
 	if (in_control_port_count > 0 && LOGLEVEL(LL_VERBOSE)) {
 		int cport = 0;
-		LOG_FMT(LL_VERBOSE, "%s: %s: %s: info: controls:", argv[0], path, argv[2]);
+		fprintf(stderr, "%s: %s: %s: %s: info: controls:", dsp_globals.prog_name, argv[0], path, argv[2]);
 		for (unsigned long i = 0; i < desc->PortCount; ++i) {
 			LADSPA_PortDescriptor pd = desc->PortDescriptors[i];
 			if (LADSPA_IS_PORT_CONTROL(pd)) {
