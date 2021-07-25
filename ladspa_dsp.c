@@ -285,7 +285,7 @@ static void cleanup_dsp(LADSPA_Handle inst)
 
 void __attribute__((constructor)) ladspa_dsp_so_init()
 {
-	int i, k;
+	int i, k, n;
 	char **pn, *env, *tmp;
 	LADSPA_PortDescriptor *pd;
 	LADSPA_PortRangeHint *ph;
@@ -332,10 +332,18 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 			pd[i] = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO;
 		pn = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(char *));
 		descriptors[k].PortNames = (const char **) pn;
-		for (i = 0; i < configs[k].input_channels; ++i)
-			pn[i] = strdup("Input");
-		for (i = configs[k].input_channels; i < configs[k].input_channels + configs[k].output_channels; ++i)
-			pn[i] = strdup("Output");
+		for (i = 0; i < configs[k].input_channels; ++i) {
+			n = snprintf(NULL, 0, "Input%d", i) + 1;
+			tmp = calloc(n, sizeof(char));
+			snprintf(tmp, n, "Input%d", i);
+			pn[i] = tmp;
+		}
+		for (i = configs[k].input_channels; i < configs[k].input_channels + configs[k].output_channels; ++i) {
+			n = snprintf(NULL, 0, "Output%d", i-configs[k].input_channels) + 1;
+			tmp = calloc(n, sizeof(char));
+			snprintf(tmp, n, "Output%d", i-configs[k].input_channels);
+			pn[i] = tmp;
+		}
 		ph = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(LADSPA_PortRangeHint));
 		descriptors[k].PortRangeHints = ph;
 		for (i = 0; i < configs[k].input_channels + configs[k].output_channels; ++i)
