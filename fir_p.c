@@ -50,7 +50,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 			for (i = 0; i < e->ostream.channels; ++i) {
 				if (state->input[i])
 					state->input[i][state->in_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
-				#ifdef __SYMMETRIC_IO__
+				#ifdef SYMMETRIC_IO
 					obuf[oframes * e->ostream.channels + i] = 0;
 				#else
 					if (state->part[0].has_output)
@@ -67,7 +67,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 			for (i = 0; i < e->ostream.channels; ++i)
 				if (!state->input[i])
 					state->part[0].output[i][state->part[0].pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
-			#ifdef __SYMMETRIC_IO__
+			#ifdef SYMMETRIC_IO
 				++oframes;
 			#else
 				if (state->part[0].has_output)
