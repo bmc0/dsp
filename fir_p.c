@@ -159,8 +159,12 @@ void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 	else {
 		if (!state->is_draining) {
 			state->drain_frames = state->filter_len;
-			if (state->part[0].has_output)
+			#ifdef SYMMETRIC_IO
 				state->drain_frames += state->part[0].len - state->part[0].pos;
+			#else
+				if (state->part[0].has_output)
+					state->drain_frames += state->part[0].len - state->part[0].pos;
+			#endif
 			state->drain_frames += state->part[0].pos;
 			state->is_draining = 1;
 		}

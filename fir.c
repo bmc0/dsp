@@ -24,23 +24,23 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 	while (iframes < *frames) {
 		while (state->buf_pos < state->len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i) {
-#ifdef SYMMETRIC_IO
-				obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->buf_pos] : 0;
-#else
-				if (state->has_output)
-					obuf[oframes * e->ostream.channels + i] = state->output[i][state->buf_pos];
-#endif
+				#ifdef SYMMETRIC_IO
+					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->buf_pos] : 0;
+				#else
+					if (state->has_output)
+						obuf[oframes * e->ostream.channels + i] = state->output[i][state->buf_pos];
+				#endif
 				if (state->input[i])
 					state->input[i][state->buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 				else
 					state->output[i][state->buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 			}
-#ifdef SYMMETRIC_IO
-			++oframes;
-#else
-			if (state->has_output)
+			#ifdef SYMMETRIC_IO
 				++oframes;
-#endif
+			#else
+				if (state->has_output)
+					++oframes;
+			#endif
 			++iframes;
 			++state->buf_pos;
 		}
@@ -93,8 +93,12 @@ void fir_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 	else {
 		if (!state->is_draining) {
 			state->drain_frames = state->len;
-			if (state->has_output)
+			#ifdef SYMMETRIC_IO
 				state->drain_frames += state->len - state->buf_pos;
+			#else
+				if (state->has_output)
+					state->drain_frames += state->len - state->buf_pos;
+			#endif
 			state->drain_frames += state->buf_pos;
 			state->is_draining = 1;
 		}

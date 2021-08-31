@@ -23,12 +23,12 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 	while (iframes < *frames) {
 		while (state->pos < state->len && iframes < *frames) {
 			for (i = k = 0; i < e->ostream.channels; ++i) {
-#ifdef SYMMETRIC_IO
-				obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0;
-#else
-				if (state->has_output)
-					obuf[oframes * e->ostream.channels + i] = state->output[i][state->pos];
-#endif
+				#ifdef SYMMETRIC_IO
+					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0;
+				#else
+					if (state->has_output)
+						obuf[oframes * e->ostream.channels + i] = state->output[i][state->pos];
+				#endif
 				if (GET_BIT(e->channel_selector, i)) {
 					state->cproc->inpdata(k)[state->pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 					++k;
@@ -36,12 +36,12 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 				else
 					state->output[i][state->pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
 			}
-#ifdef SYMMETRIC_IO
-			++oframes;
-#else
-			if (state->has_output)
+			#ifdef SYMMETRIC_IO
 				++oframes;
-#endif
+			#else
+				if (state->has_output)
+					++oframes;
+			#endif
 			++iframes;
 			++state->pos;
 		}
@@ -83,8 +83,12 @@ void zita_convolver_effect_drain(struct effect *e, ssize_t *frames, sample_t *ob
 	else {
 		if (!state->is_draining) {
 			state->drain_frames = state->filter_frames;
-			if (state->has_output)
+			#ifdef SYMMETRIC_IO
 				state->drain_frames += state->len - state->pos;
+			#else
+				if (state->has_output)
+					state->drain_frames += state->len - state->pos;
+			#endif
 			state->drain_frames += state->pos;
 			state->is_draining = 1;
 		}
