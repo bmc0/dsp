@@ -10,11 +10,12 @@
 #define RISE_TIME_SLOW      100.0
 #define NORM_TIME           160.0
 #define EVENT_THRESH          1.5
-#define NORM_MAX              3.0
+#define EVENT_END_THRESH      0.2
+#define NORM_MAX              3.2
 #define NORM_CROSSFEED        0.5
+#define EVENT_SAMPLE_TIME    16.5
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
-#define EVENT_GAP_TIME        0.0
 
 struct ewma_state {
 	double c0, c1, m0;
@@ -30,6 +31,7 @@ enum {
 	EVENT_FLAG_L = 1<<0,
 	EVENT_FLAG_R = 1<<1,
 	EVENT_FLAG_USE_ORD = 1<<2,
+	EVENT_FLAG_END = 1<<4,
 };
 
 struct matrix4_state {
@@ -38,10 +40,10 @@ struct matrix4_state {
 	int ev_flags;
 	sample_t norm_mult, surr_mult;
 	struct biquad_state in_hp[4], in_lp[4];
-	struct ewma_state r_fast[8], r_slow[2], adapt[4], norm[4], avg[2], drift[4];
+	struct ewma_state r_fast[4], r_slow[2], adapt[4], norm[4], smooth[2], avg[2], drift[4];
 	sample_t **bufs;
 	ssize_t len, p, drain_frames;
-	ssize_t t, ev_sample_frames, ev_max_hold_frames, ev_min_hold_frames, ev_gap_frames;
+	ssize_t t, ev_sample_frames, ev_max_hold_frames, ev_min_hold_frames;
 	ssize_t ord_count, diff_count, early_count;
 };
 
@@ -114,10 +116,10 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		const double sum_pwr = (s0_bp+s1_bp)*(s0_bp+s1_bp);
 		const double diff_pwr = (s0_bp-s1_bp)*(s0_bp-s1_bp);
 
-		const double l_pwr_env = ewma_run(&state->r_fast[1], ewma_run(&state->r_fast[0], l_pwr));
-		const double r_pwr_env = ewma_run(&state->r_fast[3], ewma_run(&state->r_fast[2], r_pwr));
-		const double sum_pwr_env = ewma_run(&state->r_fast[5], ewma_run(&state->r_fast[4], sum_pwr));
-		const double diff_pwr_env = ewma_run(&state->r_fast[7], ewma_run(&state->r_fast[6], diff_pwr));
+		const double l_pwr_env = ewma_run(&state->r_fast[0], l_pwr);
+		const double r_pwr_env = ewma_run(&state->r_fast[1], r_pwr);
+		const double sum_pwr_env = ewma_run(&state->r_fast[2], sum_pwr);
+		const double diff_pwr_env = ewma_run(&state->r_fast[3], diff_pwr);
 
 		const double l_adapt = l_pwr_env - ewma_run_set_max(&state->adapt[0], l_pwr_env);
 		const double r_adapt = r_pwr_env - ewma_run_set_max(&state->adapt[1], r_pwr_env);
@@ -139,18 +141,18 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		const double r_norm_div = MAXIMUM(r_norm_div_adapt, r_norm_div_env);
 		const double l_adapt_norm = (l_norm_div > 0.0) ? l_adapt / l_norm_div : (l_adapt <= 0.0) ? 0.0 : 100.0;
 		const double r_adapt_norm = (r_norm_div > 0.0) ? r_adapt / r_norm_div : (r_adapt <= 0.0) ? 0.0 : 100.0;
+		const double l_adapt_norm_sm = ewma_run(&state->smooth[0], l_adapt_norm);
+		const double r_adapt_norm_sm = ewma_run(&state->smooth[1], r_adapt_norm);
 
-		const double l_event = l_adapt_norm - ewma_run(&state->r_slow[0], l_adapt_norm);
-		const double r_event = r_adapt_norm - ewma_run(&state->r_slow[1], r_adapt_norm);
+		const double l_event = l_adapt_norm_sm - ewma_run(&state->r_slow[0], l_adapt_norm_sm);
+		const double r_event = r_adapt_norm_sm - ewma_run(&state->r_slow[1], r_adapt_norm_sm);
 
 		if (state->ev == EVENT_STATE_NONE
-				&& state->t >= state->ev_gap_frames
 				&& (l_event > EVENT_THRESH || r_event > EVENT_THRESH)) {
 			state->ev = EVENT_STATE_SAMPLE;
 			state->ev_flags = 0;
-			state->ev_flags |= (l_event > EVENT_THRESH) ? EVENT_FLAG_L : 0;
-			state->ev_flags |= (r_event > EVENT_THRESH) ? EVENT_FLAG_R : 0;
-			/* state->ev_flags |= (fabs(lr_adapt)+fabs(cs_adapt) > M_PI_4*1.5) ? EVENT_FLAG_USE_ORD : 0; */
+			state->ev_flags |= (l_event >= r_event) ? EVENT_FLAG_L : 0;
+			state->ev_flags |= (r_event >= l_event) ? EVENT_FLAG_R : 0;
 			state->t = 0;
 			ewma_set(&state->avg[0], lr_adapt);
 			ewma_set(&state->avg[1], cs_adapt);
@@ -160,10 +162,6 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		case EVENT_STATE_SAMPLE:
 			ewma_run(&state->avg[0], lr_adapt);
 			ewma_run(&state->avg[1], cs_adapt);
-			if ((state->ev_flags & EVENT_FLAG_L && l_adapt_norm <= 0.0)
-					|| (state->ev_flags & EVENT_FLAG_R && r_adapt_norm <= 0.0)) {
-				state->ev_flags |= EVENT_FLAG_USE_ORD;
-			}
 			lr = ewma_run(&state->drift[0], lr_ord);
 			cs = ewma_run(&state->drift[1], cs_ord);
 			if (state->t >= state->ev_sample_frames) {
@@ -191,9 +189,11 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				lr_adapt = lr = ewma_set(&state->drift[0], ewma_run(&state->drift[2], ewma_get_last(&state->avg[0])));
 				cs_adapt = cs = ewma_set(&state->drift[1], ewma_run(&state->drift[3], ewma_get_last(&state->avg[1])));
 			}
-			if ((state->t >= state->ev_min_hold_frames
-						&& ((state->ev_flags & EVENT_FLAG_L && l_adapt_norm <= 0.0)
-							|| (state->ev_flags & EVENT_FLAG_R && r_adapt_norm <= 0.0)))
+			if ((state->ev_flags & EVENT_FLAG_L && l_adapt_norm_sm <= EVENT_END_THRESH)
+					|| (state->ev_flags & EVENT_FLAG_R && r_adapt_norm_sm <= EVENT_END_THRESH)) {
+				state->ev_flags |= EVENT_FLAG_END;
+			}
+			if ((state->t >= state->ev_min_hold_frames && state->ev_flags & EVENT_FLAG_END)
 					|| state->t >= state->ev_max_hold_frames) {
 				if (state->t < state->ev_max_hold_frames) ++state->early_count;
 				state->ev = EVENT_STATE_NONE;
@@ -482,25 +482,24 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 		biquad_init_using_type(&state->in_hp[i], BIQUAD_HIGHPASS, istream->fs,  500.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
 		biquad_init_using_type(&state->in_lp[i], BIQUAD_LOWPASS,  istream->fs, 5000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
 	}
-	for (i = 0; i < 8; ++i) ewma_init(&state->r_fast[i], istream->fs, TIME_TO_FREQ(RISE_TIME_FAST));
+	for (i = 0; i < 4; ++i) ewma_init(&state->r_fast[i], istream->fs, TIME_TO_FREQ(RISE_TIME_FAST));
 	for (i = 0; i < 2; ++i) ewma_init(&state->r_slow[i], istream->fs, TIME_TO_FREQ(RISE_TIME_SLOW));
 	for (i = 0; i < 4; ++i) ewma_init(&state->adapt[i], istream->fs, TIME_TO_FREQ(ADAPT_TIME));
 	for (i = 0; i < 4; ++i) ewma_init(&state->norm[i], istream->fs, TIME_TO_FREQ(NORM_TIME));
-	for (i = 0; i < 2; ++i) ewma_init(&state->avg[i], istream->fs, TIME_TO_FREQ(RISE_TIME_FAST));
+	for (i = 0; i < 2; ++i) ewma_init(&state->smooth[i], istream->fs, TIME_TO_FREQ(RISE_TIME_FAST));
+	for (i = 0; i < 2; ++i) ewma_init(&state->avg[i], istream->fs, TIME_TO_FREQ(EVENT_SAMPLE_TIME));
 	for (i = 0; i < 2; ++i) ewma_init(&state->drift[i], istream->fs, TIME_TO_FREQ(ADAPT_TIME));
 	for (i = 2; i < 4; ++i) ewma_init(&state->drift[i], istream->fs, TIME_TO_FREQ(RISE_TIME_FAST));
 
-	state->len = lround(TIME_TO_FRAMES((RISE_TIME_FAST)*2.0, istream->fs));
+	state->len = lround(TIME_TO_FRAMES(RISE_TIME_FAST + EVENT_SAMPLE_TIME, istream->fs));
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
 	state->surr_mult = surr_mult;
 	state->norm_mult = 1.0 / sqrt(1.0 + surr_mult*surr_mult);
-	state->ev_sample_frames = TIME_TO_FRAMES(RISE_TIME_FAST, istream->fs);
+	state->ev_sample_frames = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, istream->fs);
 	state->ev_max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, istream->fs);
 	state->ev_min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, istream->fs);
-	state->ev_gap_frames = TIME_TO_FRAMES(EVENT_GAP_TIME, istream->fs);
-	state->t = state->ev_gap_frames;
 	e->data = state;
 	return e;
 
