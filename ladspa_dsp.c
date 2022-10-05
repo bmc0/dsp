@@ -178,6 +178,9 @@ static void load_configs(void)
 			path = calloc(i, sizeof(char));
 			snprintf(path, i, "%s%s%s:%s", env, DEFAULT_XDG_CONFIG_DIR, DEFAULT_CONFIG_DIR, GLOBAL_CONFIG_DIR);
 		}
+		else {
+			path = strdup(GLOBAL_CONFIG_DIR);
+		}
 	}
 	LOG_FMT(LL_VERBOSE, "info: config path: %s", path);
 	load_configs_in_path(path);
