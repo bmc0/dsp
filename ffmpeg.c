@@ -274,7 +274,11 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	snprintf((char *) c->type, i, "ffmpeg/%s", codec->name);
 	c->enc = av_get_sample_fmt_name(state->cc->sample_fmt);
 	c->fs = state->cc->sample_rate;
-	c->channels = state->cc->channels;
+	#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(59, 37, 100)
+		c->channels = state->cc->ch_layout.nb_channels;
+	#else
+		c->channels = state->cc->channels;
+	#endif
 	switch (state->cc->sample_fmt) {
 	case AV_SAMPLE_FMT_U8:
 	case AV_SAMPLE_FMT_U8P:
