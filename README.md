@@ -259,11 +259,12 @@ Example:
 * `hilbert taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
 	odd. Bandwidth is controlled by the number of taps.
-* `decorrelate [stages]`  
+* `decorrelate [-m] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
-	Default number of stages is 5. The average group delay with the default
-	settings is about 8.5ms at high frequencies.
+	If `-m` is given, the same filter parameters are used for all input
+	channels. The default number of stages is 5, which results in an
+	average group delay of about 8.5ms at high frequencies.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).

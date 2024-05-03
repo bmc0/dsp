@@ -108,20 +108,26 @@ void decorrelate_effect_destroy(struct effect *e)
 	free(state);
 }
 
+#define RANDOM_FILTER_DELAY ((double)pm_rand()/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
+
 struct effect * decorrelate_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
-	int k, j, n_stages = 5;
+	int k = 1, j, n_stages = 5, mono = 0;
 	struct decorrelate_state *state;
 	struct effect *e;
 	char *endptr;
 
-	if (argc > 2) {
+	if (argc > 3) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	if (argc == 2) {
-		n_stages = strtol(argv[1], &endptr, 10);
-		CHECK_ENDPTR(argv[1], endptr, "stages", return NULL);
+	if (k < argc && strcmp(argv[k], "-m") == 0) {
+		mono = 1;
+		++k;
+	}
+	if (k < argc) {
+		n_stages = strtol(argv[k], &endptr, 10);
+		CHECK_ENDPTR(argv[k], endptr, "stages", return NULL);
 		CHECK_RANGE(n_stages > 0, "stages", return NULL);
 	}
 
@@ -136,10 +142,24 @@ struct effect * decorrelate_effect_init(struct effect_info *ei, struct stream_in
 	state->n_stages = n_stages;
 	state->ap = calloc(istream->channels, sizeof(struct sch_ap_state *));
 	for (k = 0; k < istream->channels; ++k) {
-		if (GET_BIT(channel_selector, k)) {
+		if (GET_BIT(channel_selector, k))
 			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
-			for (j = 0; j < n_stages; ++j)
-				sch_ap_init(&state->ap[k][j], istream->fs, (double)pm_rand()/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3);
+	}
+	if (mono) {
+		for (j = 0; j < n_stages; ++j) {
+			const double d = RANDOM_FILTER_DELAY;
+			for (k = 0; k < istream->channels; ++k) {
+				if (GET_BIT(channel_selector, k))
+					sch_ap_init(&state->ap[k][j], istream->fs, d);
+			}
+		}
+	}
+	else {
+		for (k = 0; k < istream->channels; ++k) {
+			if (GET_BIT(channel_selector, k)) {
+				for (j = 0; j < n_stages; ++j)
+					sch_ap_init(&state->ap[k][j], istream->fs, RANDOM_FILTER_DELAY);
+			}
 		}
 	}
 	e->data = state;

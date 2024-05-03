@@ -59,7 +59,7 @@ static struct effect_info effects[] = {
 #ifdef HAVE_FFTW3
 	{ "hilbert",            "hilbert taps",                            hilbert_effect_init,   0 },
 #endif
-	{ "decorrelate",        "decorrelate [stages]",                    decorrelate_effect_init, 0 },
+	{ "decorrelate",        "decorrelate [-m] [stages]",               decorrelate_effect_init, 0 },
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
 #ifdef ENABLE_LADSPA_HOST
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
