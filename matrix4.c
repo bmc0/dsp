@@ -85,8 +85,8 @@ static double ewma_get_last(struct ewma_state *state)
 #define TO_DEGREES(x) ((x)*M_1_PI*180.0)
 #define TIME_TO_FREQ(x) (350.0/(x))  /* f0 ~= 0.35/tr */
 #define TIME_TO_FRAMES(x, fs) ((x)/1000.0 * (fs))
-#define ANGLE(n, d, expr) (((n) == 0 && (d) == 0) ? M_PI_4 : ((d) == 0) ? M_PI_2 : atan(expr))
-#define CALC_LR(n, d, expr) (M_PI_4 - ANGLE(n, d, expr))
+#define ANGLE(n, d, expr) ((!isnormal(n) && !isnormal(d)) ? M_PI_4 : (!isnormal(d)) ? M_PI_2 : atan(expr))
+#define CALC_LR(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
 #define CALC_CS(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
 #define CALC_DIR_BOOST(f, s, n) ((1.0/sqrt(1.0+pow((f)*(s), 2.0))) * (1.0/(n)) - 1.0)
 
@@ -226,13 +226,13 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		if (state->do_dir_boost) {
 			if (cs >= 0.0) {
 				const double dir_boost = CALC_DIR_BOOST(cos(2.0*(abs_lr+cs)), surr_mult, norm_mult);
-				fl_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
-				fr_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
+				fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
+				fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
 			}
 			else if (cs >= -M_PI_4/2) {
 				const double dir_boost = CALC_DIR_BOOST(1.0-(1.0-cos(2.0*lr))*cos(4.0*cs), surr_mult, norm_mult);
-				fl_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
-				fr_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
+				fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
+				fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
 			}
 			else {
 				fl_boost = 0.0;
@@ -258,7 +258,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		if (cs >= 0.0) {
 			const double cf = cos(cs)+sin(cs);
 			const double gc = 2.0*sin(cs)/(cos(cs)+sin(cs));
-			if (lr <= 0.0) {
+			if (lr >= 0.0) {
 				lsl_m = cf*(1.0-gsl-0.5*gc);
 				lsr_m = cf*(-0.5*gc-gl);
 				rsl_m = -sin(cs);
@@ -272,7 +272,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			}
 		}
 		else {
-			if (lr <= 0.0) {
+			if (lr >= 0.0) {
 				if (cs > -M_PI_4/2) {
 					lsl_m = 1.0-gsl*(1.0+sin(4.0*cs));
 					lsr_m = -gl*cos(4.0*cs);
