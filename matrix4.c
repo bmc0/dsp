@@ -248,27 +248,27 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		rl_m = 0.0;
 		rr_m = 1.0 + fr_boost;
 
-		/* The matrix coefficients for the surround channels are from
+		/* The matrix coefficients during front steering are from
 		   "Multichannel matrix surround decoders for two-eared listeners" by
 		   David Griesinger (http://www.davidgriesinger.com/sur.pdf). I've
-		   corrected gsl so there is full cancellation when |lr|+|cs|=45°.
+		   simplified the equations and corrected gsl so there is full
+		   cancellation when |lr|+|cs|=45°.
 		*/
-		const double gl = (cos(M_PI/4-abs_lr)-sin(M_PI/4-abs_lr))/cos(M_PI/4-abs_lr);
+		const double gl = 1.0+tan(abs_lr-M_PI_4);
 		const double gsl = gl*gl;
 		if (cs >= 0.0) {
-			const double cf = cos(cs)+sin(cs);
-			const double gc = 2.0*sin(cs)/(cos(cs)+sin(cs));
+			const double gc = 1.0+tan(cs-M_PI_4);
 			if (lr >= 0.0) {
-				lsl_m = cf*(1.0-gsl-0.5*gc);
-				lsr_m = cf*(-0.5*gc-gl);
-				rsl_m = -sin(cs);
-				rsr_m = cos(cs);
+				lsl_m = 1.0-gsl-0.5*gc;
+				lsr_m = -0.5*gc-gl;
+				rsl_m = -0.5*gc;
+				rsr_m = 1.0-0.5*gc;
 			}
 			else {
-				lsl_m = cos(cs);
-				lsr_m = -sin(cs);
-				rsl_m = cf*(-0.5*gc-gl);
-				rsr_m = cf*(1.0-gsl-0.5*gc);
+				lsl_m = 1.0-0.5*gc;
+				lsr_m = -0.5*gc;
+				rsl_m = -0.5*gc-gl;
+				rsr_m = 1.0-gsl-0.5*gc;
 			}
 		}
 		else {
@@ -298,6 +298,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			}
 		}
 
+		/* Power correction */
 		const sample_t ls_m_pwr = sqrt(lsl_m*lsl_m + lsr_m*lsr_m);
 		const sample_t rs_m_pwr = sqrt(rsl_m*rsl_m + rsr_m*rsr_m);
 		lsl_m /= ls_m_pwr;
