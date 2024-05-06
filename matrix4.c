@@ -88,7 +88,6 @@ static double ewma_get_last(struct ewma_state *state)
 #define ANGLE(n, d, expr) ((!isnormal(n) && !isnormal(d)) ? M_PI_4 : (!isnormal(d)) ? M_PI_2 : atan(expr))
 #define CALC_LR(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
 #define CALC_CS(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
-#define CALC_DIR_BOOST(f, s, n) ((1.0/sqrt(1.0+pow((f)*(s), 2.0))) * (1.0/(n)) - 1.0)
 
 sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -223,31 +222,6 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		sample_t ll_m, lr_m, rl_m, rr_m;
 		sample_t lsl_m, lsr_m, rsl_m, rsr_m;
 
-		if (state->do_dir_boost) {
-			if (cs >= 0.0) {
-				const double dir_boost = CALC_DIR_BOOST(cos(2.0*(abs_lr+cs)), surr_mult, norm_mult);
-				fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
-				fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
-			}
-			else if (cs >= -M_PI_4/2) {
-				const double dir_boost = CALC_DIR_BOOST(1.0-(1.0-cos(2.0*lr))*cos(4.0*cs), surr_mult, norm_mult);
-				fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
-				fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
-			}
-			else {
-				fl_boost = 0.0;
-				fr_boost = 0.0;
-			}
-		}
-		else {
-			fl_boost = 0.0;
-			fr_boost = 0.0;
-		}
-		ll_m = 1.0 + fl_boost;
-		lr_m = 0.0;
-		rl_m = 0.0;
-		rr_m = 1.0 + fr_boost;
-
 		/* The matrix coefficients during front steering are from
 		   "Multichannel matrix surround decoders for two-eared listeners" by
 		   David Griesinger (http://www.davidgriesinger.com/sur.pdf). I've
@@ -298,18 +272,42 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			}
 		}
 
-		/* Power correction */
-		const sample_t ls_m_pwr = sqrt(lsl_m*lsl_m + lsr_m*lsr_m);
-		const sample_t rs_m_pwr = sqrt(rsl_m*rsl_m + rsr_m*rsr_m);
-		lsl_m /= ls_m_pwr;
-		lsr_m /= ls_m_pwr;
-		rsl_m /= rs_m_pwr;
-		rsr_m /= rs_m_pwr;
+		/* Power correction and scaling */
+		const sample_t ls_m_scale = norm_mult*surr_mult/sqrt(lsl_m*lsl_m + lsr_m*lsr_m);
+		const sample_t rs_m_scale = norm_mult*surr_mult/sqrt(rsl_m*rsl_m + rsr_m*rsr_m);
+		lsl_m *= ls_m_scale;
+		lsr_m *= ls_m_scale;
+		rsl_m *= rs_m_scale;
+		rsr_m *= rs_m_scale;
 
-		const sample_t out_l = (s0_d*ll_m + s1_d*lr_m) * norm_mult;
-		const sample_t out_r = (s0_d*rl_m + s1_d*rr_m) * norm_mult;
-		const sample_t out_ls = (s0_d*lsl_m + s1_d*lsr_m) * norm_mult * surr_mult;
-		const sample_t out_rs = (s0_d*rsl_m + s1_d*rsr_m) * norm_mult * surr_mult;
+		if (state->do_dir_boost) {
+			if (cs >= 0.0) {
+				const double b_gl = 1.0+tan(abs_lr+cs-M_PI_4);
+				fl_boost = (1.0-norm_mult)*b_gl*b_gl;
+				fr_boost = fl_boost;
+			}
+			else if (cs >= -M_PI_4/2) {
+				fl_boost = (1.0-norm_mult)*gsl*cos(4.0*cs);
+				fr_boost = fl_boost;
+			}
+			else {
+				fl_boost = 0.0;
+				fr_boost = 0.0;
+			}
+		}
+		else {
+			fl_boost = 0.0;
+			fr_boost = 0.0;
+		}
+		ll_m = norm_mult + fl_boost;
+		lr_m = 0.0;
+		rl_m = 0.0;
+		rr_m = norm_mult + fr_boost;
+
+		const sample_t out_l = s0_d*ll_m + s1_d*lr_m;
+		const sample_t out_r = s0_d*rl_m + s1_d*rr_m;
+		const sample_t out_ls = s0_d*lsl_m + s1_d*lsr_m;
+		const sample_t out_rs = s0_d*rsl_m + s1_d*rsr_m;
 
 		if (state->has_output) {
 			for (k = 0; k < e->istream.channels; ++k) {
@@ -345,7 +343,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	#ifndef LADSPA_FRONTEND
 		/* TODO: Implement a proper way for effects to show status lines. */
 		if (state->show_status)
-			fprintf(stderr, "\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: l:%05.2f r:%05.2f; ord: %zd; diff: %zd; early: %zd\033[K\r\033[A",
+			fprintf(stderr, "\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: l:%05.3f r:%05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r\033[A",
 				e->name, (state->disable) ? " [off]" : "", TO_DEGREES(lr), TO_DEGREES(lr_adapt), TO_DEGREES(cs), TO_DEGREES(cs_adapt),
 				fl_boost, fr_boost, state->ord_count, state->diff_count, state->early_count);
 	#endif
