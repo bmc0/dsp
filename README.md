@@ -156,27 +156,35 @@ Example:
 #### Full effects list
 
 * `lowpass_1 f0[k]`  
-	Single-pole lowpass filter.
+	First-order lowpass filter.
 * `highpass_1 f0[k]`  
-	Single-pole highpass filter.
+	First-order highpass filter.
+* `allpass_1 f0[k]`  
+	First-order allpass filter.
+* `lowshelf_1 f0[k] gain`  
+	First-order lowshelf filter.
+* `highshelf_1 f0[k] gain`  
+	First-order highshelf filter.
+* `lowpass_1p f0[k]`  
+	Single pole lowpass (EWMA) filter.
 * `lowpass f0[k] width[q|o|h|k]`  
-	Double-pole lowpass filter.
+	Second-order lowpass filter.
 * `highpass f0[k] width[q|o|h|k]`  
-	Double-pole highpass filter.
+	Second-order highpass filter.
 * `bandpass_skirt f0[k] width[q|o|h|k]`  
-	Double-pole bandpass filter with constant skirt gain.
+	Second-order bandpass filter with constant skirt gain.
 * `bandpass_peak f0[k] width[q|o|h|k]`  
-	Double-pole bandpass filter with constant peak gain.
+	Second-order bandpass filter with constant peak gain.
 * `notch f0[k] width[q|o|h|k]`  
-	Double-pole notch filter.
+	Second-order notch filter.
 * `allpass f0[k] width[q|o|h|k]`  
-	Double-pole allpass filter.
+	Second-order allpass filter.
 * `eq f0[k] width[q|o|h|k] gain`  
-	Double-pole peaking filter.
+	Second-order peaking filter.
 * `lowshelf f0[k] width[q|s|d|o|h|k] gain`  
-	Double-pole lowshelf filter.
+	Second-order lowshelf filter.
 * `highshelf f0[k] width[q|s|d|o|h|k] gain`  
-	Double-pole highshelf filter.
+	Second-order highshelf filter.
 * `linkwitz_transform fz[k] qz fp[k] qp`  
 	Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
 * `deemph`  

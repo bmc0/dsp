@@ -122,37 +122,49 @@ Example:
 .SS Full effects list
 .TP
 \fBlowpass_1\fR \fIf0\fR[\fBk\fR]
-Single-pole lowpass filter.
+First-order lowpass filter.
 .TP
 \fBhighpass_1\fR \fIf0\fR[\fBk\fR]
-Single-pole highpass filter.
+First-order highpass filter.
+.TP
+\fBallpass_1\fR \fIf0\fR[\fBk\fR]
+First-order allpass filter.
+.TP
+\fBlowshelf_1\fR \fIf0\fR[\fBk\fR] \fIgain\fR
+First-order lowshelf filter.
+.TP
+\fBhighshelf_1\fR \fIf0\fR[\fBk\fR] \fIgain\fR
+First-order highshelf filter.
+.TP
+\fBlowpass_1p\fR \fIf0\fR[\fBk\fR]
+Single pole lowpass (EWMA) filter.
 .TP
 \fBlowpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole lowpass filter.
+Second-order lowpass filter.
 .TP
 \fBhighpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole highpass filter.
+Second-order highpass filter.
 .TP
 \fBbandpass_skirt\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole bandpass filter with constant skirt gain.
+Second-order bandpass filter with constant skirt gain.
 .TP
 \fBbandpass_peak\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole bandpass filter with constant peak gain.
+Second-order bandpass filter with constant peak gain.
 .TP
 \fBnotch\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole notch filter.
+Second-order notch filter.
 .TP
 \fBallpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Double-pole allpass filter.
+Second-order allpass filter.
 .TP
 \fBeq\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Double-pole peaking filter.
+Second-order peaking filter.
 .TP
 \fBlowshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Double-pole lowshelf filter.
+Second-order lowshelf filter.
 .TP
 \fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Double-pole highshelf filter.
+Second-order highshelf filter.
 .TP
 \fBlinkwitz_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
 Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).

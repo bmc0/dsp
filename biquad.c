@@ -74,21 +74,21 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 		d0i = pow(2.0 * M_PI * fz, 2.0);
 		d1i = (2.0 * M_PI * fz) / qz;
-		d2i = 1;
+		d2i = 1.0;
 
 		c0i = pow(2.0 * M_PI * fp, 2.0);
 		c1i = (2.0 * M_PI * fp) / qp;
-		c2i = 1;
+		c2i = 1.0;
 
 		gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
 		cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
 
 		b0 = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
-		b1 = 2 * (d0i - pow(gn, 2.0) * d2i) / cci;
+		b1 = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
 		b2 = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
-		a0 = 1;
-		a1 = (2.0 * (c0i - pow(gn, 2.0) * c2i) / cci);
-		a2 = ((c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci);
+		a0 = 1.0;
+		a1 = 2.0 * (c0i - pow(gn, 2.0) * c2i) / cci;
+		a2 = (c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci;
 	}
 	else {
 		f0 = arg0;
@@ -126,20 +126,57 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 		switch (type) {
 		case BIQUAD_LOWPASS_1:
+			c = 1.0 + cos_w0;
+			b0 = sin_w0;
+			b1 = sin_w0;
+			b2 = 0.0;
+			a0 = sin_w0 + c;
+			a1 = sin_w0 - c;
+			a2 = 0.0;
+			break;
+		case BIQUAD_HIGHPASS_1:
+			c = 1.0 + cos_w0;
+			b0 = c;
+			b1 = -c;
+			b2 = 0.0;
+			a0 = sin_w0 + c;
+			a1 = sin_w0 - c;
+			a2 = 0.0;
+			break;
+		case BIQUAD_ALLPASS_1:
+			c = 1.0 + cos_w0;
+			b0 = sin_w0 - c;
+			b1 = sin_w0 + c;
+			b2 = 0.0;
+			a0 = b1;
+			a1 = b0;
+			a2 = 0.0;
+			break;
+		case BIQUAD_LOWSHELF_1:
+			c = 1.0 + cos_w0;
+			b0 = a * sin_w0 + c;
+			b1 = a * sin_w0 - c;
+			b2 = 0.0;
+			a0 = sin_w0 / a + c;
+			a1 = sin_w0 / a - c;
+			a2 = 0.0;
+			break;
+		case BIQUAD_HIGHSHELF_1:
+			c = 1.0 + cos_w0;
+			b0 = sin_w0 + c * a;
+			b1 = sin_w0 - c * a;
+			b2 = 0.0;
+			a0 = sin_w0 + c / a;
+			a1 = sin_w0 - c / a;
+			a2 = 0.0;
+			break;
+		case BIQUAD_LOWPASS_1P:
 			c = 1.0 - cos_w0;
 			b0 = -c + sqrt(c*c + 2.0*c);
 			b1 = b2 = 0.0;
 			a0 = 1.0;
 			a1 = -1.0 + b0;
 			a2 = 0.0;
-			break;
-		case BIQUAD_HIGHPASS_1:
-			a0 = 1.0;
-			a1 = (w0 == M_PI_2) ? 0.0 : (-1.0 + sin_w0) / cos_w0;
-			a2 = 0.0;
-			b0 = (1.0 - a1) / 2.0;
-			b1 = -b0;
-			b2 = 0.0;
 			break;
 		case BIQUAD_LOWPASS:
 			b0 = (1.0 - cos_w0) / 2.0;
@@ -329,8 +366,17 @@ struct effect * biquad_effect_init(struct effect_info *ei, struct stream_info *i
 	switch (ei->effect_number) {
 	case BIQUAD_LOWPASS_1:
 	case BIQUAD_HIGHPASS_1:
+	case BIQUAD_ALLPASS_1:
+	case BIQUAD_LOWPASS_1P:
 		INIT_COMMON(1, ei->effect_number);
 		GET_FREQ_ARG(arg0, argv[1], "f0");
+		break;
+	case BIQUAD_LOWSHELF_1:
+	case BIQUAD_HIGHSHELF_1:
+		INIT_COMMON(2, ei->effect_number);
+		GET_FREQ_ARG(arg0, argv[1], "f0");
+		/* no width argument */
+		GET_ARG(arg2, argv[2], "gain");
 		break;
 	case BIQUAD_LOWPASS:
 	case BIQUAD_HIGHPASS:

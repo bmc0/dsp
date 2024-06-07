@@ -25,6 +25,10 @@
 static struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_LOWPASS_1 },
 	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init,    BIQUAD_HIGHPASS_1 },
+	{ "allpass_1",          "allpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_ALLPASS_1 },
+	{ "lowshelf_1",         "lowshelf_1 f0[k] gain",                   biquad_effect_init,    BIQUAD_LOWSHELF_1 },
+	{ "highshelf_1",        "highshelf_1 f0[k] gain",                  biquad_effect_init,    BIQUAD_HIGHSHELF_1 },
+	{ "lowpass_1p",         "lowpass_1p f0[k]",                        biquad_effect_init,    BIQUAD_LOWPASS_1P },
 	{ "lowpass",            "lowpass f0[k] width[q|o|h|k]",            biquad_effect_init,    BIQUAD_LOWPASS },
 	{ "highpass",           "highpass f0[k] width[q|o|h|k]",           biquad_effect_init,    BIQUAD_HIGHPASS },
 	{ "bandpass_skirt",     "bandpass_skirt f0[k] width[q|o|h|k]",     biquad_effect_init,    BIQUAD_BANDPASS_SKIRT },
