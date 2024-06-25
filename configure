@@ -21,6 +21,7 @@ Options:
   --disable-mad
   --disable-pulse
   --disable-ladspa_dsp
+  --disable-ladspa-host
   --debug-build
   --prefix=path (default: $PREFIX)
   --bindir=path (default: $BINDIR)
@@ -50,6 +51,7 @@ for i in "$@"; do
 		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
 		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
+		--disable-ladspa-host)    CONFIG_DISABLE_LADSPA_HOST=y ;;
 		--debug-build)            CONFIG_DEBUG_BUILD=y ;;
 		--prefix=*)               PREFIX="${i#--prefix=}" ;;
 		--bindir=*)               BINDIR="${i#--bindir=}" ;;
@@ -106,7 +108,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	TARGETS="$TARGETS dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_dsp"
-	if check_header ladspa.h && check_header ltdl.h && check_lib ltdl; then
+	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ladspa.h && check_header ltdl.h && check_lib ltdl; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lltdl"
 		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
@@ -139,7 +141,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_ladspa_dsp"
 	unset INCLUDE_CODECS
-	if check_header ltdl.h && check_lib ltdl; then
+	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ltdl.h && check_lib ltdl; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lltdl"
 		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
