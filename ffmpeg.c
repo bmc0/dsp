@@ -339,7 +339,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	if (state->frame)
 		av_frame_free(&state->frame);
 	if (state->cc)
-		avcodec_close(state->cc);
+		avcodec_free_context(&state->cc);
 	if (state->container)
 		avformat_close_input(&state->container);
 	free(state);
