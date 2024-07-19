@@ -134,9 +134,10 @@ void fir_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct stream_info *istream, char *channel_selector, int argc, char **argv, sample_t *filter_data, int filter_channels, int filter_frames)
+struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct stream_info *istream, char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames)
 {
-	int i, k, j, n_channels;
+	int i, k, n_channels;
+	ssize_t j;
 	struct effect *e;
 	struct fir_state *state;
 	sample_t *filter;
@@ -147,14 +148,14 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 			++n_channels;
 
 	if (filter_channels != 1 && filter_channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, filter_channels);
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;
 	}
 	if (filter_frames < 1) {
-		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", argv[0]);
+		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", ei->name);
 		return NULL;
 	}
-	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", argv[0], filter_frames);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", ei->name, filter_frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -215,7 +216,8 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 
 struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
-	int filter_channels, filter_frames;
+	int filter_channels;
+	ssize_t filter_frames;
 	struct effect *e;
 	struct codec *c_filter;
 	sample_t *filter_data;
@@ -248,7 +250,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 		return NULL;
 	}
 	destroy_codec(c_filter);
-	e = fir_effect_init_with_filter(ei, istream, channel_selector, argc, argv, filter_data, filter_channels, filter_frames);
+	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames);
 	free(filter_data);
 	return e;
 }
