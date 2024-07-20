@@ -203,7 +203,7 @@ Example:
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
-* `matrix4 [[options] surround_level]`  
+* `matrix4 [options] [surround_level]`  
 	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
 	plain (i.e. unencoded) stereo material. The matrix coefficients and the
 	main ideas behind the steering behavior come from David Griesinger's
@@ -211,17 +211,21 @@ Example:
 
 	The intended speaker configuration is fronts at ±30° and surrounds between
 	±60° and ±120°. The surround speakers must be calibrated correctly in
-	level and frequency response for best results. No frequency contouring or
-	delay is done internally, so it is highly recommended to apply `delay` and
-	`lowpass_1` effects to the surround outputs:
+	level and frequency response for best results. The surrounds should be
+	delayed by about 10-25ms (acoustically) relative to the fronts. No
+	frequency contouring is done internally, so applying low pass and/or
+	shelving filters to the surround outputs is recommended:
 
 	```
-	matrix4 -6 :2,3 delay 15m lowpass_1 6k :
+	matrix4 surround_delay=15m -6 :2,3 lowpass_1 10k :
 	```
 
-	The settings shown above (-6dB surround level, 15ms delay, and 6kHz rolloff)
-	are a good starting point, but may be adjusted to taste. The default
-	`surround_level` is -6dB.
+	The settings shown above (-6dB surround level, 15ms delay, and 10kHz
+	rolloff) are a good starting point, but may be adjusted to taste. The
+	default `surround_level` is -6dB. Applying the `decorrelate` effect to the
+	surround outputs can be useful to eliminate coloration caused by comb
+	filtering (note: adjust `surround_delay` to compensate for the `decorrelate`
+	effect's group delay).
 
 	The front outputs replace the original input channels and the surround
 	outputs are appended to the end of the channel list.
@@ -235,7 +239,16 @@ Example:
 		debugging).
 	* `signal`  
 		Toggle the effect when `effect.signal()` is called.
+	* `linear_phase` (`matrix4_mb` only)  
+		Apply an FIR filter to correct the phase distortion caused by the IIR
+		filter bank. Has no effect with `matrix4`. Requires the `fir` effect.
+	* `surround_delay=delay[s|m|S]`  
+		Surround output delay. Default is zero.
 
+* `matrix4_mb [options] [surround_level]`  
+	Like the `matrix4` effect, but divides the input into ten individually
+	steered bands in order to improve separation of concurrent sound sources.
+	The usage and options are the same as the `matrix4` effect.
 * `remix channel_selector|. ...`  
 	Select and mix input channels into output channels. Each channel selector
 	specifies the input channels to be mixed to produce each output channel.

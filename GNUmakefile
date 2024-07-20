@@ -11,6 +11,9 @@ DSP_OBJ := dsp.o \
 	gain.o \
 	crossfeed.o \
 	matrix4.o \
+	matrix4_mb.o \
+	matrix4_common.o \
+	cap5.o \
 	remix.o \
 	st2ms.o \
 	delay.o \
@@ -28,6 +31,9 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	gain.o \
 	crossfeed.o \
 	matrix4.o \
+	matrix4_mb.o \
+	matrix4_common.o \
+	cap5.o \
 	remix.o \
 	st2ms.o \
 	delay.o \

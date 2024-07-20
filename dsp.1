@@ -191,7 +191,7 @@ argument is given.
 Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 crossfeed.
 .TP
-\fBmatrix4\fR [[\fIoptions\fR] \fIsurround_level\fR]
+\fBmatrix4\fR [\fIoptions\fR] [\fIsurround_level\fR]
 2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
 plain (i.e. unencoded) stereo material. The matrix coefficients and the
 main ideas behind the steering behavior come from David Griesinger's
@@ -199,15 +199,19 @@ published works on matrix surround.
 
 The intended speaker configuration is fronts at ±30° and surrounds between
 ±60° and ±120°. The surround speakers must be calibrated correctly in
-level and frequency response for best results. No frequency contouring or
-delay is done internally, so it is highly recommended to apply \fBdelay\fR and
-\fBlowpass_1\fR effects to the surround outputs:
+level and frequency response for best results. The surrounds should be
+delayed by about 10-25ms (acoustically) relative to the fronts. No
+frequency contouring is done internally, so applying low pass and/or
+shelving filters to the surround outputs is recommended:
 .EX
-	matrix4 -6 :2,3 delay 15m lowpass_1 6k :
+	matrix4 surround_delay=15m -6 :2,3 lowpass_1 10k :
 .EE
 The settings shown above (-6dB surround level, 15ms delay, and 6kHz rolloff)
 are a good starting point, but may be adjusted to taste. The default
-\fIsurround_level\fR is -6dB.
+\fIsurround_level\fR is -6dB. Applying the \fBdecorrelate\fR effect to the
+surround outputs can be useful to eliminate coloration caused by comb
+filtering (note: adjust `surround_delay' to compensate for the \fBdecorrelate\fR
+effect's group delay).
 
 The front outputs replace the original input channels and the surround
 outputs are appended to the end of the channel list.
@@ -215,16 +219,28 @@ outputs are appended to the end of the channel list.
 Options are given as a comma-separated list. Recognized options are:
 .RS
 .TP
-\fIno_dir_boost\fR
+no_dir_boost
 Disable directional boost of front channels.
 .TP
-\fIshow_status\fR
+show_status
 Show a status line (slightly broken currently, but still useful for
 debugging).
 .TP
-\fIsignal\fR
+signal
 Toggle the effect when `effect.signal()' is called.
+.TP
+linear_phase (\fBmatrix4_mb\fR only)
+Apply an FIR filter to correct the phase distortion caused by the IIR
+filter bank. Has no effect with \fBmatrix4\fR. Requires the \fBfir\fR effect.
+.TP
+surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Surround output delay. Default is zero.
 .RE
+.TP
+\fBmatrix4_mb\fR [\fIoptions\fR] [\fIsurround_level\fR]
+Similar to the \fBmatrix4\fR effect, but divides the input into ten
+individually steered bands in order to improve separation of concurrent
+sound sources. See the \fBmatrix4\fR effect description for more information.
 .TP
 \fBremix\fR \fIchannel_selector\fR|. ...
 Select and mix input channels into output channels. Each channel selector
