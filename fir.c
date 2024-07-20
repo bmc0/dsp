@@ -155,7 +155,6 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", ei->name);
 		return NULL;
 	}
-	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", ei->name, filter_frames);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -170,7 +169,8 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 	state = calloc(1, sizeof(struct fir_state));
 	e->data = state;
 
-	state->len = filter_frames;
+	state->len = next_fast_fftw_len(filter_frames);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd fft_len=%zd", ei->name, filter_frames, state->len);
 	state->fr_len = state->len + 1;
 	state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -183,7 +183,7 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 	memset(filter, 0, state->len * 2 * sizeof(sample_t));
 	filter_plan = fftw_plan_dft_r2c_1d(state->len * 2, filter, state->tmp_fr, FFTW_ESTIMATE);
 	if (filter_channels == 1) {
-		memcpy(filter, filter_data, state->len * sizeof(sample_t));
+		memcpy(filter, filter_data, filter_frames * sizeof(sample_t));
 		fftw_execute(filter_plan);
 	}
 	for (i = k = 0; i < e->ostream.channels; ++i) {
@@ -200,7 +200,7 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 			if (filter_channels == 1)
 				memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
 			else {
-				for (j = 0; j < state->len; ++j)
+				for (j = 0; j < filter_frames; ++j)
 					filter[j] = filter_data[j * filter_channels + k];
 				fftw_execute(filter_plan);
 				memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));

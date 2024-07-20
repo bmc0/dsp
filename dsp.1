@@ -254,8 +254,8 @@ Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 Sinc resampler. Ignores the channel selector.
 .TP
 \fBfir\fR [~/]\fIfilter_path\fR
-Non-partitioned 64-bit FFT convolution. Latency is equal to the length
-of the filter.
+Non-partitioned 64-bit FFT convolution. Latency is equal to the \fIfft_len\fR
+reported in verbose mode.
 .TP
 \fBfir_p\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Non-uniform partitioned 64-bit FFT convolution. Runs slower than the

@@ -269,3 +269,30 @@ char * isolate(char *s, char c)
 	if (*s != '\0') *s++ = '\0';
 	return s;
 }
+
+#ifdef HAVE_FFTW3
+ssize_t next_fast_fftw_len(ssize_t min_len)
+{
+	ssize_t best = min_len * 7, bound = min_len * 2, p2 = 1;
+	for (int i2 = 0; p2 <= bound; ++i2) {
+		ssize_t p3 = p2;
+		for (int i3 = 0; p3 <= bound; ++i3) {
+			ssize_t p5 = p3;
+			for (int i5 = 0; p5 <= bound; ++i5) {
+				ssize_t p7 = p5;
+				for (int i7 = 0; p7 <= bound; ++i7) {
+					if (p7 < best && p7 >= min_len) {
+						best = p7;
+						/* LOG_FMT(LL_VERBOSE, "next_fast_fftw_len(): best=%zd (2^%d * 3^%d * 5^%d * 7^%d)", best, i2, i3, i5, i7); */
+					}
+					p7 *= 7;
+				}
+				p5 *= 5;
+			}
+			p3 *= 3;
+		}
+		p2 *= 2;
+	}
+	return best;
+}
+#endif

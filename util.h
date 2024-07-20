@@ -43,6 +43,9 @@ int gen_argv_from_string(const char *, int *, char ***);
 char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *);
 char * isolate(char *, char);
+#ifdef HAVE_FFTW3
+ssize_t next_fast_fftw_len(ssize_t);
+#endif
 
 static __inline__ long unsigned int pm_rand(void)
 {
