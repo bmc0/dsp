@@ -180,14 +180,18 @@ int build_effects_chain(int argc, const char *const *argv, struct effects_chain 
 					goto fail;
 				}
 			}
-			else if (e->run == NULL) {
-				LOG_FMT(LL_VERBOSE, "info: not using effect: %s", argv[k]);
-				destroy_effect(e);
-			}
-			else {
-				append_effect(chain, e);
-				if (e->ostream.channels != stream->channels) channels_changed = 1;
-				*stream = e->ostream;
+			while (e != NULL) {
+				struct effect *e_n = e->next;
+				if (e->run == NULL) {
+					LOG_FMT(LL_VERBOSE, "info: not using effect: %s", argv[k]);
+					destroy_effect(e);
+				}
+				else {
+					append_effect(chain, e);
+					if (e->ostream.channels != stream->channels) channels_changed = 1;
+					*stream = e->ostream;
+				}
+				e = e_n;
 			}
 		}
 		allow_fail = 0;
