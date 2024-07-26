@@ -11,7 +11,7 @@ dsp is an audio processing program with an interactive mode.
 
 #### Optional dependencies
 
-* fftw3: For `resample` and `fir` effects.
+* fftw3: For `resample`, `fir`, `fir_p`, and `hilbert` effects.
 * zita-convolver: For the `zita_convolver` effect.
 * libsndfile: For sndfile input/output support (recommended).
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
