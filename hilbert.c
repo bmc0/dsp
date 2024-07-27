@@ -35,7 +35,7 @@ struct effect * hilbert_effect_init(struct effect_info *ei, struct stream_info *
 			h[i] = 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
 		}
 	}
-	e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps);
+	e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
 	return e;
 }

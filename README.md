@@ -253,8 +253,9 @@ Example:
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [~/]filter_path`  
-	Non-partitioned 64-bit FFT convolution. Latency is equal to the `fft_len`
-	reported in verbose mode.
+	Non-partitioned 64-bit direct/FFT convolution. Latency is zero for filters
+	up to 16 samples. For longer filters, the latency is equal to the
+	`fft_len` reported in verbose mode.
 * `fir_p [min_part_len [max_part_len]] [~/]filter_path`  
 	Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
 	`zita_convolver` effect, but potentially useful if you need more precision
