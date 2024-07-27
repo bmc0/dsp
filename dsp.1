@@ -259,10 +259,9 @@ up to 16 samples. For longer filters, the latency is equal to the
 \fIfft_len\fR reported in verbose mode.
 .TP
 \fBfir_p\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
-Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
-\fBzita_convolver\fR effect, but potentially useful if you need more precision
-and/or lower latency. Latency is equal to \fImin_part_len\fR (16 samples by
-default). \fI{min,max}_part_len\fR must be powers of 2.
+Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
+slower than the \fBzita_convolver\fR effect, but useful if you need higher
+precision and/or zero latency. \fImax_part_len\fR must be a power of 2.
 .TP
 \fBhilbert\fR \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be

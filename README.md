@@ -256,11 +256,10 @@ Example:
 	Non-partitioned 64-bit direct/FFT convolution. Latency is zero for filters
 	up to 16 samples. For longer filters, the latency is equal to the
 	`fft_len` reported in verbose mode.
-* `fir_p [min_part_len [max_part_len]] [~/]filter_path`  
-	Non-uniform partitioned 64-bit FFT convolution. Runs slower than the
-	`zita_convolver` effect, but potentially useful if you need more precision
-	and/or lower latency. Latency is equal to `min_part_len` (16 samples by
-	default). `{min,max}_part_len` must be powers of 2.
+* `fir_p [max_part_len] [~/]filter_path`  
+	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
+	slower than the `zita_convolver` effect, but useful if you need higher
+	precision and/or zero latency. `max_part_len` must be a power of 2.
 * `zita_convolver [min_part_len [max_part_len]] [~/]filter_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
