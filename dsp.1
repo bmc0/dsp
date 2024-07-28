@@ -263,9 +263,15 @@ Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
 slower than the \fBzita_convolver\fR effect, but useful if you need higher
 precision and/or zero latency. \fImax_part_len\fR must be a power of 2.
 .TP
-\fBhilbert\fR \fItaps\fR
+\fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
+Partitioned 32-bit FFT convolution using the zita-convolver library.
+Latency is equal to \fImin_part_len\fR (64 samples by default).
+\fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192.
+.TP
+\fBhilbert\fR [\fI-p\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be
-odd. Bandwidth is controlled by the number of taps.
+odd. Bandwidth is controlled by the number of taps. If \fI-p\fR is given, the
+\fBfir_p\fR convolution engine is used instead of the default \fBfir\fR engine.
 .TP
 \fBdecorrelate\fR [\fI-m\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder
@@ -273,11 +279,6 @@ Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
 If \fI-m\fR is given, the same filter parameters are used for all input
 channels. The default number of stages is 5, which results in an
 average group delay of about 8.5ms at high frequencies.
-.TP
-\fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
-Partitioned 32-bit FFT convolution using the zita-convolver library.
-Latency is equal to \fImin_part_len\fR (64 samples by default).
-\fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192.
 .TP
 \fBnoise\fR \fIlevel\fR
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise

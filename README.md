@@ -264,9 +264,10 @@ Example:
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192.
-* `hilbert taps`  
+* `hilbert [-p] taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
-	odd. Bandwidth is controlled by the number of taps.
+	odd. Bandwidth is controlled by the number of taps. If `-p` is given, the
+	`fir_p` convolution engine is used instead of the default `fir` engine.
 * `decorrelate [-m] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).

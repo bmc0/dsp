@@ -3,21 +3,27 @@
 #include <math.h>
 #include "hilbert.h"
 #include "fir.h"
+#include "fir_p.h"
 #include "util.h"
 
 struct effect * hilbert_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
 {
-	ssize_t taps, i, k;
+	ssize_t taps, i = 1, k;
 	sample_t *h;
 	char *endptr;
+	int use_fir_p = 0;
 	struct effect *e;
 
-	if (argc != 2) {
+	if (argc > 3 || argc < 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	taps = strtol(argv[1], &endptr, 10);
-	CHECK_ENDPTR(argv[1], endptr, "taps", return NULL);
+	if (strcmp(argv[i], "-p") == 0) {
+		use_fir_p = 1;
+		++i;
+	}
+	taps = strtol(argv[i], &endptr, 10);
+	CHECK_ENDPTR(argv[i], endptr, "taps", return NULL);
 	if (taps < 3) {
 		LOG_FMT(LL_ERROR, "%s: error: taps must be > 3", argv[0]);
 		return NULL;
@@ -35,7 +41,9 @@ struct effect * hilbert_effect_init(struct effect_info *ei, struct stream_info *
 			h[i] = 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
 		}
 	}
-	e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+	e = (use_fir_p) ?
+		fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0) :
+		fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
 	return e;
 }

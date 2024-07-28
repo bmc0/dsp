@@ -61,7 +61,7 @@ static struct effect_info effects[] = {
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]filter_path", zita_convolver_effect_init, 0 },
 #endif
 #ifdef HAVE_FFTW3
-	{ "hilbert",            "hilbert taps",                            hilbert_effect_init,   0 },
+	{ "hilbert",            "hilbert [-p] taps",                       hilbert_effect_init,   0 },
 #endif
 	{ "decorrelate",        "decorrelate [-m] [stages]",               decorrelate_effect_init, 0 },
 	{ "noise",              "noise level",                             noise_effect_init,     0 },
