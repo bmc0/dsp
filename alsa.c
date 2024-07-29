@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <alsa/asoundlib.h>
 #include "alsa.h"
@@ -30,54 +31,70 @@ static int alsa_prepare_device(struct alsa_state *state)
 	return err;
 }
 
-ssize_t alsa_read(struct codec *c, sample_t *buf, ssize_t frames)
+ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 {
-	ssize_t n;
+	ssize_t n, r = 0;
+	uint8_t *buf = (uint8_t *) sbuf;
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
 		return 0;
 
 	try_again:
-	n = snd_pcm_readi(state->dev, (char *) buf, frames);
+	n = snd_pcm_readi(state->dev, buf, frames);
 	if (n < 0) {
+		if (n == -EAGAIN)
+			goto try_again;
 		if (n == -EPIPE)
 			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
 			LOG_FMT(LL_ERROR, "%s: error: read failed", codec_name);
-			return 0;
+			return r;
 		}
 		else
 			goto try_again;
 	}
-	state->enc_info->read_func((char *) buf, buf, n * c->channels);
-	return n;
+	r += n;
+	if (r < frames) {
+		buf += n * c->channels * state->enc_info->bytes;
+		goto try_again;
+	}
+	state->enc_info->read_func((char *) sbuf, sbuf, n * c->channels);
+	return r;
 }
 
-ssize_t alsa_write(struct codec *c, sample_t *buf, ssize_t frames)
+ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 {
-	ssize_t n;
+	ssize_t n, w = 0;
+	uint8_t *buf = (uint8_t *) sbuf;
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
 		return 0;
 
-	state->enc_info->write_func(buf, (char * ) buf, frames * c->channels);
+	state->enc_info->write_func(sbuf, (char *) sbuf, frames * c->channels);
 	try_again:
 	n = snd_pcm_writei(state->dev, buf, frames);
 	if (n < 0) {
+		if (n == -EAGAIN)
+			goto try_again;
 		if (n == -EPIPE)
 			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
 			LOG_FMT(LL_ERROR, "%s: error: write failed", codec_name);
-			return 0;
+			return w;
 		}
 		else
 			goto try_again;
 	}
-	return n;
+	w += n;
+	if (w < frames) {
+		buf += n * c->channels * state->enc_info->bytes;
+		goto try_again;
+	}
+	return w;
 }
 
 ssize_t alsa_seek(struct codec *c, ssize_t pos)
