@@ -19,6 +19,7 @@
 #define EVENT_SAMPLE_TIME    30.0
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
+#define EVENT_MASK_TIME     100.0
 #define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST)
 #define ORD_SENS_ERR         10.0
 #define ORD_SENS_LEVEL       10.0
@@ -58,9 +59,10 @@ struct event_state {
 		EVENT_FLAG_L = 1<<0,
 		EVENT_FLAG_R = 1<<1,
 		EVENT_FLAG_USE_ORD = 1<<2,
-		EVENT_FLAG_END = 1<<3,
+		EVENT_FLAG_FUSE = 1<<3,
+		EVENT_FLAG_END = 1<<4,
 	} flags[2];
-	struct ewma_state accom[4], norm[2], slow[4], smooth[2], avg[2];
+	struct ewma_state accom[4], norm[2], slow[4], smooth[2], avg[2], mask[2];
 	struct axes dir;
 	double ord_factor, adj;
 	ssize_t t, t_sample, t_hold;
@@ -132,6 +134,8 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	for (int i = 0; i < 4; ++i) ewma_init(&ev->slow[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(RISE_TIME_SLOW));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->smooth[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SMOOTH_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->avg[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
+	for (int i = 0; i < 2; ++i) ewma_init(&ev->mask[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME));
+	ev->t_hold = -2;
 }
 
 static void drift_init(struct ewma_state drift[4], const struct stream_info *istream)
@@ -184,14 +188,18 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	ev->adj = (ev->adj > 0.5) ? ev->adj : 0.5;
 	ev->ord_factor *= evc->ord_factor_c;
 
-	ewma_run(&ev->norm[0], fabs(pwr_env->l - ewma_run(&ev->slow[0], pwr_env->l)*NORM_FACTOR*ev->adj));
-	ewma_run(&ev->norm[1], fabs(pwr_env->r - ewma_run(&ev->slow[1], pwr_env->r)*NORM_FACTOR*ev->adj));
-	const double l_norm_div = ewma_get_last(&ev->norm[0])*(1.0-NORM_CROSSFEED) + ewma_get_last(&ev->norm[1])*NORM_CROSSFEED;
-	const double r_norm_div = ewma_get_last(&ev->norm[1])*(1.0-NORM_CROSSFEED) + ewma_get_last(&ev->norm[0])*NORM_CROSSFEED;
-	const double l_adapt_norm = ewma_run(&ev->smooth[0], (isnormal(l_norm_div)) ? adapt.l / l_norm_div : (!isnormal(adapt.l)) ? 0.0 : EVENT_THRESH*4.0);
-	const double r_adapt_norm = ewma_run(&ev->smooth[1], (isnormal(r_norm_div)) ? adapt.r / r_norm_div : (!isnormal(adapt.r)) ? 0.0 : EVENT_THRESH*4.0);
-	const double l_event = (l_adapt_norm - ewma_run(&ev->slow[2], l_adapt_norm)) * ev->adj;
-	const double r_event = (r_adapt_norm - ewma_run(&ev->slow[3], r_adapt_norm)) * ev->adj;
+	const double l_pwr_xf = pwr_env->l*(1.0-NORM_CROSSFEED) + pwr_env->r*NORM_CROSSFEED;
+	const double r_pwr_xf = pwr_env->r*(1.0-NORM_CROSSFEED) + pwr_env->l*NORM_CROSSFEED;
+	const double l_norm_div = ewma_run(&ev->norm[0], fabs(l_pwr_xf - ewma_run(&ev->slow[0], l_pwr_xf)*NORM_FACTOR*ev->adj));
+	const double r_norm_div = ewma_run(&ev->norm[1], fabs(r_pwr_xf - ewma_run(&ev->slow[1], r_pwr_xf)*NORM_FACTOR*ev->adj));
+	ewma_run_scale_asym(&ev->mask[0], l_pwr_xf, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
+	ewma_run_scale_asym(&ev->mask[1], r_pwr_xf, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
+	const double l_mask = MAXIMUM(l_pwr_xf - ewma_get_last(&ev->mask[0]), 0.0);
+	const double r_mask = MAXIMUM(r_pwr_xf - ewma_get_last(&ev->mask[1]), 0.0);
+	const double l_mask_norm = ewma_run(&ev->smooth[0], (isnormal(l_norm_div)) ? l_mask / l_norm_div : (!isnormal(l_mask)) ? 0.0 : EVENT_THRESH*4.0);
+	const double r_mask_norm = ewma_run(&ev->smooth[1], (isnormal(r_norm_div)) ? r_mask / r_norm_div : (!isnormal(r_mask)) ? 0.0 : EVENT_THRESH*4.0);
+	const double l_event = (l_mask_norm - ewma_run(&ev->slow[2], l_mask_norm)) * ev->adj;
+	const double r_event = (r_mask_norm - ewma_run(&ev->slow[3], r_mask_norm)) * ev->adj;
 
 	if (!ev->sample && (l_event > EVENT_THRESH || r_event > EVENT_THRESH)) {
 		ev->sample = 1;
@@ -199,8 +207,11 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		ev->flags[1] |= (l_event >= r_event) ? EVENT_FLAG_L : 0;
 		ev->flags[1] |= (r_event >= l_event) ? EVENT_FLAG_R : 0;
 		ev->t_sample = ev->t;
-		ewma_set(&ev->avg[0], diff.lr);
-		ewma_set(&ev->avg[1], diff.cs);
+		if (ev->t - ev->t_hold > 1) {
+			ewma_set(&ev->avg[0], diff.lr);
+			ewma_set(&ev->avg[1], diff.cs);
+		}
+		else ev->flags[1] |= EVENT_FLAG_FUSE;
 	}
 
 	if (ev->sample) {
@@ -217,7 +228,7 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 				++ev->ord_count;
 				ev->ord_factor += 1.0;
 			}
-			else ++ev->diff_count;
+			else if (!(ev->flags[1] & EVENT_FLAG_FUSE)) ++ev->diff_count;
 			ev->flags[0] = ev->flags[1];
 			/* LOG_FMT(LL_VERBOSE, "%s: event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
 					e->name, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff",
@@ -236,8 +247,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 			ax_ev->lr = ax->lr = ewma_set(&drift[0], ewma_run_scale(&drift[2], ev->dir.lr, ds));
 			ax_ev->cs = ax->cs = ewma_set(&drift[1], ewma_run_scale(&drift[3], ev->dir.cs, ds));
 		}
-		if ((ev->flags[0] & EVENT_FLAG_L && l_adapt_norm <= EVENT_END_THRESH)
-				|| (ev->flags[0] & EVENT_FLAG_R && r_adapt_norm <= EVENT_END_THRESH)) {
+		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm <= EVENT_END_THRESH)
+				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm <= EVENT_END_THRESH)) {
 			ev->flags[0] |= EVENT_FLAG_END;
 		}
 		if ((ev->t - ev->t_hold >= evc->min_hold_frames && ev->flags[0] & EVENT_FLAG_END)

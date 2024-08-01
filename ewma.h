@@ -34,6 +34,11 @@ static __inline__ double ewma_run_scale(struct ewma_state *state, double s, doub
 	return r;
 }
 
+static __inline__ double ewma_run_scale_asym(struct ewma_state *state, double s, double rise_sf, double fall_sf)
+{
+	return (s >= state->m0) ? ewma_run_scale(state, s, rise_sf) : ewma_run_scale(state, s, fall_sf);
+}
+
 static __inline__ double ewma_run_set_max(struct ewma_state *state, double s)
 {
 	if (s >= state->m0) s = ewma_run(state, s);
