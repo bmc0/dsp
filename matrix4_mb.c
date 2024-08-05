@@ -70,7 +70,7 @@ struct matrix4_mb_state {
 	#else
 		double fl_boost, fr_boost;
 	#endif
-	ssize_t len, p, drain_frames;
+	ssize_t len, p, drain_frames, fade_frames, fade_p;
 };
 
 static void filter_bank_init(struct filter_bank *fb, double fs)
@@ -227,16 +227,24 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	ssize_t i, k, oframes = 0;
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 
-	const double norm_mult = (state->disable) ? 1.0 : state->norm_mult;
-	const double surr_mult = (state->disable) ? 0.0 : state->surr_mult;
-
 	for (i = 0; i < *frames; ++i) {
+		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
 		double fl_boost = 0.0, fr_boost = 0.0, f_boost_norm = 0.0;
 		sample_t out_ls = 0.0, out_rs = 0.0;
 		const sample_t s0 = (ibuf) ? ibuf[i*e->istream.channels + state->c0] : 0.0;
 		const sample_t s1 = (ibuf) ? ibuf[i*e->istream.channels + state->c1] : 0.0;
 		const sample_t s0_d = state->bufs[state->c0][state->p];
 		const sample_t s1_d = state->bufs[state->c1][state->p];
+
+		if (state->fade_p > 0) {
+			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
+			norm_mult = CALC_NORM_MULT(surr_mult);
+			--state->fade_p;
+		}
+		else if (state->disable) {
+			norm_mult = 1.0;
+			surr_mult = 0.0;
+		}
 
 		filter_bank_run(&state->fb[0], s0);
 		filter_bank_run(&state->fb[1], s1);
@@ -398,6 +406,7 @@ void matrix4_mb_effect_signal(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->disable = !state->disable;
+	state->fade_p = state->fade_frames - state->fade_p;
 	if (!state->show_status)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
@@ -495,6 +504,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	}
 	state->surr_mult = config.surr_mult;
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
+	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 #endif
 	filter_bank_init(&state->fb[0], istream->fs);

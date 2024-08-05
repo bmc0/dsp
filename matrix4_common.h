@@ -25,6 +25,9 @@
 #define ORD_SENS_LEVEL       10.0
 #define DIFF_SENS_ERR        10.0
 #define DIFF_SENS_LEVEL       3.0
+#define FADE_TIME           500.0
+/* 1 = linear; 2 = quarter sine; 3 = half sine; 4 = double-exponential sigmoid */
+#define FADE_TYPE               3
 
 #ifndef DOWNSAMPLE_FACTOR
 	#define DOWNSAMPLE_FACTOR 1
@@ -150,6 +153,23 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 	evc->max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, DOWNSAMPLED_FS(istream->fs));
 	evc->min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, DOWNSAMPLED_FS(istream->fs));
 	evc->ord_factor_c = exp(-1.0/(DOWNSAMPLED_FS(istream->fs)*ORD_FACTOR_DECAY));
+}
+
+static __inline__ double fade_mult(ssize_t pos, ssize_t n, int is_out)
+{
+	double fade = (double) (n-pos) / n;
+	if (is_out) fade = 1.0 - fade;
+#if FADE_TYPE == 1
+	return fade;
+#elif FADE_TYPE == 2
+	return sin(fade*M_PI_2);
+#elif FADE_TYPE == 3
+	return (1.0 - cos(fade*M_PI)) * 0.5;
+#elif FADE_TYPE == 4
+	return (fade <= 0.5) ? 4.0 * fade*fade*fade : 1.0 - 4.0 * (1.0-fade)*(1.0-fade)*(1.0-fade);
+#else
+	#error "illegal FADE_TYPE"
+#endif
 }
 
 static void calc_input_envs(struct smooth_state *sm, double l, double r, struct envs *env, struct envs *pwr_env)

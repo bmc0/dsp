@@ -23,7 +23,7 @@ struct matrix4_state {
 	struct ewma_state drift[4];
 	struct axes ax, ax_ev;
 	sample_t norm_mult, surr_mult;
-	ssize_t len, p, drain_frames;
+	ssize_t len, p, drain_frames, fade_frames, fade_p;
 };
 
 sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -32,14 +32,22 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	double fl_boost = 0.0, fr_boost = 0.0;
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 
-	const double norm_mult = (state->disable) ? 1.0 : state->norm_mult;
-	const double surr_mult = (state->disable) ? 0.0 : state->surr_mult;
-
 	for (i = 0; i < *frames; ++i) {
+		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
 		const sample_t s0 = (ibuf) ? ibuf[i*e->istream.channels + state->c0] : 0.0;
 		const sample_t s1 = (ibuf) ? ibuf[i*e->istream.channels + state->c1] : 0.0;
 		const sample_t s0_d = state->bufs[state->c0][state->p];
 		const sample_t s1_d = state->bufs[state->c1][state->p];
+
+		if (state->fade_p > 0) {
+			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
+			norm_mult = CALC_NORM_MULT(surr_mult);
+			--state->fade_p;
+		}
+		else if (state->disable) {
+			norm_mult = 1.0;
+			surr_mult = 0.0;
+		}
 
 		const sample_t s0_bp = biquad(&state->in_lp[0], biquad(&state->in_hp[0], s0));
 		const sample_t s1_bp = biquad(&state->in_lp[1], biquad(&state->in_hp[1], s1));
@@ -127,6 +135,7 @@ void matrix4_effect_signal(struct effect *e)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	state->disable = !state->disable;
+	state->fade_p = state->fade_frames - state->fade_p;
 	if (!state->show_status)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
@@ -207,6 +216,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
 	state->surr_mult = config.surr_mult;
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
+	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 
 	struct effect *e_delay = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
