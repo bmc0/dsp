@@ -8,7 +8,6 @@
 #include "fir_p.h"
 #include "fir.h"
 #include "util.h"
-#include "codec.h"
 
 #define DIRECT_LEN           (1<<5)
 #define MAX_PART_LEN_LIMIT   INT_MAX
@@ -345,9 +344,8 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 	int filter_channels;
 	ssize_t filter_frames, max_part_len = 0;
 	struct effect *e;
-	struct codec *c_filter;
 	sample_t *filter_data;
-	char *p, *endptr;
+	char *endptr;
 
 	if (argc > 3 || argc < 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
@@ -357,29 +355,9 @@ struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *is
 		max_part_len = strtol(argv[1], &endptr, 10);
 		CHECK_ENDPTR(argv[1], endptr, "max_part_len", return NULL);
 	}
-	p = construct_full_path(dir, argv[argc - 1]);
-	c_filter = init_codec(p, NULL, NULL, istream->fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
-	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
-		free(p);
+	filter_data = fir_read_filter(ei, dir, argv[argc - 1], istream->fs, &filter_channels, &filter_frames);
+	if (filter_data == NULL)
 		return NULL;
-	}
-	free(p);
-	filter_channels = c_filter->channels;
-	filter_frames = c_filter->frames;
-	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
-		destroy_codec(c_filter);
-		return NULL;
-	}
-	filter_data = calloc(filter_frames * filter_channels, sizeof(sample_t));
-	if (c_filter->read(c_filter, filter_data, filter_frames) != filter_frames) {
-		LOG_FMT(LL_ERROR, "%s: error: short read", argv[0]);
-		destroy_codec(c_filter);
-		free(filter_data);
-		return NULL;
-	}
-	destroy_codec(c_filter);
 	e = fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, max_part_len);
 	free(filter_data);
 	return e;

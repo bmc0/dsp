@@ -8,7 +8,7 @@
 #include "util.h"
 #include "codec.h"
 
-#define MAX_DIRECT_LEN 16
+#define MAX_DIRECT_LEN (1<<4)
 
 struct fir_direct_state {
 	ssize_t len, mask, p, filter_frames, drain_frames;
@@ -338,38 +338,48 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	int filter_channels;
 	ssize_t filter_frames;
 	struct effect *e;
-	struct codec *c_filter;
 	sample_t *filter_data;
-	char *p;
 
 	if (argc != 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	p = construct_full_path(dir, argv[1]);
-	c_filter = init_codec(p, NULL, NULL, istream->fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
-	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
+	filter_data = fir_read_filter(ei, dir, argv[1], istream->fs, &filter_channels, &filter_frames);
+	if (filter_data == NULL)
+		return NULL;
+	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
+	free(filter_data);
+	return e;
+}
+
+sample_t * fir_read_filter(struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
+{
+	struct codec *c;
+	sample_t *data;
+	char *p;
+
+	p = construct_full_path(dir, path);
+	c = init_codec(p, NULL, NULL, fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+	if (c == NULL) {
+		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, p);
 		free(p);
 		return NULL;
 	}
 	free(p);
-	filter_channels = c_filter->channels;
-	filter_frames = c_filter->frames;
-	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
-		destroy_codec(c_filter);
+	*channels = c->channels;
+	*frames = c->frames;
+	if (c->fs != fs) {
+		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, fs, c->fs);
+		destroy_codec(c);
 		return NULL;
 	}
-	filter_data = calloc(filter_frames * filter_channels, sizeof(sample_t));
-	if (c_filter->read(c_filter, filter_data, filter_frames) != filter_frames) {
-		LOG_FMT(LL_ERROR, "%s: error: short read", argv[0]);
-		destroy_codec(c_filter);
-		free(filter_data);
+	data = calloc(c->frames * c->channels, sizeof(sample_t));
+	if (c->read(c, data, c->frames) != c->frames) {
+		LOG_FMT(LL_ERROR, "%s: error: short read", ei->name);
+		destroy_codec(c);
+		free(data);
 		return NULL;
 	}
-	destroy_codec(c_filter);
-	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
-	free(filter_data);
-	return e;
+	destroy_codec(c);
+	return data;
 }
