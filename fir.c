@@ -215,7 +215,7 @@ void fir_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct stream_info *istream, char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
+struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
 {
 	int i, k, n_channels;
 	ssize_t j;
@@ -333,7 +333,7 @@ struct effect * fir_effect_init_with_filter(struct effect_info *ei, struct strea
 	return e;
 }
 
-struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * fir_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels;
 	ssize_t filter_frames;
@@ -352,7 +352,7 @@ struct effect * fir_effect_init(struct effect_info *ei, struct stream_info *istr
 	return e;
 }
 
-sample_t * fir_read_filter(struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
+sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
 {
 	struct codec *c;
 	sample_t *data;

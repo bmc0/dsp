@@ -78,13 +78,13 @@ void gain_effect_destroy(struct effect *e)
 	free(e->channel_selector);
 }
 
-struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * gain_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
 	struct gain_state *state;
 	double v;
 	int channel = -1;
-	char *endptr, *arg;
+	char *endptr;
 
 	if (argc != 2 && argc != 3) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
@@ -94,10 +94,8 @@ struct effect * gain_effect_init(struct effect_info *ei, struct stream_info *ist
 		channel = strtol(argv[1], &endptr, 10);
 		CHECK_ENDPTR(argv[1], endptr, "channel", return NULL);
 		CHECK_RANGE(channel >= 0 && channel < istream->channels, "channel", return NULL);
-		arg = argv[2];
 	}
-	else
-		arg = argv[1];
+	const char *arg = argv[argc - 1];
 
 	switch (ei->effect_number) {
 	case GAIN_EFFECT_NUMBER_GAIN:

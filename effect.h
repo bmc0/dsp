@@ -6,7 +6,7 @@
 struct effect_info {
 	const char *name;
 	const char *usage;
-	struct effect * (*init)(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
+	struct effect * (*init)(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 	int effect_number;
 };
 
@@ -31,11 +31,11 @@ struct effects_chain {
 	struct effect *tail;
 };
 
-struct effect_info * get_effect_info(const char *);
+const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
-int build_effects_chain(int, char **, struct effects_chain *, struct stream_info *, char *, const char *);
-int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, char *, const char *, const char *);
+int build_effects_chain(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
+int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, const char *, const char *, const char *);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);

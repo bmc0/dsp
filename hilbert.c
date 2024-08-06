@@ -6,7 +6,7 @@
 #include "fir_p.h"
 #include "util.h"
 
-struct effect * hilbert_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	ssize_t taps, i = 1, k;
 	sample_t *h;

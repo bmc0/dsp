@@ -183,7 +183,7 @@ void fir_p_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * fir_p_effect_init_with_filter(struct effect_info *ei, struct stream_info *istream, char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t max_part_len)
+struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t max_part_len)
 {
 	int i, k, j, l, n_channels;
 	ssize_t filter_pos = DIRECT_LEN, delay = 0, max_delay = 0;
@@ -339,7 +339,7 @@ struct effect * fir_p_effect_init_with_filter(struct effect_info *ei, struct str
 	return e;
 }
 
-struct effect * fir_p_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * fir_p_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels;
 	ssize_t filter_frames, max_part_len = 0;

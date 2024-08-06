@@ -513,7 +513,7 @@ int main(int argc, char *argv[])
 	effect_argc = argc - optind;
 	stream.fs = in_codecs.head->fs;
 	stream.channels = in_codecs.head->channels;
-	if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+	if (build_effects_chain(effect_argc, (const char *const *) &argv[effect_start], &chain, &stream, NULL, NULL))
 		cleanup_and_exit(1);
 
 	if (plot)
@@ -602,7 +602,7 @@ int main(int argc, char *argv[])
 						destroy_effects_chain(&chain);
 						stream.fs = in_codecs.head->fs;
 						stream.channels = in_codecs.head->channels;
-						if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+						if (build_effects_chain(effect_argc, (const char *const *) &argv[effect_start], &chain, &stream, NULL, NULL))
 							cleanup_and_exit(1);
 						if (input_mode != INPUT_MODE_SEQUENCE) {
 							if (out_codec->fs != stream.fs) {
@@ -681,7 +681,7 @@ int main(int argc, char *argv[])
 				destroy_effects_chain(&chain);
 				stream.fs = in_codecs.head->fs;
 				stream.channels = in_codecs.head->channels;
-				if (build_effects_chain(effect_argc, &argv[effect_start], &chain, &stream, NULL, NULL))
+				if (build_effects_chain(effect_argc, (const char *const *) &argv[effect_start], &chain, &stream, NULL, NULL))
 					cleanup_and_exit(1);
 				if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) {
 					LOG_S(LL_NORMAL, "info: output sample rate and/or channels changed; reopening output");

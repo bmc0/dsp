@@ -22,7 +22,7 @@
 #include "ladspa_host.h"
 #include "stats.h"
 
-static struct effect_info effects[] = {
+static const struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_LOWPASS_1 },
 	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init,    BIQUAD_HIGHPASS_1 },
 	{ "allpass_1",          "allpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_ALLPASS_1 },
@@ -71,7 +71,7 @@ static struct effect_info effects[] = {
 	{ "stats",              "stats [ref_level]",                       stats_effect_init,     0 },
 };
 
-struct effect_info * get_effect_info(const char *name)
+const struct effect_info * get_effect_info(const char *name)
 {
 	int i;
 	for (i = 0; i < LENGTH(effects); ++i)
@@ -96,21 +96,20 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 	e->next = NULL;
 }
 
-int build_effects_chain(int argc, char **argv, struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir)
+int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *initial_channel_selector, const char *dir)
 {
 	int i = 1, k = 0, j, last_selector_index = -1, old_stream_channels, allow_fail = 0, channels_changed = 0;
-	char *tmp_channel_selector;
-	struct effect_info *ei = NULL;
+	char *channel_selector, *tmp_channel_selector;
+	const struct effect_info *ei = NULL;
 	struct effect *e = NULL;
 
-	if (channel_selector == NULL) {
+	if (initial_channel_selector == NULL) {
 		channel_selector = NEW_SELECTOR(stream->channels);
 		SET_SELECTOR(channel_selector, stream->channels);
 	}
 	else {
-		tmp_channel_selector = NEW_SELECTOR(stream->channels);
-		COPY_SELECTOR(tmp_channel_selector, channel_selector, stream->channels);
-		channel_selector = tmp_channel_selector;
+		channel_selector = NEW_SELECTOR(stream->channels);
+		COPY_SELECTOR(channel_selector, initial_channel_selector, stream->channels);
 	}
 
 	while (k < argc) {
@@ -203,7 +202,7 @@ int build_effects_chain(int argc, char **argv, struct effects_chain *chain, stru
 	return 1;
 }
 
-int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, char *channel_selector, const char *dir, const char *path)
+int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, const char *channel_selector, const char *dir, const char *path)
 {
 	char **argv = NULL, *tmp, *d = NULL, *p, *c;
 	int i, ret = 0, argc = 0;
@@ -224,7 +223,7 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 	else
 		*tmp = '\0';
 	LOG_FMT(LL_VERBOSE, "info: begin effects file: %s", p);
-	if (build_effects_chain(argc, argv, chain, stream, channel_selector, d))
+	if (build_effects_chain(argc, (const char *const *) argv, chain, stream, channel_selector, d))
 		goto fail;
 	LOG_FMT(LL_VERBOSE, "info: end effects file: %s", p);
 	done:

@@ -110,7 +110,7 @@ void decorrelate_effect_destroy(struct effect *e)
 
 #define RANDOM_FILTER_DELAY ((double)pm_rand()/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
 
-struct effect * decorrelate_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * decorrelate_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int k = 1, j, n_stages = 5, mono = 0;
 	struct decorrelate_state *state;

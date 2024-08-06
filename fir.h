@@ -4,8 +4,8 @@
 #include "dsp.h"
 #include "effect.h"
 
-struct effect * fir_effect_init_with_filter(struct effect_info *, struct stream_info *, char *, sample_t *, int, ssize_t, int);
-struct effect * fir_effect_init(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
-sample_t * fir_read_filter(struct effect_info *, const char *, const char *, int, int *, ssize_t *);
+struct effect * fir_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int);
+struct effect * fir_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+sample_t * fir_read_filter(const struct effect_info *, const char *, const char *, int, int *, ssize_t *);
 
 #endif

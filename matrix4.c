@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include "matrix4.h"
 #include "biquad.h"
@@ -408,20 +409,20 @@ void matrix4_effect_destroy(struct effect *e)
 	free(state);
 }
 
-struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
 	struct matrix4_state *state;
-	int i, n_channels = 0;
+	int i, n_channels = 0, opt_str_idx = -1;
 	double surr_mult = 0.5;
-	char *opt = NULL, *next_opt, *endptr;
+	char *opt_str = NULL, *endptr;
 
 	if (argc > 3) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 	if (argc > 2)
-		opt = argv[1];
+		opt_str_idx = 1;
 	if (argc > 1) {
 		surr_mult = pow(10.0, strtod(argv[argc-1], &endptr) / 20.0);
 		CHECK_ENDPTR(argv[argc-1], endptr, "surround_level", return NULL);
@@ -463,9 +464,10 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 		}
 	}
 	state->do_dir_boost = 1;
-	if (opt) {
+	if (opt_str_idx > 0) {
+		char *opt = opt_str = strdup(argv[opt_str_idx]);
 		while (*opt != '\0') {
-			next_opt = isolate(opt, ',');
+			char *next_opt = isolate(opt, ',');
 			if (*opt == '\0') /* do nothing */;
 			else if (strcmp(opt, "show_status")  == 0) state->show_status = 1;
 			else if (strcmp(opt, "no_dir_boost") == 0) state->do_dir_boost = 0;
@@ -476,6 +478,7 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 			}
 			opt = next_opt;
 		}
+		free(opt_str);
 	}
 	for (i = 0; i < 4; ++i) {
 		biquad_init_using_type(&state->in_hp[i], BIQUAD_HIGHPASS, istream->fs,  500.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
@@ -503,6 +506,7 @@ struct effect * matrix4_effect_init(struct effect_info *ei, struct stream_info *
 	return e;
 
 	opt_fail:
+	free(opt_str);
 	free(state);
 	free(e);
 	return NULL;

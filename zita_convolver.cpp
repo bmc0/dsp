@@ -128,7 +128,7 @@ static void write_buf_floatp(sample_t *in, float **out, int channels, ssize_t s)
 	}
 }
 
-struct effect * zita_convolver_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * zita_convolver_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int i, k, n_channels;
 	unsigned int min_part_len = 0, max_part_len = 0;

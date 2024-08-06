@@ -42,7 +42,7 @@ void st2ms_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
-struct effect * st2ms_effect_init(struct effect_info *ei, struct stream_info *istream, char *channel_selector, const char *dir, int argc, char **argv)
+struct effect * st2ms_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
 	struct st2ms_state *state;

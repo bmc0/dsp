@@ -10,6 +10,6 @@ enum {
 	GAIN_EFFECT_NUMBER_ADD,
 };
 
-struct effect * gain_effect_init(struct effect_info *, struct stream_info *, char *, const char *, int, char **);
+struct effect * gain_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #endif

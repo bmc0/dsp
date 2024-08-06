@@ -216,7 +216,7 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 		}
 		old_locale = uselocale(new_locale);
 	}
-	r = build_effects_chain(config->chain_argc, config->chain_argv, &d->chain, &stream, NULL, config->dir_path);
+	r = build_effects_chain(config->chain_argc, (const char *const *) config->chain_argv, &d->chain, &stream, NULL, config->dir_path);
 	if (old_locale != (locale_t) 0) {
 		LOG_S(LL_VERBOSE, "info: resetting locale");
 		uselocale(old_locale);
