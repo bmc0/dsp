@@ -333,6 +333,83 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	return e;
 }
 
+sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
+{
+	static const char coefs_str_prefix[] = "coefs:";
+	static const char file_str_prefix[] = "file:";
+	sample_t *data = NULL;
+
+	if (strncmp(path, coefs_str_prefix, LENGTH(coefs_str_prefix)-1) == 0) {
+		char *endptr;
+		path += LENGTH(coefs_str_prefix)-1;
+
+		int filter_channels = 1;
+		ssize_t i = 1, filter_frames = 1;
+		for (const char *s = path; *s; ++s) {
+			if (*s == ',') ++i;
+			else if (*s == '/') {
+				++filter_channels;
+				if (i > filter_frames) filter_frames = i;
+				i = 1;
+			}
+		}
+		if (i > filter_frames) filter_frames = i;
+
+		sample_t *ch_data = data = calloc(filter_frames * filter_channels, sizeof(sample_t));
+		char *coefs_str = strdup(path);
+		char *ch = coefs_str;
+		while (*ch != '\0') {
+			char *next_ch = isolate(ch, '/');
+			char *coef = ch;
+			for (i = 0; *coef != '\0'; ++i) {
+				char *next_coef = isolate(coef, ',');
+				if (*coef != '\0') {
+					ch_data[filter_channels * i] = strtod(coef, &endptr);
+					if (check_endptr(ei->name, coef, endptr, "coefficient")) {
+						free(data);
+						free(coefs_str);
+						return NULL;
+					}
+				}
+				coef = next_coef;
+			}
+			ch_data += 1;
+			ch = next_ch;
+		}
+		free(coefs_str);
+		*channels = filter_channels;
+		*frames = filter_frames;
+	}
+	else {
+		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
+			path += LENGTH(file_str_prefix)-1;
+		char *p = construct_full_path(dir, path);
+		struct codec *c = init_codec(p, NULL, NULL, fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+		if (c == NULL) {
+			LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, p);
+			free(p);
+			return NULL;
+		}
+		free(p);
+		*channels = c->channels;
+		*frames = c->frames;
+		if (c->fs != fs) {
+			LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, fs, c->fs);
+			destroy_codec(c);
+			return NULL;
+		}
+		data = calloc(c->frames * c->channels, sizeof(sample_t));
+		if (c->read(c, data, c->frames) != c->frames) {
+			LOG_FMT(LL_ERROR, "%s: error: short read", ei->name);
+			destroy_codec(c);
+			free(data);
+			return NULL;
+		}
+		destroy_codec(c);
+	}
+	return data;
+}
+
 struct effect * fir_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels;
@@ -350,36 +427,4 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
 	free(filter_data);
 	return e;
-}
-
-sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
-{
-	struct codec *c;
-	sample_t *data;
-	char *p;
-
-	p = construct_full_path(dir, path);
-	c = init_codec(p, NULL, NULL, fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
-	if (c == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, p);
-		free(p);
-		return NULL;
-	}
-	free(p);
-	*channels = c->channels;
-	*frames = c->frames;
-	if (c->fs != fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, fs, c->fs);
-		destroy_codec(c);
-		return NULL;
-	}
-	data = calloc(c->frames * c->channels, sizeof(sample_t));
-	if (c->read(c, data, c->frames) != c->frames) {
-		LOG_FMT(LL_ERROR, "%s: error: short read", ei->name);
-		destroy_codec(c);
-		free(data);
-		return NULL;
-	}
-	destroy_codec(c);
-	return data;
 }

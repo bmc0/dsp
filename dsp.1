@@ -253,15 +253,19 @@ Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
 Sinc resampler. Ignores the channel selector.
 .TP
-\fBfir\fR [~/]\fIfilter_path\fR
+\fBfir\fR [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Non-partitioned 64-bit direct/FFT convolution. Latency is zero for filters
 up to 16 samples. For longer filters, the latency is equal to the
-\fIfft_len\fR reported in verbose mode.
+\fIfft_len\fR reported in verbose mode. Each \fIlist\fR is a comma-separated list
+of coefficients for one filter channel. Missing values are filled with
+zeros.
 .TP
-\fBfir_p\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
+\fBfir_p\fR [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
 slower than the \fBzita_convolver\fR effect, but useful if you need higher
-precision and/or zero latency. \fImax_part_len\fR must be a power of 2.
+precision and/or zero latency. \fImax_part_len\fR must be a power of 2. Each
+\fIlist\fR is a comma-separated list of coefficients for one filter channel.
+Missing values are filled with zeros.
 .TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.
