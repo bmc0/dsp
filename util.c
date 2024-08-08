@@ -284,6 +284,7 @@ ssize_t next_fast_fftw_len(ssize_t min_len)
 					if (p7 < best && p7 >= min_len) {
 						best = p7;
 						/* LOG_FMT(LL_VERBOSE, "next_fast_fftw_len(): best=%zd (2^%d * 3^%d * 5^%d * 7^%d)", best, i2, i3, i5, i7); */
+						(void) i2; (void) i3; (void) i5; (void) i7;  /* silence unused variable warning */
 					}
 					p7 *= 7;
 				}
