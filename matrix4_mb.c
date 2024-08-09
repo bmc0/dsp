@@ -38,6 +38,10 @@ static const double fb_bp[2]   = { 125.0, 9500.0 };
 
 #define DO_FILTER_BANK_TEST 0
 
+struct filter_bank_frame {
+	sample_t s[N_BANDS];
+};
+
 struct filter_bank {
 	struct cap5_state f[LENGTH(fb_freqs)];
 	struct ap2_state ap[LENGTH(fb_ap_idx)];
@@ -62,7 +66,7 @@ struct matrix4_mb_state {
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
-	sample_t *fb_buf[2][N_BANDS];
+	struct filter_bank_frame *fb_buf[2];
 	sample_t norm_mult, surr_mult;
 	struct event_config evc;
 	#if DOWNSAMPLE_FACTOR > 1
@@ -256,10 +260,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 			const sample_t s0_bp = state->fb[0].s_bp[k];
 			const sample_t s1_bp = state->fb[1].s_bp[k];
-			const sample_t s0_d_fb = state->fb_buf[0][k][state->p];
-			const sample_t s1_d_fb = state->fb_buf[1][k][state->p];
-			state->fb_buf[0][k][state->p] = state->fb[0].s[k];
-			state->fb_buf[1][k][state->p] = state->fb[1].s[k];
+			const sample_t s0_d_fb = state->fb_buf[0][state->p].s[k];
+			const sample_t s1_d_fb = state->fb_buf[1][state->p].s[k];
+			state->fb_buf[0][state->p].s[k] = state->fb[0].s[k];
+			state->fb_buf[1][state->p].s[k] = state->fb[1].s[k];
 
 			struct envs env, pwr_env;
 			calc_input_envs(&band->sm, s0_bp, s1_bp, &env, &pwr_env);
@@ -397,10 +401,8 @@ void matrix4_mb_effect_reset(struct effect *e)
 	state->has_output = 0;
 	for (i = 0; i < e->istream.channels; ++i)
 		memset(state->bufs[i], 0, state->len * sizeof(sample_t));
-	for (i = 0; i < N_BANDS; ++i) {
-		memset(state->fb_buf[0][i], 0, state->len * sizeof(sample_t));
-		memset(state->fb_buf[1][i], 0, state->len * sizeof(sample_t));
-	}
+	memset(state->fb_buf[0], 0, state->len * sizeof(struct filter_bank_frame));
+	memset(state->fb_buf[1], 0, state->len * sizeof(struct filter_bank_frame));
 }
 
 void matrix4_mb_effect_signal(struct effect *e)
@@ -437,12 +439,11 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (int i = 0; i < e->istream.channels; ++i)
 		free(state->bufs[i]);
-	for (int i = 0; i < N_BANDS; ++i) {
-		free(state->fb_buf[0][i]);
-		free(state->fb_buf[1][i]);
-		event_state_cleanup(&state->band[i].ev);
-	}
+	free(state->fb_buf[0]);
+	free(state->fb_buf[1]);
 	free(state->bufs);
+	for (int i = 0; i < N_BANDS; ++i)
+		event_state_cleanup(&state->band[i].ev);
 	#ifndef LADSPA_FRONTEND
 		if (state->show_status) {
 			for (int i = 0; i < N_BANDS+1; ++i) fprintf(stderr, "\033[K\n");
@@ -500,10 +501,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
-	for (int i = 0; i < N_BANDS; ++i) {
-		state->fb_buf[0][i] = calloc(state->len, sizeof(sample_t));
-		state->fb_buf[1][i] = calloc(state->len, sizeof(sample_t));
-	}
+	state->fb_buf[0] = calloc(state->len, sizeof(struct filter_bank_frame));
+	state->fb_buf[1] = calloc(state->len, sizeof(struct filter_bank_frame));
 	state->surr_mult = config.surr_mult;
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
