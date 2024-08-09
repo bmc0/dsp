@@ -267,6 +267,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			#if DOWNSAMPLE_FACTOR > 1
 			if (state->s == 0) {
 			#endif
+				const struct envs pwr_env_d = band->ev.pwr_env_buf[band->ev.buf_p];
 				process_events(&band->ev, &state->evc, &env, &pwr_env, band->drift, &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
@@ -275,9 +276,9 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				band->fl_boost = m.fl_boost;
 				band->fr_boost = m.fr_boost;
 
-				fl_boost += m.fl_boost * m.fl_boost * pwr_env.sum;
-				fr_boost += m.fr_boost * m.fr_boost * pwr_env.sum;
-				f_boost_norm += pwr_env.sum;
+				fl_boost += m.fl_boost * m.fl_boost * pwr_env_d.sum;
+				fr_boost += m.fr_boost * m.fr_boost * pwr_env_d.sum;
+				f_boost_norm += pwr_env_d.sum;
 
 			#if DOWNSAMPLE_FACTOR > 1
 				band->lsl_m[0] = band->lsl_m[1];
@@ -439,6 +440,7 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	for (int i = 0; i < N_BANDS; ++i) {
 		free(state->fb_buf[0][i]);
 		free(state->fb_buf[1][i]);
+		event_state_cleanup(&state->band[i].ev);
 	}
 	free(state->bufs);
 	#ifndef LADSPA_FRONTEND

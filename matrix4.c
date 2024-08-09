@@ -167,6 +167,7 @@ void matrix4_effect_destroy(struct effect *e)
 	for (i = 0; i < e->istream.channels; ++i)
 		free(state->bufs[i]);
 	free(state->bufs);
+	event_state_cleanup(&state->ev);
 	#ifndef LADSPA_FRONTEND
 		if (state->show_status) fprintf(stderr, "\033[K\n\033[K\r\033[A");
 	#endif
