@@ -352,12 +352,12 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 	else {
 		if (lr >= 0.0) {
 			if (cs > -M_PI_4/2) {
-				m->lsl = 1.0-gsl*(1.0+sin(4.0*cs));
-				m->lsr = -gl*cos(4.0*cs);
+				m->lsl = 1.0-gsl*(1.0+sin(3.0*cs));
+				m->lsr = -gl*cos(3.0*cs);
 			}
 			else {
-				m->lsl = 1.0;
-				m->lsr = 0.0;
+				m->lsl = 1.0-gsl*(1.0+sin(cs-M_PI_4));
+				m->lsr = -gl*cos(cs-M_PI_4);
 			}
 			m->rsl = 0.0;
 			m->rsr = 1.0;
@@ -366,12 +366,12 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 			m->lsl = 1.0;
 			m->lsr = 0.0;
 			if (cs > -M_PI_4/2) {
-				m->rsl = -gl*cos(4.0*cs);
-				m->rsr = 1.0-gsl*(1.0+sin(4.0*cs));
+				m->rsl = -gl*cos(3.0*cs);
+				m->rsr = 1.0-gsl*(1.0+sin(3.0*cs));
 			}
 			else {
-				m->rsl = 0.0;
-				m->rsr = 1.0;
+				m->rsl = -gl*cos(cs-M_PI_4);
+				m->rsr = 1.0-gsl*(1.0+sin(cs-M_PI_4));
 			}
 		}
 	}
@@ -387,16 +387,18 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 	m->fl_boost = 0.0;
 	m->fr_boost = 0.0;
 	if (do_dir_boost) {
-		if (cs >= 0.0) {
+		const double b_norm = 1.0-norm_mult;
+		const double b_lr = b_norm*gsl;
+		if (cs > 0.0) {
 			const double b_gl = 1.0+tan(abs_lr+cs-M_PI_4);
-			const double dir_boost = (1.0-norm_mult)*b_gl*b_gl;
-			m->fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
-			m->fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
+			const double b = b_norm*b_gl*b_gl;
+			m->fl_boost = (lr >= 0.0) ? b : b - b_lr;
+			m->fr_boost = (lr <= 0.0) ? b : b - b_lr;
 		}
-		else if (cs >= -M_PI_4/2) {
-			const double dir_boost = (1.0-norm_mult)*gsl*cos(4.0*cs);
-			m->fl_boost = (lr < 0.0) ? dir_boost*(1.0-sin(-2.0*lr)) : dir_boost;
-			m->fr_boost = (lr > 0.0) ? dir_boost*(1.0-sin(2.0*lr)) : dir_boost;
+		else {
+			const double b = (cs > -M_PI_4/2) ? b_lr*cos(3.0*cs) : b_lr*cos(cs-M_PI_4);
+			m->fl_boost = (lr > 0.0) ? b : 0.0;
+			m->fr_boost = (lr < 0.0) ? b : 0.0;
 		}
 	}
 }
