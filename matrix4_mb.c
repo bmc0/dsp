@@ -23,9 +23,10 @@ static const int fb_ap_idx[]   = { 3, 4, 1, 0, 0, 4 };
 static const double fb_bp[2]   = { 125.0, 8000.0 };
 #define PHASE_LIN_FILTER_LEN 15
 #elif N_BANDS == 10
-static const double fb_freqs[] = { 249.172, 437.245, 701.191, 1070.98, 1588.74, 2313.53, 3328.04, 4748.02, 6735.46 };
-static const int fb_ap_idx[]   = { 5, 6, 7, 8, 3, 2, 1, 0, 2, 3, 0, 3, 7, 8, 5, 8 };
-static const double fb_bp[2]   = { 125.0, 9500.0 };
+static const double fb_freqs[]   = { 249.172, 437.245, 701.191, 1070.98, 1588.74, 2313.53, 3328.04, 4748.02, 6735.46 };
+static const int fb_ap_idx[]     = { 5, 6, 7, 8, 3, 2, 1, 0, 2, 3, 0, 3, 7, 8, 5, 8 };
+static const double fb_bp[2]     = { 125.0, 9500.0 };
+static const double fb_weights[] = { 0.2, 0.6, 1.3, 1.8, 1.1, 0.7, 1.1, 1.2, 0.7, 0.2 };
 #define PHASE_LIN_FILTER_LEN 16
 #elif N_BANDS == 12
 static const double fb_freqs[] = { 236.079, 381.191, 572.544, 824.554, 1156.29, 1592.89, 2167.43, 2923.48, 3918.34, 5227.44, 6950.02 };
@@ -280,9 +281,14 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				band->fl_boost = m.fl_boost;
 				band->fr_boost = m.fr_boost;
 
-				fl_boost += m.fl_boost * m.fl_boost * pwr_env_d.sum;
-				fr_boost += m.fr_boost * m.fr_boost * pwr_env_d.sum;
-				f_boost_norm += pwr_env_d.sum;
+				#if N_BANDS == 10
+					const double weight = pwr_env_d.sum * fb_weights[k];
+				#else
+					const double weight = pwr_env_d.sum;
+				#endif
+				fl_boost += m.fl_boost * m.fl_boost * weight;
+				fr_boost += m.fr_boost * m.fr_boost * weight;
+				f_boost_norm += weight;
 
 			#if DOWNSAMPLE_FACTOR > 1
 				band->lsl_m[0] = band->lsl_m[1];
