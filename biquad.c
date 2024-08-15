@@ -61,31 +61,21 @@ void biquad_reset(struct biquad_state *state)
 void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3, int width_type)
 {
 	double b0 = 1.0, b1 = 0.0, b2 = 0.0, a0 = 1.0, a1 = 0.0, a2 = 0.0;
-
 	if (type == BIQUAD_LINKWITZ_TRANSFORM) {
 		const double fz = arg0, qz = arg1;
 		const double fp = arg2, qp = arg3;
 
-		const double fc = (fz+fp)/2.0;
+		const double w0z = 2*M_PI*fz / fs, w0p = 2*M_PI*fp / fs;
+		const double cos_w0z = cos(w0z), cos_w0p = cos(w0p);
+		const double alpha_z = sin(w0z) / (2.0*qz), alpha_p = sin(w0p) / (2.0*qp);
+		const double kz = 2.0/(1.0+cos_w0z), kp = 2.0/(1.0+cos_w0p);
 
-		const double wz = 2.0*M_PI*fz;
-		const double d0i = wz*wz;
-		const double d1i = wz/qz;
-
-		const double wp = 2.0*M_PI*fp;
-		const double c0i = wp*wp;
-		const double c1i = wp/qp;
-
-		const double gn = (2.0*M_PI*fc) / tan(M_PI*fc/fs);
-		const double gn2 = gn*gn;
-		const double cci = c0i + gn*c1i + gn2;
-
-		b0 = (d0i + gn*d1i + gn2) / cci;
-		b1 = 2.0 * (d0i - gn2) / cci;
-		b2 = (d0i - gn*d1i + gn2) / cci;
-		a0 = 1.0;
-		a1 = 2.0 * (c0i - gn2) / cci;
-		a2 = (c0i - gn*c1i + gn2) / cci;
+		b0 = (1.0 + alpha_z)*kz;
+		b1 = (-2.0 * cos_w0z)*kz;
+		b2 = (1.0 - alpha_z)*kz;
+		a0 = (1.0 + alpha_p)*kp;
+		a1 = (-2.0 * cos_w0p)*kp;
+		a2 = (1.0 - alpha_p)*kp;
 	}
 	else {
 		double alpha, c, f0 = arg0, width = arg1;
