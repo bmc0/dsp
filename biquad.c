@@ -60,40 +60,36 @@ void biquad_reset(struct biquad_state *state)
 
 void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3, int width_type)
 {
-	double b0, b1, b2, a0, a1, a2;
-	double f0, width, gain, a, w0, sin_w0, cos_w0, alpha, c;
-	double fz, qz, fp, qp, fc, d0i, d1i, d2i, c0i, c1i, c2i, gn, cci;
+	double b0 = 1.0, b1 = 0.0, b2 = 0.0, a0 = 1.0, a1 = 0.0, a2 = 0.0;
 
 	if (type == BIQUAD_LINKWITZ_TRANSFORM) {
-		fz = arg0;
-		qz = arg1;
-		fp = arg2;
-		qp = arg3;
+		const double fz = arg0, qz = arg1;
+		const double fp = arg2, qp = arg3;
 
-		fc = (fz + fp) / 2.0;
+		const double fc = (fz+fp)/2.0;
 
-		d0i = pow(2.0 * M_PI * fz, 2.0);
-		d1i = (2.0 * M_PI * fz) / qz;
-		d2i = 1.0;
+		const double wz = 2.0*M_PI*fz;
+		const double d0i = wz*wz;
+		const double d1i = wz/qz;
 
-		c0i = pow(2.0 * M_PI * fp, 2.0);
-		c1i = (2.0 * M_PI * fp) / qp;
-		c2i = 1.0;
+		const double wp = 2.0*M_PI*fp;
+		const double c0i = wp*wp;
+		const double c1i = wp/qp;
 
-		gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
-		cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
+		const double gn = (2.0*M_PI*fc) / tan(M_PI*fc/fs);
+		const double gn2 = gn*gn;
+		const double cci = c0i + gn*c1i + gn2;
 
-		b0 = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
-		b1 = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
-		b2 = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
+		b0 = (d0i + gn*d1i + gn2) / cci;
+		b1 = 2.0 * (d0i - gn2) / cci;
+		b2 = (d0i - gn*d1i + gn2) / cci;
 		a0 = 1.0;
-		a1 = 2.0 * (c0i - pow(gn, 2.0) * c2i) / cci;
-		a2 = (c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci;
+		a1 = 2.0 * (c0i - gn2) / cci;
+		a2 = (c0i - gn*c1i + gn2) / cci;
 	}
 	else {
-		f0 = arg0;
-		width = arg1;
-		gain = arg2;
+		double alpha, c, f0 = arg0, width = arg1;
+		const double gain = arg2;
 
 		if (width_type == BIQUAD_WIDTH_SLOPE_DB) {
 			width_type = BIQUAD_WIDTH_SLOPE;
@@ -104,20 +100,19 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 				f0 /= pow(10.0, fabs(gain) / 80.0 / width);
 		}
 
-		a = pow(10.0, gain / 40.0);
-		w0 = 2 * M_PI * f0 / fs;
-		sin_w0 = sin(w0);
-		cos_w0 = cos(w0);
+		const double a = pow(10.0, gain / 40.0);
+		const double w0 = 2.0*M_PI*f0 / fs;
+		const double sin_w0 = sin(w0), cos_w0 = cos(w0);
 
 		switch (width_type) {
 		case BIQUAD_WIDTH_SLOPE:
-			alpha = sin_w0 / 2.0 * sqrt((a + 1 / a) * (1 / width - 1) + 2);
+			alpha = sin_w0/2.0 * sqrt((a + 1.0/a) * (1.0/width - 1.0) + 2.0);
 			break;
 		case BIQUAD_WIDTH_BW_OCT:
-			alpha = sin_w0 * sinh(log(2) / 2 * width * w0 / sin_w0);
+			alpha = sin_w0 * sinh(M_LN2/2 * width * w0 / sin_w0);
 			break;
 		case BIQUAD_WIDTH_BW_HZ:
-			alpha = sin_w0 / (2 * f0 / width);
+			alpha = sin_w0 / (2.0 * f0 / width);
 			break;
 		case BIQUAD_WIDTH_Q:
 		default:
@@ -252,14 +247,6 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 			a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
 			a2 = (a + 1.0) - (a - 1.0) * cos_w0 - c;
 			break;
-		default:
-			/* do nothing */
-			b0 = 1.0;
-			b1 = 0.0;
-			b2 = 0.0;
-			a0 = 1.0;
-			a1 = 0.0;
-			a2 = 0.0;
 		}
 	}
 	biquad_init(b, b0, b1, b2, a0, a1, a2);
@@ -357,8 +344,8 @@ void biquad_effect_destroy(struct effect *e)
 struct effect * biquad_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int i, type, width_type = BIQUAD_WIDTH_Q;
-	double arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
-	double b0 = 0, b1 = 0, b2 = 0, a0 = 0, a1 = 0, a2 = 0;
+	double arg0 = 0.0, arg1 = 0.0, arg2 = 0.0, arg3 = 0.0;
+	double b0 = 0.0, b1 = 0.0, b2 = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
 	struct biquad_state **state;
 	struct effect *e;
 	char *endptr;
