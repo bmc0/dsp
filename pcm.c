@@ -18,8 +18,8 @@ struct pcm_state {
 struct pcm_enc_info {
 	const char *name;
 	int bytes, prec, can_dither;
-	void (*read_func)(char *, sample_t *, ssize_t);
-	void (*write_func)(sample_t *, char *, ssize_t);
+	void (*read_func)(void *, sample_t *, ssize_t);
+	void (*write_func)(sample_t *, void *, ssize_t);
 };
 
 static const char codec_name[] = "pcm";
@@ -29,6 +29,9 @@ static struct pcm_enc_info encodings[] = {
 	{ "u8",     1, 8,  1, read_buf_u8,     write_buf_u8 },
 	{ "s8",     1, 8,  1, read_buf_s8,     write_buf_s8 },
 	{ "s24",    4, 24, 1, read_buf_s24,    write_buf_s24 },
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__  == __ORDER_LITTLE_ENDIAN__
+	{ "s24_3",  3, 24, 1, read_buf_s24_3,  write_buf_s24_3 },
+#endif
 	{ "s32",    4, 32, 1, read_buf_s32,    write_buf_s32 },
 	{ "float",  4, 24, 0, read_buf_float,  write_buf_float },
 	{ "double", 8, 53, 0, read_buf_double, write_buf_double },
@@ -56,7 +59,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
-	state->enc_info->read_func((char *) buf, buf, n * c->channels);
+	state->enc_info->read_func(buf, buf, n * c->channels);
 	state->pos += n;
 	return n;
 }
@@ -66,7 +69,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
 
-	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	state->enc_info->write_func(buf, buf, frames * c->channels);
 	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
 		LOG_FMT(LL_ERROR, "%s: write failed: %s", codec_name, strerror(errno));

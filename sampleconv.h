@@ -45,21 +45,21 @@
 #define SAMPLE_TO_DOUBLE(x) ((double) x)
 #define DOUBLE_TO_SAMPLE(x) ((sample_t) x)
 
-void write_buf_u8(sample_t *, char *, ssize_t);
-void read_buf_u8(char *, sample_t *, ssize_t);
-void write_buf_s8(sample_t *, char *, ssize_t);
-void read_buf_s8(char *, sample_t *, ssize_t);
-void write_buf_s16(sample_t *, char *, ssize_t);
-void read_buf_s16(char *, sample_t *, ssize_t);
-void write_buf_s24(sample_t *, char *, ssize_t);
-void read_buf_s24(char *, sample_t *, ssize_t);
-void write_buf_s32(sample_t *, char *, ssize_t);
-void read_buf_s32(char *, sample_t *, ssize_t);
-void write_buf_s24_3(sample_t *, char *, ssize_t);
-void read_buf_s24_3(char *, sample_t *, ssize_t);
-void write_buf_float(sample_t *, char *, ssize_t);
-void read_buf_float(char *, sample_t *, ssize_t);
-void write_buf_double(sample_t *, char *, ssize_t);
-void read_buf_double(char *, sample_t *, ssize_t);
+void write_buf_u8(sample_t *, void *, ssize_t);
+void read_buf_u8(void *, sample_t *, ssize_t);
+void write_buf_s8(sample_t *, void *, ssize_t);
+void read_buf_s8(void *, sample_t *, ssize_t);
+void write_buf_s16(sample_t *, void *, ssize_t);
+void read_buf_s16(void *, sample_t *, ssize_t);
+void write_buf_s24(sample_t *, void *, ssize_t);
+void read_buf_s24(void *, sample_t *, ssize_t);
+void write_buf_s32(sample_t *, void *, ssize_t);
+void read_buf_s32(void *, sample_t *, ssize_t);
+void write_buf_s24_3(sample_t *, void *, ssize_t);
+void read_buf_s24_3(void *, sample_t *, ssize_t);
+void write_buf_float(sample_t *, void *, ssize_t);
+void read_buf_float(void *, sample_t *, ssize_t);
+void write_buf_double(sample_t *, void *, ssize_t);
+void read_buf_double(void *, sample_t *, ssize_t);
 
 #endif

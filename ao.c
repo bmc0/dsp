@@ -14,7 +14,7 @@ struct ao_state {
 struct ao_enc_info {
 	const char *name;
 	int bytes, prec;
-	void (*write_func)(sample_t *, char *, ssize_t);
+	void (*write_func)(sample_t *, void *, ssize_t);
 };
 
 static const char codec_name[] = "ao";
@@ -46,7 +46,7 @@ ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
 
-	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	state->enc_info->write_func(buf, buf, frames * c->channels);
 	if (ao_play(state->dev, (char *) buf, frames * c->channels * state->enc_info->bytes) == 0) {
 		LOG_FMT(LL_ERROR, "%s: ao_play(): write failed", codec_name);
 		return 0;

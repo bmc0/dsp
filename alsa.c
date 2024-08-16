@@ -11,8 +11,8 @@ struct alsa_enc_info {
 	const char *name;
 	snd_pcm_format_t fmt;
 	int bytes, prec, can_dither;
-	void (*write_func)(sample_t *, char *, ssize_t);
-	void (*read_func)(char *, sample_t *, ssize_t);
+	void (*write_func)(sample_t *, void *, ssize_t);
+	void (*read_func)(void *, sample_t *, ssize_t);
 };
 
 struct alsa_state {
@@ -60,7 +60,7 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 		buf += n * c->channels * state->enc_info->bytes;
 		goto try_again;
 	}
-	state->enc_info->read_func((char *) sbuf, sbuf, n * c->channels);
+	state->enc_info->read_func(sbuf, sbuf, n * c->channels);
 	return r;
 }
 
@@ -73,7 +73,7 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
 		return 0;
 
-	state->enc_info->write_func(sbuf, (char *) sbuf, frames * c->channels);
+	state->enc_info->write_func(sbuf, sbuf, frames * c->channels);
 	try_again:
 	n = snd_pcm_writei(state->dev, buf, frames);
 	if (n < 0) {

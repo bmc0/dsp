@@ -10,8 +10,8 @@
 struct pulse_enc_info {
 	const char *name;
 	int fmt, bytes, prec, can_dither;
-	void (*write_func)(sample_t *, char *, ssize_t);
-	void (*read_func)(char *, sample_t *, ssize_t);
+	void (*write_func)(sample_t *, void *, ssize_t);
+	void (*read_func)(void *, sample_t *, ssize_t);
 };
 
 struct pulse_state {
@@ -26,11 +26,11 @@ ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
 
-	if (pa_simple_read(state->s, (char *) buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
+	if (pa_simple_read(state->s, buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
 		LOG_FMT(LL_ERROR, "%s: read: error: %s", codec_name, pa_strerror(err));
 		return 0;
 	}
-	state->enc_info->read_func((char *) buf, buf, frames * c->channels);
+	state->enc_info->read_func(buf, buf, frames * c->channels);
 	return frames;
 }
 
@@ -39,7 +39,7 @@ ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
 
-	state->enc_info->write_func(buf, (char *) buf, frames * c->channels);
+	state->enc_info->write_func(buf, buf, frames * c->channels);
 	if (pa_simple_write(state->s, buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
 		LOG_FMT(LL_ERROR, "%s: write: error: %s", codec_name, pa_strerror(err));
 		return 0;

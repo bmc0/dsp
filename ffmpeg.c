@@ -11,8 +11,8 @@ struct ffmpeg_state {
 	AVFormatContext *container;
 	AVCodecContext *cc;
 	AVFrame *frame;
-	void (*read_func)(char *, sample_t *, ssize_t);
-	void (*readp_func)(char **, sample_t *, int, ssize_t, ssize_t);
+	void (*read_func)(void *, sample_t *, ssize_t);
+	void (*readp_func)(void **, sample_t *, int, ssize_t, ssize_t);
 	int planar, bytes, stream_index, got_frame;
 	ssize_t frame_pos;
 	int64_t last_ts;
@@ -23,9 +23,9 @@ static int av_initialized = 0;
 
 /* Planar sample conversion functions */
 
-static void read_buf_u8p(char **in, sample_t *out, int channels, ssize_t start, ssize_t s)
+static void read_buf_u8p(void **in, sample_t *out, int channels, ssize_t start, ssize_t s)
 {
-	unsigned char **inn = (unsigned char **) in;
+	uint8_t **inn = (uint8_t **) in;
 	int c = channels;
 	ssize_t out_s = s * channels;
 	while (s-- > 0) {
@@ -35,9 +35,9 @@ static void read_buf_u8p(char **in, sample_t *out, int channels, ssize_t start, 
 	}
 }
 
-static void read_buf_s16p(char **in, sample_t *out, int channels, ssize_t start, ssize_t s)
+static void read_buf_s16p(void **in, sample_t *out, int channels, ssize_t start, ssize_t s)
 {
-	signed short **inn = (signed short **) in;
+	int16_t **inn = (int16_t **) in;
 	int c = channels;
 	ssize_t out_s = s * channels;
 	while (s-- > 0) {
@@ -47,9 +47,9 @@ static void read_buf_s16p(char **in, sample_t *out, int channels, ssize_t start,
 	}
 }
 
-static void read_buf_s32p(char **in, sample_t *out, int channels, ssize_t start, ssize_t s)
+static void read_buf_s32p(void **in, sample_t *out, int channels, ssize_t start, ssize_t s)
 {
-	signed int **inn = (signed int **) in;
+	int32_t **inn = (int32_t **) in;
 	int c = channels;
 	ssize_t out_s = s * channels;
 	while (s-- > 0) {
@@ -59,7 +59,7 @@ static void read_buf_s32p(char **in, sample_t *out, int channels, ssize_t start,
 	}
 }
 
-static void read_buf_floatp(char **in, sample_t *out, int channels, ssize_t start, ssize_t s)
+static void read_buf_floatp(void **in, sample_t *out, int channels, ssize_t start, ssize_t s)
 {
 	float **inn = (float **) in;
 	int c = channels;
@@ -71,7 +71,7 @@ static void read_buf_floatp(char **in, sample_t *out, int channels, ssize_t star
 	}
 }
 
-static void read_buf_doublep(char **in, sample_t *out, int channels, ssize_t start, ssize_t s)
+static void read_buf_doublep(void **in, sample_t *out, int channels, ssize_t start, ssize_t s)
 {
 	double **inn = (double **) in;
 	int c = channels;
@@ -139,10 +139,10 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 		if (state->got_frame) {
 			avail = (avail > frames - buf_pos) ? frames - buf_pos : avail;
 			if (state->planar)
-				state->readp_func((char **) state->frame->extended_data, &buf[buf_pos * c->channels],
+				state->readp_func((void **) state->frame->extended_data, &buf[buf_pos * c->channels],
 					c->channels, state->frame_pos, avail);
 			else
-				state->read_func((char *) &state->frame->extended_data[0][state->frame_pos * state->bytes * c->channels],
+				state->read_func(&state->frame->extended_data[0][state->frame_pos * state->bytes * c->channels],
 					&buf[buf_pos * c->channels], avail * c->channels);
 			buf_pos += avail;
 			state->frame_pos += avail;
