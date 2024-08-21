@@ -10,7 +10,7 @@
 /* Tunables */
 static const double default_bw = 0.95;  /* default bandwidth */
 #define M_FACT 8                        /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
-#define SINC_MAX_OVERSAMPLE 8
+#define SINC_MAX_OVERSAMPLE 2
 
 struct resample_state {
 	struct {
