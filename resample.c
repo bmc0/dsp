@@ -241,7 +241,15 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 
 	/* determine array lengths */
 	state->m = (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
-	const int len_mult = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;
+	int len_mult = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;
+	if (len_mult > 16) {  /* 17 is the first slow size */
+		const int fast_len_mult = next_fast_fftw_len(len_mult);
+		if (fast_len_mult != len_mult
+				&& (state->ratio.n <= 16 || state->ratio.d <= 16
+					|| next_fast_fftw_len(state->ratio.n) == state->ratio.n
+					|| next_fast_fftw_len(state->ratio.d) == state->ratio.d))
+			len_mult = fast_len_mult;
+	}
 	state->sinc_len = max_factor * len_mult * sinc_os;
 	state->in_len = state->ratio.d * len_mult;
 	state->out_len = state->ratio.n * len_mult;
