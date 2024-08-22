@@ -9,8 +9,8 @@
 
 /* Tunables */
 static const double default_bw = 0.95;  /* default bandwidth */
-#define M_FACT 8                        /* controls window size; 6 for Blackman window, 8 for Nuttall and Blackman-Nuttall window */
 #define SINC_MAX_OVERSAMPLE 2
+#define WINDOW_SHAPE        2  /* 1: Blackman; 2: Nuttall, continuous first derivative */
 
 struct resample_state {
 	struct {
@@ -23,6 +23,28 @@ struct resample_state {
 	fftw_plan *r2c_plan, *c2r_plan;
 	int has_output, is_draining;
 };
+
+static double window(const double x)
+{
+#if WINDOW_SHAPE == 1
+	/* Blackman (~75dB stopband attenuation) */
+	#define M_FACT 6
+	return 0.42 - 0.5*cos(2*M_PI*x) + 0.08*cos(4*M_PI*x);
+#elif WINDOW_SHAPE == 2
+	/* Nuttall window (continuous first derivative) (~112dB stopband attenuation) */
+	#define M_FACT 8
+	return 0.355768 - 0.487396*cos(2*M_PI*x) + 0.144232*cos(4*M_PI*x) - 0.012604*cos(6*M_PI*x);
+#else
+	#error "error: illegal WINDOW_SHAPE"
+#endif
+}
+
+static double norm_sinc(const double x, const double fc)
+{
+	if (fabs(x) < 1e-9)
+		return fc;
+	return sin(M_PI*fc*x) / (M_PI*x);
+}
 
 sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -162,9 +184,9 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	struct effect *e;
 	struct resample_state *state;
 	char *endptr;
-	int rate, max_rate, min_rate, max_factor, gcd, i, sinc_oversample;
+	int rate;
 	double bw = default_bw;
-	sample_t *sinc, width, fc, m, ov_fc, ov_m;
+	sample_t *sinc;
 	fftw_plan sinc_plan;
 
 	if (argc < 2 || argc > 3) {
@@ -181,7 +203,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 		rate = lround(parse_freq(argv[1], &endptr));
 		CHECK_ENDPTR(argv[1], endptr, "fs", return NULL);
 	}
-	CHECK_RANGE(bw > 0 && bw < 1, "bandwidth", return NULL);
+	CHECK_RANGE(bw >= 0.8 && bw <= 0.999, "bandwidth", return NULL);
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
@@ -202,35 +224,35 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	state = calloc(1, sizeof(struct resample_state));
 	e->data = state;
 
-	max_rate = MAXIMUM(rate, istream->fs);
-	min_rate = MINIMUM(rate, istream->fs);
-	gcd = find_gcd(rate, istream->fs);
+	const int max_rate = MAXIMUM(rate, istream->fs);
+	const int min_rate = MINIMUM(rate, istream->fs);
+	const int gcd = find_gcd(rate, istream->fs);
 	state->ratio.n = rate / gcd;
 	state->ratio.d = istream->fs / gcd;
-	max_factor = MAXIMUM(state->ratio.n, state->ratio.d);
+	const int max_factor = MAXIMUM(state->ratio.n, state->ratio.d);
 
 	/* calulate params for windowed sinc function */
-	width = (min_rate - min_rate * bw) / 2;
-	fc = ((double) min_rate - width) / max_rate;
-	m = round((double) M_FACT / (width / max_rate));
-	sinc_oversample = MINIMUM(state->ratio.n, SINC_MAX_OVERSAMPLE);
-	ov_fc = fc / sinc_oversample;
-	ov_m = m * sinc_oversample;
+	const double width = (min_rate - min_rate * bw) / 2.0;
+	const double fc = (min_rate - width) / max_rate;
+	const int m = lround(M_FACT / (width / max_rate));
+	const int sinc_os = MINIMUM(state->ratio.n, SINC_MAX_OVERSAMPLE);
+	const double fc_os = fc / sinc_os;
+	const int m_os = m * sinc_os;
 
 	/* determine array lengths */
-	state->m = (ssize_t) (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
-	i = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;  /* calculate multiplier */
-	state->sinc_len = max_factor * i * sinc_oversample;
-	state->in_len = state->ratio.d * i;
-	state->out_len = state->ratio.n * i;
-	state->tmp_fr_len = max_factor * i + 1;
+	state->m = (m + 1) * 2 - 1;  /* final impulse length after convolving sinc function with itself */
+	const int len_mult = (state->m % max_factor != 0) ? state->m / max_factor + 1 : state->m / max_factor;
+	state->sinc_len = max_factor * len_mult * sinc_os;
+	state->in_len = state->ratio.d * len_mult;
+	state->out_len = state->ratio.n * len_mult;
+	state->tmp_fr_len = max_factor * len_mult + 1;
 	state->sinc_fr_len = state->sinc_len + 1;
 
 	/* calculate output delay */
 	if (rate == max_rate)
 		state->out_delay = state->m / 2;
 	else
-		state->out_delay = lround((double) state->m / 2 * state->ratio.n / state->ratio.d);
+		state->out_delay = lround(state->m / 2 * ((double) state->ratio.n / state->ratio.d));
 
 	/* allocate arrays, construct fftw plans */
 	sinc = fftw_malloc(state->sinc_len * 2 * sizeof(sample_t));
@@ -248,7 +270,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	state->overlap = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->r2c_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
 	state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-	for (i = 0; i < e->ostream.channels; ++i) {
+	for (int i = 0; i < e->ostream.channels; ++i) {
 		state->input[i] = fftw_malloc(state->in_len * 2 * sizeof(sample_t));
 		memset(state->input[i], 0, state->in_len * 2 * sizeof(sample_t));
 		state->output[i] = fftw_malloc(state->out_len * 2 * sizeof(sample_t));
@@ -260,30 +282,19 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	}
 
 	/* generate windowed sinc function */
-	for (i = 0; i < (int) ov_m + 1; ++i) {
-		/* calculate scaled sinc() value */
-		if ((double) i == ov_m / 2)
-			sinc[i] = ov_fc;
-		else
-			sinc[i] = sin(M_PI * ov_fc * (i - ov_m / 2)) / (M_PI * (i - ov_m / 2));
-		/* apply Blackman window (~75dB stopband attenuation) */
-		/* sinc[i] *= 0.42 - 0.5 * cos(2 * M_PI * i / ov_m) + 0.08 * cos(4 * M_PI * i / ov_m); */
-		/* apply Nuttall window (continuous first derivative) (~112dB stopband attenuation) */
-		sinc[i] *= 0.355768 - 0.487396 * cos(2 * M_PI * i / ov_m) + 0.144232 * cos(4 * M_PI * i / ov_m) - 0.012604 * cos(6 * M_PI * i / ov_m);
-		/* apply Blackman-Nuttall window (~114dB stopband attenuation) */
-		/* sinc[i] *= 0.3635819 - 0.4891775 * cos(2 * M_PI * i / ov_m) + 0.1365995 * cos(4 * M_PI * i / ov_m) - 0.0106411 * cos(6 * M_PI * i / ov_m); */
-	}
+	for (int i = 0; i < m_os + 1; ++i)
+		sinc[i] = norm_sinc((i*2 - m_os)/2.0, fc_os) * window((double) i / m_os);
 
 	fftw_execute(sinc_plan);
 	fftw_destroy_plan(sinc_plan);
 	fftw_free(sinc);
 
 	/* convolve sinc function with itself (doubles stopband attenuation) */
-	for (i = 0; i < state->sinc_fr_len; ++i)
+	for (int i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
 
 	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%zd in_len=%zd out_len=%zd sinc_oversample=%d",
-		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len, sinc_oversample);
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, state->m, state->in_len, state->out_len, sinc_os);
 
 	return e;
 }
