@@ -230,12 +230,13 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	state->ratio.n = rate / gcd;
 	state->ratio.d = istream->fs / gcd;
 	const int max_factor = MAXIMUM(state->ratio.n, state->ratio.d);
+	const int min_factor = MINIMUM(state->ratio.n, state->ratio.d);
 
 	/* calulate params for windowed sinc function */
 	const double width = (min_rate - min_rate * bw) / 2.0;
 	const double fc = (min_rate - width) / max_rate;
 	const int m = lround(M_FACT / (width / max_rate));
-	const int sinc_os = MINIMUM(state->ratio.n, SINC_MAX_OVERSAMPLE);
+	const int sinc_os = MINIMUM(min_factor, SINC_MAX_OVERSAMPLE);
 	const double fc_os = fc / sinc_os;
 	const int m_os = m * sinc_os;
 
