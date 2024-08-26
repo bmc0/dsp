@@ -29,17 +29,11 @@ struct noise_state {
 sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
-	sample_t n1, n2;
 	struct noise_state *state = (struct noise_state *) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels) {
-		for (k = 0; k < e->ostream.channels; ++k) {
-			if (GET_BIT(e->channel_selector, k)) {
-				n1 = (sample_t) pm_rand() * state->mult;
-				n2 = (sample_t) pm_rand() * state->mult;
-				ibuf[i + k] = ibuf[i + k] + n1 - n2;
-			}
-		}
-	}
+	for (i = 0; i < samples; i += e->ostream.channels)
+		for (k = 0; k < e->ostream.channels; ++k)
+			if (GET_BIT(e->channel_selector, k))
+				ibuf[i + k] += tpdf_noise(state->mult);
 	return ibuf;
 }
 

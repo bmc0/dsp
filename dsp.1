@@ -15,10 +15,7 @@ is an audio processing program with an interactive mode.
 Show help text.
 .TP
 \fB\-b\fR \fIframes\fR
-Set buffer size (must be given before the first input).
-.TP
-\fB\-R\fR \fIratio\fR
-Set codec maximum buffer ratio (must be given before the first input).
+Block size (must be given before the first input).
 .TP
 \fB\-i\fR
 Force interactive mode.
@@ -48,7 +45,7 @@ Don't drain effects chain before rebuilding.
 Plot effects chain instead of processing audio.
 .TP
 \fB\-V\fR
-Enable verbose progress display.
+Verbose progress display.
 .TP
 \fB\-S\fR
 Use `sequence' input combining mode.
@@ -71,6 +68,9 @@ Sample rate.
 .TP
 \fB\-c\fR \fIchannels\fR
 Number of channels.
+.TP
+\fB\-R\fR \fIratio\fR
+Buffer ratio.
 .TP
 \fB\-n\fR
 Equivalent to

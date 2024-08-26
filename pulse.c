@@ -115,24 +115,32 @@ static struct pulse_enc_info * pulse_get_enc_info(const char *enc)
 	return NULL;
 }
 
-struct codec * pulse_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * pulse_codec_init(const struct codec_params *p)
 {
 	int err;
 	pa_simple *s;
-	pa_sample_spec ss;
 	struct codec *c;
 	struct pulse_state *state;
 	struct pulse_enc_info *enc_info;
 
-	if ((enc_info = pulse_get_enc_info(enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, enc);
+	if ((enc_info = pulse_get_enc_info(p->enc)) == NULL) {
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
 		return NULL;
 	}
-	ss.format = enc_info->fmt;
-	ss.channels = channels;
-	ss.rate = fs;
-	s = pa_simple_new(NULL, dsp_globals.prog_name, (mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD,
-		(strcmp(path, "default") == 0) ? NULL : path, dsp_globals.prog_name, &ss, NULL, NULL, &err);
+	const pa_sample_spec ss = {
+		.format = enc_info->fmt,
+		.channels = p->channels,
+		.rate = p->fs
+	};
+	const pa_buffer_attr buf_attr = {
+		.maxlength = -1,
+		.minreq = -1,
+		.prebuf = -1,
+		.tlength = (ssize_t) enc_info->bytes * p->channels * p->block_frames * p->buf_ratio,
+		.fragsize = -1
+	};
+	s = pa_simple_new(NULL, dsp_globals.prog_name, (p->mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD,
+		(strcmp(p->path, CODEC_DEFAULT_DEVICE) == 0) ? NULL : p->path, dsp_globals.prog_name, &ss, NULL, &buf_attr, &err);
 	if (s == NULL) {
 		LOG_FMT(LL_OPEN_ERROR, "%s: failed to open device: %s", codec_name, pa_strerror(err));
 		return NULL;
@@ -143,17 +151,17 @@ struct codec * pulse_codec_init(const char *path, const char *type, const char *
 	state->enc_info = enc_info;
 
 	c = calloc(1, sizeof(struct codec));
-	c->path = path;
-	c->type = type;
+	c->path = p->path;
+	c->type = p->type;
 	c->enc = enc_info->name;
-	c->fs = fs;
-	c->channels = channels;
+	c->fs = p->fs;
+	c->channels = p->channels;
 	c->prec = enc_info->prec;
-	c->can_dither = enc_info->can_dither;
-	c->interactive = (mode == CODEC_MODE_WRITE) ? 1 : 0;
+	if (enc_info->can_dither) c->hints |= CODEC_HINT_CAN_DITHER;
+	if (p->mode == CODEC_MODE_WRITE) c->hints |= CODEC_HINT_INTERACTIVE;
 	c->frames = -1;
-	c->read = pulse_read;
-	c->write = pulse_write;
+	if (p->mode == CODEC_MODE_READ) c->read = pulse_read;
+	else c->write = pulse_write;
 	c->seek = pulse_seek;
 	c->delay = pulse_delay;
 	c->drop = pulse_drop;

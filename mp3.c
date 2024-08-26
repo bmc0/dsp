@@ -84,11 +84,6 @@ ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return buf_pos / c->channels;
 }
 
-ssize_t mp3_write(struct codec *c, sample_t *buf, ssize_t frames)
-{
-	return 0;
-}
-
 ssize_t mp3_seek(struct codec *c, ssize_t pos)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
@@ -204,15 +199,15 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 	return len;
 }
 
-struct codec * mp3_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * mp3_codec_init(const struct codec_params *p)
 {
 	struct mp3_state *state = NULL;
 	struct codec *c = NULL;
 	ssize_t nframes;
 
 	state = calloc(1, sizeof(struct mp3_state));
-	if ((state->fd = open(path, O_RDONLY)) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, path, strerror(errno));
+	if ((state->fd = open(p->path, O_RDONLY)) == -1) {
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, strerror(errno));
 		goto fail;
 	}
 	state->buf = calloc(MP3_BUF_SIZE, 1);
@@ -245,15 +240,14 @@ struct codec * mp3_codec_init(const char *path, const char *type, const char *en
 	mad_synth_frame(&state->synth, &state->frame);
 
 	c = calloc(1, sizeof(struct codec));
-	c->path = path;
-	c->type = type;
+	c->path = p->path;
+	c->type = p->type;
 	c->enc = "mad_f";
 	c->fs = state->frame.header.samplerate;
 	c->channels = MAD_NCHANNELS(&state->frame.header);
 	c->prec = 24;
 	c->frames = nframes;
 	c->read = mp3_read;
-	c->write = mp3_write;
 	c->seek = mp3_seek;
 	c->delay = mp3_delay;
 	c->drop = mp3_drop;

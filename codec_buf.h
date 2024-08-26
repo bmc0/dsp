@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2024 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,27 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#ifndef DSP_AO_H
-#define DSP_AO_H
+#ifndef DSP_CODEC_BUF_H
+#define DSP_CODEC_BUF_H
 
 #include "dsp.h"
 #include "codec.h"
 
-struct codec * ao_codec_init(const struct codec_params *);
-void ao_codec_print_encodings(const char *);
+enum {
+	CODEC_BUF_ERROR_SHORT_WRITE = 1,
+};
+
+struct codec_write_buf {
+	void (*write)(struct codec_write_buf *, sample_t *, ssize_t);
+	ssize_t (*delay)(struct codec_write_buf *);
+	void (*drop)(struct codec_write_buf *, int);
+	void (*pause)(struct codec_write_buf *, int);
+	void (*drain)(struct codec_write_buf *);
+	void (*sync)(struct codec_write_buf *);
+	void (*destroy)(struct codec_write_buf *);
+	void *data;
+};
+
+struct codec_write_buf * codec_write_buf_init(struct codec *, int, int, void (*)(int));
 
 #endif

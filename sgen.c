@@ -88,11 +88,6 @@ ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-ssize_t sgen_write(struct codec *c, sample_t *buf, ssize_t frames)
-{
-	return 0;
-}
-
 ssize_t sgen_seek(struct codec *c, ssize_t pos)
 {
 	return -1;
@@ -185,7 +180,7 @@ static void sgen_prepare_generator(struct sgen_generator *g, struct codec *c)
 	}
 }
 
-struct codec * sgen_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * sgen_codec_init(const struct codec_params *p)
 {
 	char *args = NULL, *arg, *gen_type, *len_str, *next_arg, *next_type, *value, *endptr;
 	int parse_ret;
@@ -194,15 +189,14 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 	struct sgen_generator *g;
 
 	c = calloc(1, sizeof(struct codec));
-	c->path = path;
-	c->type = type;
+	c->path = p->path;
+	c->type = p->type;
 	c->enc = "sample_t";
-	c->fs = fs;
-	c->channels = channels;
+	c->fs = p->fs;
+	c->channels = p->channels;
 	c->prec = 53;
 	c->frames = -1;
 	c->read = sgen_read;
-	c->write = sgen_write;
 	c->seek = sgen_seek;
 	c->delay = sgen_delay;
 	c->drop = sgen_drop;
@@ -213,49 +207,46 @@ struct codec * sgen_codec_init(const char *path, const char *type, const char *e
 	state->n = 0;
 	c->data = state;
 
-	args = arg = strdup(path);
+	args = arg = strdup(p->path);
 	len_str = isolate(arg, '+');
 	if (*len_str != '\0') {
-		c->frames = parse_len(len_str, fs, &endptr);
-		if (check_endptr(type, len_str, endptr, "length"))
+		c->frames = parse_len(len_str, p->fs, &endptr);
+		if (check_endptr(p->type, len_str, endptr, "length"))
 			goto fail;
 		if (c->frames <= 0) {
-			LOG_FMT(LL_ERROR, "%s: error: length cannot be <= 0", type);
+			LOG_FMT(LL_ERROR, "%s: error: length cannot be <= 0", p->type);
 			goto fail;
 		}
-		/* LOG_FMT(LL_VERBOSE, "%s: info: length=%zd", type, c->frames); */
 	}
 	while (*arg != '\0') {
 		next_type = isolate(arg, '/');
 		next_arg = isolate(arg, ':');
 		value = isolate(arg, '@');
-		/* LOG_FMT(LL_VERBOSE, "%s: info: type=%s channel_selector=%s", type, arg, value); */
 		state->g = realloc(state->g, (state->n + 1) * sizeof(struct sgen_generator));
 		g = &state->g[state->n];
 		memset(g, 0, sizeof(struct sgen_generator));
-		g->channel_selector = NEW_SELECTOR(channels);
-		SET_SELECTOR(g->channel_selector, channels);
+		g->channel_selector = NEW_SELECTOR(p->channels);
+		SET_SELECTOR(g->channel_selector, p->channels);
 		++state->n;
 
 		gen_type = arg;
 		if (strcmp(gen_type, "delta") == 0)     g->type = SGEN_TYPE_DELTA;
 		else if (strcmp(gen_type, "sine") == 0) g->type = SGEN_TYPE_SINE;
 		else {
-			LOG_FMT(LL_ERROR, "%s: error: illegal type: %s", type, gen_type);
+			LOG_FMT(LL_ERROR, "%s: error: illegal type: %s", p->type, gen_type);
 			goto fail;
 		}
 		sgen_init_generator(g, c);
-		if (*value != '\0' && parse_selector(value, g->channel_selector, channels))
+		if (*value != '\0' && parse_selector(value, g->channel_selector, p->channels))
 			goto fail;
 
 		arg = next_arg;
 		while (*arg != '\0') {
 			next_arg = isolate(arg, ':');
 			value = isolate(arg, '=');
-			/* LOG_FMT(LL_VERBOSE, "%s: %s: arg: key=%s value=%s", type, gen_type, arg, value); */
-			parse_ret = sgen_parse_param(g, c, type, arg, value);
+			parse_ret = sgen_parse_param(g, c, p->type, arg, value);
 			if (parse_ret == 1) {
-				LOG_FMT(LL_ERROR, "%s: %s: error: illegal parameter: %s", type, gen_type, arg);
+				LOG_FMT(LL_ERROR, "%s: %s: error: illegal parameter: %s", p->type, gen_type, arg);
 				goto fail;
 			}
 			else if (parse_ret == -1)

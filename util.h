@@ -19,6 +19,7 @@
 #ifndef DSP_UTIL_H
 #define DSP_UTIL_H
 
+#include <stdint.h>
 #include <string.h>
 #include "dsp.h"
 
@@ -50,7 +51,7 @@
 #define COPY_SELECTOR(dest, src, n) memcpy(dest, src, n)
 #endif
 #define IS_POWER_OF_2(x) ((x) && !((x)&((x)-1)))
-#define PM_RAND_MAX 2147483647
+#define PM_RAND_MAX 0x7fffffff
 
 int check_endptr(const char *, const char *, const char *, const char *);
 double parse_freq(const char *, char **);
@@ -65,28 +66,57 @@ char * isolate(char *, char);
 ssize_t next_fast_fftw_len(ssize_t);
 #endif
 
-static inline long unsigned int pm_rand(void)
-{
-	static long unsigned int s = 1;
-	long unsigned int h, l;
+#ifdef INT64_MAX
+#define PM_RAND_R_DEFINE_FUNC(func_name, A) \
+	static inline uint32_t func_name(uint32_t *s) \
+	{ \
+		uint64_t p = (uint64_t) *s * (A); \
+		uint32_t r = (p & 0x7fffffff) + (p >> 31); \
+		r = (r & 0x7fffffff) + (r >> 31); \
+		return *s = r; \
+	}
+#else
+#define PM_RAND_R_DEFINE_FUNC(func_name, A) \
+	static inline uint32_t func_name(uint32_t *s) \
+	{ \
+		uint32_t l = (*s & 0x7fff) * (A); \
+		uint32_t h = (*s >> 15) * (A); \
+		uint32_t r = l + ((h & 0xffff) << 15) + (h >> 16); \
+		r = (r & 0x7fffffff) + (r >> 31); \
+		return *s = r; \
+	}
+#endif
 
-	l = 16807 * (s & 0xffff);
-	h = 16807 * (s >> 16);
-	l += (h & 0x7fff) << 16;
-	l += h >> 15;
-	l = (l & 0x7fffffff) + (l >> 31);
-	return (s = l);
+PM_RAND_R_DEFINE_FUNC(pm_rand1_r, 48271)
+PM_RAND_R_DEFINE_FUNC(pm_rand2_r, 16807)
+
+static inline uint32_t pm_rand(void)
+{
+	static uint32_t s = 1;
+	return pm_rand1_r(&s);
 }
 
-static inline sample_t tpdf_dither_sample(sample_t s, int prec)
+static inline sample_t tpdf_dither_get_mult(int prec)
 {
 	if (prec < 1 || prec > 32)
-		return s;
-	unsigned long int d = (unsigned long int) 1 << (prec - 1);
-	sample_t m = 1 / ((sample_t) PM_RAND_MAX * d);
-	sample_t n1 = (sample_t) pm_rand() * m;
-	sample_t n2 = (sample_t) pm_rand() * m;
-	return s + n1 - n2;
+		return 0.0;
+	uint32_t d = ((uint32_t) 1) << (prec - 1);
+	return 1.0 / ((sample_t) PM_RAND_MAX * d);
+}
+
+static inline sample_t tpdf_noise(sample_t mult)
+{
+#if 1
+	/* Faster and gives better quality noise */
+	static uint32_t s0 = 1, s1 = 1;
+	int32_t n1 = pm_rand1_r(&s0);
+	int32_t n2 = pm_rand2_r(&s1);
+	return (n1 - n2) * mult;
+#else
+	int32_t n1 = pm_rand();
+	int32_t n2 = pm_rand();
+	return (n1 - n2) * mult;
+#endif
 }
 
 static inline ssize_t ratio_mult_ceil(ssize_t v, int n, int d)

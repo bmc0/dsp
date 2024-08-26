@@ -49,11 +49,7 @@ struct ladspa_dsp_config {
 };
 
 struct dsp_globals dsp_globals = {
-	0,                      /* clip_count */
-	0,                      /* peak */
 	LL_NORMAL,              /* loglevel */
-	DEFAULT_BUF_FRAMES,     /* buf_frames */
-	DEFAULT_MAX_BUF_RATIO,  /* max_buf_ratio */
 	"ladspa_dsp",           /* prog_name */
 };
 

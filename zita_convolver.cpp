@@ -156,7 +156,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	Convproc *cproc;
 	sample_t *buf_interleaved;
 	float **buf_planar;
-	char *endptr, *p;
+	char *endptr, *fp;
 
 	if (argc > 4 || argc < 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
@@ -188,14 +188,15 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 		LOG_FMT(LL_ERROR, "%s: error: number of channels must not exceed %d", argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
 		return NULL;
 	}
-	p = construct_full_path(dir, argv[argc - 1]);
-	c_filter = init_codec(p, NULL, NULL, istream->fs, n_channels, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+	fp = construct_full_path(dir, argv[argc - 1]);
+	struct codec_params c_params = CODEC_PARAMS_AUTO(fp, CODEC_MODE_READ);
+	c_filter = init_codec(&c_params);
 	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], p);
-		free(p);
+		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], fp);
+		free(fp);
 		return NULL;
 	}
-	free(p);
+	free(fp);
 	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
 		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, c_filter->channels);
 		destroy_codec(c_filter);

@@ -401,14 +401,15 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 	else {
 		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
 			path += LENGTH(file_str_prefix)-1;
-		char *p = construct_full_path(dir, path);
-		struct codec *c = init_codec(p, NULL, NULL, fs, 1, CODEC_ENDIAN_DEFAULT, CODEC_MODE_READ);
+		char *fp = construct_full_path(dir, path);
+		struct codec_params c_params = CODEC_PARAMS_AUTO(fp, CODEC_MODE_READ);
+		struct codec *c = init_codec(&c_params);
 		if (c == NULL) {
-			LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, p);
-			free(p);
+			LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, fp);
+			free(fp);
 			return NULL;
 		}
-		free(p);
+		free(fp);
 		*channels = c->channels;
 		*frames = c->frames;
 		if (c->fs != fs) {

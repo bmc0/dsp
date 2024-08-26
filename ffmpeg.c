@@ -170,11 +170,6 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return buf_pos;
 }
 
-ssize_t ffmpeg_write(struct codec *c, sample_t *buf, ssize_t frames)
-{
-	return 0;
-}
-
 ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 {
 	AVStream *st;
@@ -221,7 +216,7 @@ void ffmpeg_destroy(struct codec *c)
 	free((char *) c->type);
 }
 
-struct codec * ffmpeg_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * ffmpeg_codec_init(const struct codec_params *p)
 {
 	int i, err;
 	struct ffmpeg_state *state = NULL;
@@ -239,9 +234,8 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
-	if ((err = avformat_open_input(&state->container, path, NULL, NULL)) < 0) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open %s: %s: %s", codec_name,
-			(mode == CODEC_MODE_WRITE) ? "output" : "input", path, av_err2str(err));
+	if ((err = avformat_open_input(&state->container, p->path, NULL, NULL)) < 0) {
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open input: %s: %s", codec_name, p->path, av_err2str(err));
 		goto fail;
 	}
 	if ((err = avformat_find_stream_info(state->container, NULL)) < 0) {
@@ -287,7 +281,7 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 
 	c = calloc(1, sizeof(struct codec));
 	i = strlen(codec->name) + 8;
-	c->path = path;
+	c->path = p->path;
 	c->type = calloc(1, i);
 	snprintf((char *) c->type, i, "ffmpeg/%s", codec->name);
 	c->enc = av_get_sample_fmt_name(state->cc->sample_fmt);
@@ -301,21 +295,21 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	case AV_SAMPLE_FMT_U8:
 	case AV_SAMPLE_FMT_U8P:
 		c->prec = 8;
-		c->can_dither = 1;
+		c->hints |= CODEC_HINT_CAN_DITHER;
 		state->read_func = read_buf_u8;
 		state->readp_func = read_buf_u8p;
 		break;
 	case AV_SAMPLE_FMT_S16:
 	case AV_SAMPLE_FMT_S16P:
 		c->prec = 16;
-		c->can_dither = 1;
+		c->hints |= CODEC_HINT_CAN_DITHER;
 		state->read_func = read_buf_s16;
 		state->readp_func = read_buf_s16p;
 		break;
 	case AV_SAMPLE_FMT_S32:
 	case AV_SAMPLE_FMT_S32P:
 		c->prec = 32;
-		c->can_dither = 1;
+		c->hints |= CODEC_HINT_CAN_DITHER;
 		state->read_func = read_buf_s32;
 		state->readp_func = read_buf_s32p;
 		break;
@@ -342,7 +336,6 @@ struct codec * ffmpeg_codec_init(const char *path, const char *type, const char 
 	else
 		c->frames = -1;
 	c->read = ffmpeg_read;
-	c->write = ffmpeg_write;
 	c->seek = ffmpeg_seek;
 	c->delay = ffmpeg_delay;
 	c->drop = ffmpeg_drop;

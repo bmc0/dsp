@@ -191,7 +191,7 @@ static int sndfile_get_endian(int endian)
 	}
 }
 
-struct codec * sndfile_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * sndfile_codec_init(const struct codec_params *p)
 {
 	SNDFILE *f = NULL;
 	SF_INFO *info = NULL;
@@ -200,16 +200,16 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	struct sndfile_enc_info *enc_info = NULL;
 
 	info = calloc(1, sizeof(SF_INFO));
-	info->samplerate = fs;
-	info->channels = channels;
-	info->format = ((type == NULL) ? 0 : sndfile_get_type(type)) | sndfile_get_sf_enc(enc) | sndfile_get_endian(endian);
+	info->samplerate = p->fs;
+	info->channels = p->channels;
+	info->format = ((p->type == NULL) ? 0 : sndfile_get_type(p->type)) | sndfile_get_sf_enc(p->enc) | sndfile_get_endian(p->endian);
 	if (info->format == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: bad format type or encoding: %s: type=%s enc=%s", codec_name, path, type, enc);
+		LOG_FMT(LL_ERROR, "%s: error: bad format type or encoding: %s: type=%s enc=%s", codec_name, p->path, p->type, p->enc);
 		goto fail;
 	}
-	f = sf_open(path, (mode == CODEC_MODE_WRITE) ? SFM_WRITE : SFM_READ, info);
+	f = sf_open(p->path, (p->mode == CODEC_MODE_WRITE) ? SFM_WRITE : SFM_READ, info);
 	if (f == NULL) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, path, sf_strerror(NULL));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, sf_strerror(NULL));
 		goto fail;
 	}
 
@@ -223,16 +223,16 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 
 	c = calloc(1, sizeof(struct codec));
 	enc_info = sndfile_get_enc_info(info->format);
-	c->path = path;
+	c->path = p->path;
 	c->type = sndfile_get_type_name(info->format);
-	c->enc = (enc_info != NULL) ? enc_info->name : "unknown";
+	c->enc = (enc_info) ? enc_info->name : "unknown";
 	c->fs = info->samplerate;
 	c->channels = info->channels;
-	c->prec = (enc_info != NULL) ? enc_info->prec : 0;
-	c->can_dither = (enc_info != NULL) ? enc_info->can_dither : 0;
+	c->prec = (enc_info) ? enc_info->prec : 0;
+	if (enc_info && enc_info->can_dither) c->hints |= CODEC_HINT_CAN_DITHER;
 	c->frames = info->frames;
-	c->read = sndfile_read;
-	c->write = sndfile_write;
+	if (p->mode == CODEC_MODE_READ) c->read = sndfile_read;
+	else c->write = sndfile_write;
 	c->seek = sndfile_seek;
 	c->delay = sndfile_delay;
 	c->drop = sndfile_drop;
@@ -243,7 +243,7 @@ struct codec * sndfile_codec_init(const char *path, const char *type, const char
 	return c;
 
 	fail:
-	if (f != NULL)
+	if (f)
 		sf_close(f);
 	free(info);
 	return NULL;

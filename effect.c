@@ -281,6 +281,20 @@ ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_fra
 	return max_len;
 }
 
+ssize_t get_effects_chain_max_out_frames(struct effects_chain *chain, ssize_t in_frames)
+{
+	ssize_t frames = in_frames;
+	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (e->ostream.fs != e->istream.fs) {
+			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			frames = ratio_mult_ceil(frames, e->ostream.fs / gcd, e->istream.fs / gcd);
+		}
+		e = e->next;
+	}
+	return frames;
+}
+
 sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;

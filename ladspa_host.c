@@ -235,7 +235,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	}
 
 	state->handles = calloc(state->n_handles, sizeof(LADSPA_Handle));
-	state->buf_size = dsp_globals.buf_frames;
+	state->buf_size = DEFAULT_BLOCK_FRAMES;
 	if (state->n_in > 0) {
 		state->in = calloc(state->n_in, sizeof(LADSPA_Data *));
 		for (int i = 0; i < state->n_in; ++i) state->in[i] = calloc(state->buf_size, sizeof(LADSPA_Data));

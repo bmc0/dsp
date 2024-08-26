@@ -22,7 +22,7 @@
 #include "dsp.h"
 #include "codec.h"
 
-struct codec * null_codec_init(const char *, const char *, const char *, int, int, int, int);
+struct codec * null_codec_init(const struct codec_params *);
 void null_codec_print_encodings(const char *);
 
 #endif

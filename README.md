@@ -45,8 +45,7 @@ options. Run `./configure --help` to see all available options.
 Flag        | Description
 ----------- | --------------------------------------------------------------------------
 `-h`        | Show help text.
-`-b frames` | Set buffer size (must be given before the first input).
-`-R ratio`  | Set codec maximum buffer ratio (must be given before the first input).
+`-b frames` | Block size (must be given before the first input).
 `-i`        | Force interactive mode.
 `-I`        | Disable interactive mode.
 `-q`        | Disable progress display.
@@ -56,7 +55,7 @@ Flag        | Description
 `-D`        | Disable dithering.
 `-E`        | Don't drain effects chain before rebuilding.
 `-p`        | Plot effects chain instead of processing audio.
-`-V`        | Enable verbose progress display.
+`-V`        | Verbose progress display.
 `-S`        | Use "sequence" input combining mode.
 
 #### Input/output options
@@ -69,6 +68,7 @@ Flag              | Description
 `-B/L/N`          | Big/little/native endian.
 `-r frequency[k]` | Sample rate.
 `-c channels`     | Number of channels.
+`-R ratio`        | Buffer ratio.
 `-n`              | Equivalent to `-t null null`.
 
 ### Inputs and Outputs

@@ -36,19 +36,18 @@ struct codec_info {
 	const char *type;
 	const char **ext;  /* null terminated array of extension strings */
 	int modes;
-	/* args: path, type, encoding, fs, channels, endian, mode */
-	struct codec * (*init)(const char *, const char *, const char *, int, int, int, int);
+	struct codec * (*init)(const struct codec_params *);
 	void (*print_encodings)(const char *);
 };
 
 #ifdef HAVE_SNDFILE
 static const char *wav_ext[]   = { ".wav", NULL };
-static const char *aiff_ext[]  = { ".aif", ".aiff", ".aifc", NULL };
+static const char *aiff_ext[]  = { ".aiff", ".aif", ".aifc", NULL };
 static const char *au_ext[]    = { ".au", NULL };
 static const char *raw_ext[]   = { ".raw", NULL };
 static const char *paf_ext[]   = { ".paf", NULL };
 static const char *svx_ext[]   = { ".8svx", ".iff", NULL };
-static const char *nist_ext[]  = { ".nist", NULL };
+static const char *nist_ext[]  = { ".wav", ".nist", NULL };
 static const char *voc_ext[]   = { ".voc", NULL };
 static const char *ircam_ext[] = { ".sf", NULL };
 static const char *w64_ext[]   = { ".w64", NULL };
@@ -62,10 +61,10 @@ static const char *avr_ext[]   = { ".avr", NULL };
 static const char *wavex_ext[] = { ".wav", ".wavex", NULL };
 static const char *sd2_ext[]   = { ".sd2", NULL };
 static const char *flac_ext[]  = { ".flac", NULL };
-static const char *caf_ext[]   = { ".caf", NULL };
+static const char *caf_ext[]   = { ".caf", ".m4a", NULL };
 static const char *wve_ext[]   = { ".wve", NULL };
 static const char *ogg_ext[]   = { ".ogg", ".oga", ".ogv", NULL };
-static const char *mpc2k_ext[] = { ".mpc2k", NULL };
+static const char *mpc2k_ext[] = { ".mpc", ".mpc2k", NULL };
 static const char *rf64_ext[]  = { ".wav", ".rf64", NULL };
 #endif
 #ifdef HAVE_MAD
@@ -168,47 +167,60 @@ static struct codec_info * get_codec_info_by_ext(const char *ext)
 	return NULL;
 }
 
-struct codec * init_codec(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * init_codec(const struct codec_params *p_in)
 {
 	int i, old_loglevel;
 	struct codec_info *info;
 	struct codec *c = NULL;
 	const char *ext;
-	ext = strrchr(path, '.');
-	if (type != NULL) {
-		info = get_codec_info_by_type(type);
+	if (p_in->mode != CODEC_MODE_READ && p_in->mode != CODEC_MODE_WRITE) {
+		LOG_FMT(LL_ERROR, "%s: BUG: bad mode", (p_in->path) ? p_in->path : "[NULL path]");
+		return NULL;
+	}
+	struct codec_params p = *p_in;
+	ext = strrchr(p.path, '.');
+	if (p.type != NULL) {
+		info = get_codec_info_by_type(p.type);
 		if (info == NULL) {
-			LOG_FMT(LL_ERROR, "error: bad type: %s", type);
+			LOG_FMT(LL_ERROR, "error: bad type: %s", p.type);
 			return NULL;
 		}
-		if (info->modes & mode)
-			return info->init(path, info->type, enc, fs, channels, endian, mode);
-		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
+		p.type = info->type;
+		if (info->modes & p.mode)
+			return info->init(&p);
+		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (p.mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
 	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
-		if (info->modes & mode)
-			return info->init(path, info->type, enc, fs, channels, endian, mode);
-		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (mode == CODEC_MODE_READ) ? 'r' : 'w');
+		p.type = info->type;
+		if (info->modes & p.mode)
+			return info->init(&p);
+		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (p.mode == CODEC_MODE_READ) ? 'r' : 'w');
 		return NULL;
 	}
 	c = NULL;
 	if ((old_loglevel = dsp_globals.loglevel) == LL_NORMAL)
 		dsp_globals.loglevel = LL_ERROR;
-	if (mode == CODEC_MODE_WRITE) {
+	if (p.mode == CODEC_MODE_WRITE) {
 		if (LENGTH(fallback_output_codecs) == 0)
 			LOG_S(LL_ERROR, "error: no fallback output(s) available and no output given");
 		for (i = 0; i < LENGTH(fallback_output_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_output_codecs[i]);
-			if (info != NULL && info->modes & mode && (c = info->init(path, info->type, enc, fs, channels, endian, mode)) != NULL)
-				break;
+			if (info != NULL && (info->modes & p.mode)) {
+				p.type = info->type;
+				if ((c = info->init(&p)) != NULL)
+					break;
+			}
 		}
 	}
 	else {
 		for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
 			info = get_codec_info_by_type(fallback_input_codecs[i]);
-			if (info != NULL && info->modes & mode && (c = info->init(path, info->type, enc, fs, channels, endian, mode)) != NULL)
-				break;
+			if (info != NULL && (info->modes & p.mode)) {
+				p.type = info->type;
+				if ((c = info->init(&p)) != NULL)
+					break;
+			}
 		}
 	}
 	dsp_globals.loglevel = old_loglevel;

@@ -137,7 +137,7 @@ void pcm_destroy(struct codec *c)
 	free(state);
 }
 
-struct codec * pcm_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * pcm_codec_init(const struct codec_params *p)
 {
 	int fd = -1;
 	off_t size;
@@ -145,18 +145,18 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	struct pcm_state *state = NULL;
 	struct codec *c = NULL;
 
-	if ((enc_info = pcm_get_enc_info(enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, enc);
+	if ((enc_info = pcm_get_enc_info(p->enc)) == NULL) {
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
 		goto fail;
 	}
-	if (!(endian == CODEC_ENDIAN_DEFAULT || endian == CODEC_ENDIAN_NATIVE)) {
+	if (!(p->endian == CODEC_ENDIAN_DEFAULT || p->endian == CODEC_ENDIAN_NATIVE)) {
 		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", codec_name);
 		goto fail;
 	}
-	if (strcmp(path, "-") == 0)
-		fd = (mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
-	else if ((fd = open(path, (mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, path, strerror(errno));
+	if (strcmp(p->path, "-") == 0)
+		fd = (p->mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
+	else if ((fd = open(p->path, (p->mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, strerror(errno));
 		goto fail;
 	}
 
@@ -165,21 +165,21 @@ struct codec * pcm_codec_init(const char *path, const char *type, const char *en
 	state->enc_info = enc_info;
 
 	c = calloc(1, sizeof(struct codec));
-	c->path = path;
-	c->type = type;
+	c->path = p->path;
+	c->type = p->type;
 	c->enc = enc_info->name;
-	c->fs = fs;
-	c->channels = channels;
+	c->fs = p->fs;
+	c->channels = p->channels;
 	c->prec = enc_info->prec;
-	c->can_dither = enc_info->can_dither;
+	if (enc_info->can_dither) c->hints |= CODEC_HINT_CAN_DITHER;
 	c->frames = -1;
-	if (mode == CODEC_MODE_READ) {
+	if (p->mode == CODEC_MODE_READ) {
 		size = lseek(fd, 0, SEEK_END);
-		c->frames = (size == -1) ? -1 : size / enc_info->bytes / channels;
+		c->frames = (size == -1) ? -1 : size / enc_info->bytes / p->channels;
 		lseek(fd, 0, SEEK_SET);
 	}
-	c->read = pcm_read;
-	c->write = pcm_write;
+	if (p->mode == CODEC_MODE_READ) c->read = pcm_read;
+	else c->write = pcm_write;
 	c->seek = pcm_seek;
 	c->delay = pcm_delay;
 	c->drop = pcm_drop;

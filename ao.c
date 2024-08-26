@@ -55,11 +55,6 @@ static struct ao_enc_info * ao_get_enc_info(const char *enc)
 	return NULL;
 }
 
-ssize_t ao_read(struct codec *c, sample_t *buf, ssize_t frames)
-{
-	return 0;
-}
-
 ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
@@ -102,14 +97,16 @@ void ao_destroy(struct codec *c)
 	free(state);
 }
 
-struct codec * ao_codec_init(const char *path, const char *type, const char *enc, int fs, int channels, int endian, int mode)
+struct codec * ao_codec_init(const struct codec_params *p)
 {
 	int driver;
 	struct ao_enc_info *enc_info;
 	struct ao_sample_format format;
 	ao_device *dev = NULL;
 	struct ao_state *state = NULL;
+	struct ao_option *opts = NULL;
 	struct codec *c = NULL;
+	char buf_time_str[12];
 
 	if (ao_open_count == 0)
 		ao_initialize();
@@ -117,35 +114,43 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed get default driver id", codec_name);
 		goto fail;
 	}
-	if ((enc_info = ao_get_enc_info(enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, enc);
+	if ((enc_info = ao_get_enc_info(p->enc)) == NULL) {
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
 		goto fail;
 	}
 	format.bits = enc_info->prec;
-	format.rate = fs;
-	format.channels = channels;
+	format.rate = p->fs;
+	format.channels = p->channels;
 	format.byte_format = AO_FMT_NATIVE;
 	format.matrix = NULL;
-	if ((dev = ao_open_live(driver, &format, NULL)) == NULL) {
+	const double buf_time = MINIMUM(1000.0 * p->block_frames * p->buf_ratio / p->fs, 1000.0);
+	snprintf(buf_time_str, sizeof(buf_time_str), "%.2f", buf_time);
+	if (LOGLEVEL(LL_VERBOSE))
+		ao_append_option(&opts, "verbose", "");
+	if (strcmp(p->path, CODEC_DEFAULT_DEVICE) != 0)
+		ao_append_option(&opts, "dev", p->path);
+	ao_append_option(&opts, "client_name", dsp_globals.prog_name);
+	ao_append_option(&opts, "buffer_time", buf_time_str);
+	if ((dev = ao_open_live(driver, &format, opts)) == NULL) {
 		LOG_FMT(LL_OPEN_ERROR, "%s: error: could not open device", codec_name);
 		goto fail;
 	}
+	ao_free_options(opts);
 
 	state = calloc(1, sizeof(struct ao_state));
 	state->dev = dev;
 	state->enc_info = enc_info;
 
 	c = calloc(1, sizeof(struct codec));
-	c->path = path;
-	c->type = type;
+	c->path = p->path;
+	c->type = p->type;
 	c->enc = enc_info->name;
-	c->fs = fs;
-	c->channels = channels;
+	c->fs = p->fs;
+	c->channels = p->channels;
 	c->prec = enc_info->prec;
-	c->can_dither = 1;  /* all formats are fixed-point LPCM */
-	c->interactive = 1;
+	c->hints |= CODEC_HINT_CAN_DITHER;  /* all formats are fixed-point LPCM */
+	c->hints |= CODEC_HINT_INTERACTIVE;
 	c->frames = -1;
-	c->read = ao_read;
 	c->write = ao_write;
 	c->seek = ao_seek;
 	c->delay = ao_delay;
@@ -159,6 +164,7 @@ struct codec * ao_codec_init(const char *path, const char *type, const char *enc
 	return c;
 
 	fail:
+	ao_free_options(opts);
 	if (ao_open_count == 0)
 		ao_shutdown();
 	return NULL;
