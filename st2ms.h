@@ -1,5 +1,5 @@
-#ifndef _ST2MS_H
-#define _ST2MS_H
+#ifndef DSP_ST2MS_H
+#define DSP_ST2MS_H
 
 #include "dsp.h"
 #include "effect.h"

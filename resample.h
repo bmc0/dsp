@@ -1,5 +1,5 @@
-#ifndef _RESAMPLE_H
-#define _RESAMPLE_H
+#ifndef DSP_RESAMPLE_H
+#define DSP_RESAMPLE_H
 
 #include "dsp.h"
 #include "effect.h"

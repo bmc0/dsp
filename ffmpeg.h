@@ -1,5 +1,5 @@
-#ifndef _FFMPEG_H
-#define _FFMPEG_H
+#ifndef DSP_FFMPEG_H
+#define DSP_FFMPEG_H
 
 #include "dsp.h"
 #include "codec.h"

@@ -1,5 +1,5 @@
-#ifndef _HILBERT_H
-#define _HILBERT_H
+#ifndef DSP_HILBERT_H
+#define DSP_HILBERT_H
 
 #include "dsp.h"
 #include "effect.h"

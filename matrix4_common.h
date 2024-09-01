@@ -1,5 +1,5 @@
-#ifndef _MATRIX4_COMMON_H
-#define _MATRIX4_COMMON_H
+#ifndef DSP_MATRIX4_COMMON_H
+#define DSP_MATRIX4_COMMON_H
 
 #include <math.h>
 #include "effect.h"
@@ -97,7 +97,7 @@ int get_args_and_channels(const struct effect_info *, const struct stream_info *
 int parse_effect_opts(const char *const *, const struct stream_info *, struct matrix4_config *);
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
-#ifndef _MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
+#ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 static __inline__ double err_scale(double a, double b, double err, double max_err_gain)
 {
 	if (!isnormal(a) && !isnormal(b))

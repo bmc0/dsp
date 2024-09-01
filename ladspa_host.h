@@ -1,5 +1,5 @@
-#ifndef _LADSPA_HOST_H
-#define _LADSPA_HOST_H
+#ifndef DSP_LADSPA_HOST_H
+#define DSP_LADSPA_HOST_H
 
 #include "dsp.h"
 #include "effect.h"

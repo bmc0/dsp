@@ -1,5 +1,5 @@
-#ifndef _SAMPLECONV_H
-#define _SAMPLECONV_H
+#ifndef DSP_SAMPLECONV_H
+#define DSP_SAMPLECONV_H
 
 #include <stdint.h>
 #include <math.h>

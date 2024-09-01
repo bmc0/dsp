@@ -1,5 +1,5 @@
-#ifndef _MATRIX4_MB_H
-#define _MATRIX4_MB_H
+#ifndef DSP_MATRIX4_MB_H
+#define DSP_MATRIX4_MB_H
 
 #include "dsp.h"
 #include "effect.h"

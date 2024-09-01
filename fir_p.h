@@ -1,5 +1,5 @@
-#ifndef _FIR_P_H
-#define _FIR_P_H
+#ifndef DSP_FIR_P_H
+#define DSP_FIR_P_H
 
 #include "dsp.h"
 #include "effect.h"

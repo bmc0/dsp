@@ -1,5 +1,5 @@
-#ifndef _SGEN_H
-#define _SGEN_H
+#ifndef DSP_SGEN_H
+#define DSP_SGEN_H
 
 #include "dsp.h"
 #include "codec.h"

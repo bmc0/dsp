@@ -1,5 +1,5 @@
-#ifndef _DELAY_H
-#define _DELAY_H
+#ifndef DSP_DELAY_H
+#define DSP_DELAY_H
 
 #include "dsp.h"
 #include "effect.h"

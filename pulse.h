@@ -1,5 +1,5 @@
-#ifndef _PULSE_H
-#define _PULSE_H
+#ifndef DSP_PULSE_H
+#define DSP_PULSE_H
 
 #include "dsp.h"
 #include "codec.h"

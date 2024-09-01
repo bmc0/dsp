@@ -1,5 +1,5 @@
-#ifndef _AO_H
-#define _AO_H
+#ifndef DSP_AO_H
+#define DSP_AO_H
 
 #include "dsp.h"
 #include "codec.h"

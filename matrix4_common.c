@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#define _MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
+#define DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 #include "matrix4_common.h"
 #include "dsp.h"
 

@@ -1,5 +1,5 @@
-#ifndef _STATS_H
-#define _STATS_H
+#ifndef DSP_STATS_H
+#define DSP_STATS_H
 
 #include "dsp.h"
 #include "effect.h"

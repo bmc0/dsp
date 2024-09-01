@@ -1,5 +1,5 @@
-#ifndef _CODEC_H
-#define _CODEC_H
+#ifndef DSP_CODEC_H
+#define DSP_CODEC_H
 
 #include "dsp.h"
 

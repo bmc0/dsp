@@ -1,5 +1,5 @@
-#ifndef _CROSSFEED_H
-#define _CROSSFEED_H
+#ifndef DSP_CROSSFEED_H
+#define DSP_CROSSFEED_H
 
 #include "dsp.h"
 #include "effect.h"

@@ -1,5 +1,5 @@
-#ifndef _REMIX_H
-#define _REMIX_H
+#ifndef DSP_REMIX_H
+#define DSP_REMIX_H
 
 #include "dsp.h"
 #include "effect.h"

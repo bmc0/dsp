@@ -1,5 +1,5 @@
-#ifndef _GAIN_H
-#define _GAIN_H
+#ifndef DSP_GAIN_H
+#define DSP_GAIN_H
 
 #include "dsp.h"
 #include "effect.h"

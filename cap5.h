@@ -1,5 +1,5 @@
-#ifndef _CAP5_H
-#define _CAP5_H
+#ifndef DSP_CAP5_H
+#define DSP_CAP5_H
 
 #include "dsp.h"
 

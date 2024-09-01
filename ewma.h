@@ -1,5 +1,5 @@
-#ifndef _EWMA_H
-#define _EWMA_H
+#ifndef DSP_EWMA_H
+#define DSP_EWMA_H
 
 #include <math.h>
 

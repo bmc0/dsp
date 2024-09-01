@@ -1,5 +1,5 @@
-#ifndef _PCM_H
-#define _PCM_H
+#ifndef DSP_PCM_H
+#define DSP_PCM_H
 
 #include "dsp.h"
 #include "codec.h"

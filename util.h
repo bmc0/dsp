@@ -1,5 +1,5 @@
-#ifndef _UTIL_H
-#define _UTIL_H
+#ifndef DSP_UTIL_H
+#define DSP_UTIL_H
 
 #include <string.h>
 #include "dsp.h"

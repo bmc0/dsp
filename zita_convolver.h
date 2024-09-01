@@ -1,5 +1,5 @@
-#ifndef _DSP_ZITA_CONVOLVER_H
-#define _DSP_ZITA_CONVOLVER_H
+#ifndef DSP_ZITA_CONVOLVER_H
+#define DSP_ZITA_CONVOLVER_H
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,5 +1,5 @@
-#ifndef _DSP_H
-#define _DSP_H
+#ifndef DSP_DSP_H
+#define DSP_DSP_H
 
 #include <stdio.h>
 #include <sys/types.h>

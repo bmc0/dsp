@@ -1,5 +1,5 @@
-#ifndef _DECORRELATE_H
-#define _DECORRELATE_H
+#ifndef DSP_DECORRELATE_H
+#define DSP_DECORRELATE_H
 
 #include "dsp.h"
 #include "effect.h"

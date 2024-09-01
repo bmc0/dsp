@@ -1,5 +1,5 @@
-#ifndef _EFFECT_H
-#define _EFFECT_H
+#ifndef DSP_EFFECT_H
+#define DSP_EFFECT_H
 
 #include "dsp.h"
 

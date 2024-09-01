@@ -1,5 +1,5 @@
-#ifndef _NOISE_H
-#define _NOISE_H
+#ifndef DSP_NOISE_H
+#define DSP_NOISE_H
 
 #include "dsp.h"
 #include "effect.h"
