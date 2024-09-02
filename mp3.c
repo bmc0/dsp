@@ -27,7 +27,8 @@
 #include "mp3.h"
 
 /* largest possible frame size (http://www.mars.org/pipermail/mad-dev/2002-January/000425.html) */
-#define MP3_BUF_SIZE 2881 + MAD_BUFFER_GUARD
+/* #define MP3_BUF_SIZE (2881 + MAD_BUFFER_GUARD) */
+#define MP3_BUF_SIZE (1<<12)
 
 struct mp3_state {
 	int fd;
