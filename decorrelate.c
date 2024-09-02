@@ -32,7 +32,7 @@
 #define RT60_HF   0.008
 
 struct sch_ap_state {
-	ssize_t len, p;
+	int len, p;
 	sample_t *mx, *my;
 	sample_t b0, b1, a0, a1;
 };
@@ -44,7 +44,7 @@ struct decorrelate_state {
 
 static void sch_ap_init(struct sch_ap_state *ap, int fs, double delay)
 {
-	const ssize_t delay_samples = round(delay*fs);
+	const int delay_samples = lround(delay*fs);
 	ap->len = delay_samples+1;
 	ap->p = 0;
 	ap->mx = calloc(ap->len, sizeof(sample_t));
@@ -66,7 +66,7 @@ static void sch_ap_init(struct sch_ap_state *ap, int fs, double delay)
 
 static sample_t sch_ap_run(struct sch_ap_state *ap, sample_t x)
 {
-	const ssize_t i0 = ((ap->p < 1) ? ap->len : ap->p)-1, i_n1 = ap->p, i_n2 = (ap->p+1 >= ap->len) ? 0 : ap->p+1;
+	const int i0 = ((ap->p < 1) ? ap->len : ap->p)-1, i_n1 = ap->p, i_n2 = (ap->p+1 >= ap->len) ? 0 : ap->p+1;
 	const sample_t r = ap->b1*x + ap->b0*ap->mx[i0] + ap->a1*ap->mx[i_n2] + ap->a0*ap->mx[i_n1]
 		- ap->a1*ap->my[i0] - ap->b0*ap->my[i_n2] - ap->b1*ap->my[i_n1];
 	ap->mx[ap->p] = x;
