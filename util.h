@@ -26,14 +26,14 @@
 #define MAXIMUM(a, b) (((a) > (b)) ? (a) : (b))
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 #define CHECK_RANGE(cond, name, action) \
-	if (!(cond)) { \
+	do { if (!(cond)) { \
 		LOG_FMT(LL_ERROR, "%s: error: %s out of range", argv[0], name); \
 		action; \
-	}
+	} } while (0)
 #define CHECK_FREQ(var, fs, name, action) \
 	CHECK_RANGE((var) >= 0.0 && (var) < (double) (fs) / 2.0, name, action)
 #define CHECK_ENDPTR(str, endptr, param_name, action) \
-	if (check_endptr(argv[0], str, endptr, param_name)) { action; }
+	do { if (check_endptr(argv[0], str, endptr, param_name)) { action; } } while (0)
 #if 0
 #define GET_BIT(x, o) (((char *) x)[(int) (o) / 8] & (1 << ((int) (o) % 8)))
 #define SET_BIT(x, o) ((char *) x)[(int) (o) / 8] |= (1 << ((int) (o) % 8))

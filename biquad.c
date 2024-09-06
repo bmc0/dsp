@@ -335,10 +335,10 @@ void biquad_effect_destroy(struct effect *e)
 
 #define BIQUAD_WIDTH_TEST_NO_SLOPE (width_type != BIQUAD_WIDTH_SLOPE && width_type != BIQUAD_WIDTH_SLOPE_DB)
 #define CHECK_WIDTH_TYPE(cond) \
-	if (!(cond)) { \
+	do { if (!(cond)) { \
 		LOG_FMT(LL_ERROR, "%s: error: invalid width type", argv[0]); \
 		return NULL; \
-	}
+	} } while (0)
 
 #define INIT_COMMON(n_args, b_type) \
 	do { \
