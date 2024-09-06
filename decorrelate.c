@@ -163,21 +163,11 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 		if (GET_BIT(channel_selector, k))
 			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
 	}
-	if (mono) {
-		for (j = 0; j < n_stages; ++j) {
-			const double d = RANDOM_FILTER_DELAY;
-			for (k = 0; k < istream->channels; ++k) {
-				if (GET_BIT(channel_selector, k))
-					sch_ap_init(&state->ap[k][j], istream->fs, d);
-			}
-		}
-	}
-	else {
+	for (j = 0; j < n_stages; ++j) {
+		const double d = (mono) ? RANDOM_FILTER_DELAY : 0.0;
 		for (k = 0; k < istream->channels; ++k) {
-			if (GET_BIT(channel_selector, k)) {
-				for (j = 0; j < n_stages; ++j)
-					sch_ap_init(&state->ap[k][j], istream->fs, RANDOM_FILTER_DELAY);
-			}
+			if (GET_BIT(channel_selector, k))
+				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY);
 		}
 	}
 	e->data = state;
