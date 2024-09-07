@@ -116,7 +116,7 @@ int parse_effect_opts(const char *const *, const struct stream_info *, struct ma
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
-static __inline__ double err_scale(double a, double b, double err, double max_err_gain)
+static inline double err_scale(double a, double b, double err, double max_err_gain)
 {
 	if (!isnormal(a) && !isnormal(b))
 		return 1.0;
@@ -127,7 +127,7 @@ static __inline__ double err_scale(double a, double b, double err, double max_er
 	return 1.0 + err*n/d;
 }
 
-static __inline__ double drift_scale(const struct axes *ax0, const struct axes *ax1, const struct envs *env, double sens_err, double sens_level)
+static inline double drift_scale(const struct axes *ax0, const struct axes *ax1, const struct envs *env, double sens_err, double sens_level)
 {
 	const double lr_err = fabs(ax1->lr - ax0->lr) / M_PI_2;
 	const double cs_err = fabs(ax1->cs - ax0->cs) / M_PI_2;
@@ -137,7 +137,7 @@ static __inline__ double drift_scale(const struct axes *ax0, const struct axes *
 }
 
 #if DOWNSAMPLE_FACTOR > 1
-static __inline__ double oversample(const double y[2], double x)
+static inline double oversample(const double y[2], double x)
 {
 	return y[0] + (x/DOWNSAMPLE_FACTOR)*(y[1]-y[0]);
 }
@@ -187,7 +187,7 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 	evc->ord_factor_c = exp(-1.0/(DOWNSAMPLED_FS(istream->fs)*ORD_FACTOR_DECAY));
 }
 
-static __inline__ double fade_mult(ssize_t pos, ssize_t n, int is_out)
+static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)
 {
 	double fade = (double) (n-pos) / n;
 	if (is_out) fade = 1.0 - fade;

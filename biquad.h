@@ -72,7 +72,7 @@ void biquad_reset(struct biquad_state *);
 void biquad_init_using_type(struct biquad_state *, int, double, double, double, double, double, int);
 struct effect * biquad_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
-static __inline__ sample_t biquad(struct biquad_state *state, sample_t s)
+static inline sample_t biquad(struct biquad_state *state, sample_t s)
 {
 #if BIQUAD_USE_TDF_2
 	sample_t r = (state->c0 * s) + state->m0;

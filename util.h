@@ -65,7 +65,7 @@ char * isolate(char *, char);
 ssize_t next_fast_fftw_len(ssize_t);
 #endif
 
-static __inline__ long unsigned int pm_rand(void)
+static inline long unsigned int pm_rand(void)
 {
 	static long unsigned int s = 1;
 	long unsigned int h, l;
@@ -78,7 +78,7 @@ static __inline__ long unsigned int pm_rand(void)
 	return (s = l);
 }
 
-static __inline__ sample_t tpdf_dither_sample(sample_t s, int prec)
+static inline sample_t tpdf_dither_sample(sample_t s, int prec)
 {
 	if (prec < 1 || prec > 32)
 		return s;
@@ -89,13 +89,13 @@ static __inline__ sample_t tpdf_dither_sample(sample_t s, int prec)
 	return s + n1 - n2;
 }
 
-static __inline__ ssize_t ratio_mult_ceil(ssize_t v, int n, int d)
+static inline ssize_t ratio_mult_ceil(ssize_t v, int n, int d)
 {
 	long long int r = (long long int) v * n;
 	return (ssize_t) ((r % d != 0) ? r / d + 1 : r / d);
 }
 
-static __inline__ int find_gcd(int a, int b)
+static inline int find_gcd(int a, int b)
 {
 	int c;
 	while (b != 0) {

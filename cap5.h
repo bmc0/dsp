@@ -47,7 +47,7 @@ void ap3_reset(struct ap3_state *);
 void cap5_reset(struct cap5_state *);
 void cap5_init(struct cap5_state *, double, double);
 
-static __inline__ sample_t ap1_run(struct ap1_state *state, sample_t s)
+static inline sample_t ap1_run(struct ap1_state *state, sample_t s)
 {
 	sample_t r = state->c0 * (s - state->o0)
 		+ state->i0;
@@ -58,7 +58,7 @@ static __inline__ sample_t ap1_run(struct ap1_state *state, sample_t s)
 	return r;
 }
 
-static __inline__ sample_t ap2_run(struct ap2_state *state, sample_t s)
+static inline sample_t ap2_run(struct ap2_state *state, sample_t s)
 {
 	sample_t r = state->c1 * (s - state->o1)
 		+ state->c0 * (state->i0 - state->o0)
@@ -73,12 +73,12 @@ static __inline__ sample_t ap2_run(struct ap2_state *state, sample_t s)
 	return r;
 }
 
-static __inline__ sample_t ap3_run(struct ap3_state *state, sample_t s)
+static inline sample_t ap3_run(struct ap3_state *state, sample_t s)
 {
 	return ap1_run(&state->ap1, ap2_run(&state->ap2, s));
 }
 
-static __inline__ void cap5_run(struct cap5_state *state, sample_t s, sample_t *lp, sample_t *hp)
+static inline void cap5_run(struct cap5_state *state, sample_t s, sample_t *lp, sample_t *hp)
 {
 	sample_t a1 = ap2_run(&state->a1, s);
 	sample_t a2 = ap3_run(&state->a2, s);
