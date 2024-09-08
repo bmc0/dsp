@@ -111,9 +111,9 @@ void read_buf_s24_3(void *in, sample_t *out, ssize_t s)
 	int32_t v;
 	uint8_t *inn = (uint8_t *) in;
 	while (s-- > 0) {
-		v = (inn[s*3 + 0] & 0xff) << 0;
-		v |= (inn[s*3 + 1] & 0xff) << 8;
-		v |= (inn[s*3 + 2] & 0xff) << 16;
+		v = (int32_t) (inn[s*3 + 0] & 0xff) << 0;
+		v |= (int32_t) (inn[s*3 + 1] & 0xff) << 8;
+		v |= (int32_t) (inn[s*3 + 2] & 0xff) << 16;
 		out[s] = S24_TO_SAMPLE(v);
 	}
 }
