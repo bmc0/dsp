@@ -19,6 +19,7 @@
 #ifndef DSP_MATRIX4_COMMON_H
 #define DSP_MATRIX4_COMMON_H
 
+#include <float.h>
 #include <math.h>
 #include "effect.h"
 #include "ewma.h"
@@ -106,7 +107,8 @@ struct matrix4_config {
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
 #define TO_DEGREES(x) ((x)*M_1_PI*180.0)
 #define TIME_TO_FRAMES(x, fs) lround((x)/1000.0 * (fs))
-#define ANGLE(n, d, expr) ((!isnormal(n) && !isnormal(d)) ? M_PI_4 : (!isnormal(d)) ? M_PI_2 : atan(expr))
+#define NEAR_POS_ZERO(x) ((x) < DBL_MIN)
+#define ANGLE(n, d, expr) ((NEAR_POS_ZERO(n) && NEAR_POS_ZERO(d)) ? M_PI_4 : (NEAR_POS_ZERO(d)) ? M_PI_2 : atan(expr))
 #define CALC_LR(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
 #define CALC_CS(n, d, expr) (ANGLE(n, d, expr) - M_PI_4)
 #define DOWNSAMPLED_FS(fs) (((double) (fs)) / DOWNSAMPLE_FACTOR)
@@ -118,11 +120,11 @@ struct effect * matrix4_delay_effect_init(const struct effect_info *, const stru
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 static inline double err_scale(double a, double b, double err, double max_err_gain)
 {
-	if (!isnormal(a) && !isnormal(b))
+	if (NEAR_POS_ZERO(a) && NEAR_POS_ZERO(b))
 		return 1.0;
 	const double n = a+b;
 	const double d = MAXIMUM(MINIMUM(a, b), n/max_err_gain);
-	if (!isnormal(d))
+	if (NEAR_POS_ZERO(d))
 		return 1.0 + err*max_err_gain;
 	return 1.0 + err*n/d;
 }
@@ -257,8 +259,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	ewma_run_scale_asym(&ev->mask[1], r_pwr_xf, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
 	const double l_mask = MAXIMUM(l_pwr_xf - ewma_get_last(&ev->mask[0]), 0.0);
 	const double r_mask = MAXIMUM(r_pwr_xf - ewma_get_last(&ev->mask[1]), 0.0);
-	const double l_mask_norm = ewma_run(&ev->smooth[0], (isnormal(l_norm_div)) ? l_mask / l_norm_div : (!isnormal(l_mask)) ? 0.0 : EVENT_THRESH*4.0);
-	const double r_mask_norm = ewma_run(&ev->smooth[1], (isnormal(r_norm_div)) ? r_mask / r_norm_div : (!isnormal(r_mask)) ? 0.0 : EVENT_THRESH*4.0);
+	const double l_mask_norm = ewma_run(&ev->smooth[0], (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : EVENT_THRESH*4.0);
+	const double r_mask_norm = ewma_run(&ev->smooth[1], (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : EVENT_THRESH*4.0);
 	const double l_event = (l_mask_norm - ewma_run(&ev->slow[2], l_mask_norm)) * ev->adj;
 	const double r_event = (r_mask_norm - ewma_run(&ev->slow[3], r_mask_norm)) * ev->adj;
 
