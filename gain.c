@@ -64,9 +64,8 @@ sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 void gain_effect_plot(struct effect *e, int i)
 {
 	struct gain_state *state = (struct gain_state *) e->data;
-	int k;
 	if (state->channel == -1) {
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			if (GET_BIT(e->channel_selector, k))
 				printf("H%d_%d(w)=%.15e\n", k, i, state->v);
 			else
@@ -74,7 +73,7 @@ void gain_effect_plot(struct effect *e, int i)
 		}
 	}
 	else {
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			if (k == state->channel)
 				printf("H%d_%d(w)=%.15e\n", k, i, state->v);
 			else
@@ -85,9 +84,9 @@ void gain_effect_plot(struct effect *e, int i)
 
 void add_effect_plot(struct effect *e, int i)
 {
-	int k;
-	for (k = 0; k < e->ostream.channels; ++k)
-		printf("H%d_%d(w)=1.0\n", k, i);
+	struct gain_state *state = (struct gain_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		printf("H%d_%d(w)=(w==0.0)?1.0+%.15e:1.0\n", k, i, state->v);
 }
 
 void gain_effect_destroy(struct effect *e)

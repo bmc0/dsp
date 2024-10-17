@@ -30,10 +30,9 @@ struct delay_state {
 
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, k;
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (i = 0; i < *frames; ++i) {
-		for (k = 0; k < e->istream.channels; ++k) {
+	for (ssize_t i = 0; i < *frames; ++i) {
+		for (ssize_t k = 0; k < e->istream.channels; ++k) {
 			if (state->bufs[k] && state->len > 0) {
 				obuf[i * e->istream.channels + k] = state->bufs[k][state->p];
 				state->bufs[k][state->p] = ibuf[i * e->istream.channels + k];
@@ -48,19 +47,17 @@ sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 void delay_effect_reset(struct effect *e)
 {
-	int i;
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (i = 0; i < e->istream.channels; ++i)
-		if (state->bufs[i] && state->len > 0)
-			memset(state->bufs[i], 0, state->len * sizeof(sample_t));
+	for (int k = 0; k < e->istream.channels; ++k)
+		if (state->bufs[k] && state->len > 0)
+			memset(state->bufs[k], 0, state->len * sizeof(sample_t));
 	state->p = 0;
 }
 
 void delay_effect_plot(struct effect *e, int i)
 {
-	int k;
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state->bufs[k])
 			printf("H%d_%d(w)=exp(-j*w*%zd)\n", k, i, state->len);
 		else
@@ -70,10 +67,9 @@ void delay_effect_plot(struct effect *e, int i)
 
 void delay_effect_destroy(struct effect *e)
 {
-	int i;
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (i = 0; i < e->istream.channels; ++i)
-		free(state->bufs[i]);
+	for (int k = 0; k < e->istream.channels; ++k)
+		free(state->bufs[k]);
 	free(state->bufs);
 	free(state);
 }
@@ -83,24 +79,22 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	char *endptr;
 	struct effect *e;
 	struct delay_state *state;
-	int i;
-	ssize_t samples;
 
 	if (argc != 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 
-	samples = parse_len(argv[1], istream->fs, &endptr);
+	ssize_t samples = parse_len(argv[1], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
 	CHECK_RANGE(samples >= 0, "delay", return NULL);
 	LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd sample%s)", argv[0], (double) samples / istream->fs, samples, (samples == 1) ? "" : "s");
 	state = calloc(1, sizeof(struct delay_state));
 	state->len = samples;
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
-	for (i = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i) && state->len > 0)
-			state->bufs[i] = calloc(state->len, sizeof(sample_t));
+	for (int k = 0; k < istream->channels; ++k)
+		if (GET_BIT(channel_selector, k) && state->len > 0)
+			state->bufs[k] = calloc(state->len, sizeof(sample_t));
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
