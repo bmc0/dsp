@@ -61,8 +61,8 @@ void crossfeed_effect_reset(struct effect *e)
 void crossfeed_effect_plot(struct effect *e, int i)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
-	printf("H0_%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
-	printf("H1_%d(f)=%.15e\n", i, 20 * log10(state->direct_gain));
+	printf("H0_%d(w)=%.15e\n", i, state->direct_gain);
+	printf("H1_%d(w)=%.15e\n", i, state->direct_gain);
 }
 
 void crossfeed_effect_destroy(struct effect *e)

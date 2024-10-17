@@ -54,7 +54,8 @@ Flag        | Description
 `-d`        | Force dithering.
 `-D`        | Disable dithering.
 `-E`        | Don't drain effects chain before rebuilding.
-`-p`        | Plot effects chain instead of processing audio.
+`-p`        | Plot effects chain magnitude response instead of processing audio.
+`-P`        | Same as `-p`, but also plot phase response.
 `-V`        | Verbose progress display.
 `-S`        | Use "sequence" input combining mode.
 

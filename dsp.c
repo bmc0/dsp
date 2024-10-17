@@ -109,7 +109,8 @@ static const char help_text[] =
 	"  -d         force dithering\n"
 	"  -D         disable dithering\n"
 	"  -E         don't drain effects chain before rebuilding\n"
-	"  -p         plot effects chain instead of processing audio\n"
+	"  -p         plot effects chain magnitude response instead of processing audio\n"
+	"  -P         same as '-p', but also plot phase response\n"
 	"  -V         verbose progress display\n"
 	"  -S         use \"sequence\" input combining mode\n"
 	"\n"
@@ -293,7 +294,7 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 	p->mode = CODEC_MODE_READ;
 	p->buf_ratio = 0;
 
-	while ((opt = getopt(argc, argv, "+:hb:iIqsvdDEpVSot:e:BLNr:c:R:n")) != -1) {
+	while ((opt = getopt(argc, argv, "+:hb:iIqsvdDEpPVSot:e:BLNr:c:R:n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help();
@@ -336,6 +337,9 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			break;
 		case 'p':
 			plot = 1;
+			break;
+		case 'P':
+			plot = 2;
 			break;
 		case 'V':
 			verbose_progress = 1;
@@ -715,7 +719,7 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 
 	if (plot)
-		plot_effects_chain(&chain, in_codecs.head->fs);
+		plot_effects_chain(&chain, in_codecs.head->fs, (plot > 1));
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));
 		sem_init(&ev_queue.items, 0, 0);

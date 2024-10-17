@@ -67,7 +67,7 @@ sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *)
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);
-void plot_effects_chain(struct effects_chain *, int);
+void plot_effects_chain(struct effects_chain *, int, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);

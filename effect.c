@@ -338,49 +338,68 @@ void signal_effects_chain(struct effects_chain *chain)
 	}
 }
 
-void plot_effects_chain(struct effects_chain *chain, int input_fs)
+void plot_effects_chain(struct effects_chain *chain, int input_fs, int plot_phase)
 {
-	int i = 0, k, j, max_fs = -1, channels = -1;
+	int max_fs = input_fs;
 	struct effect *e = chain->head;
+	if (e == NULL) {
+		LOG_S(LL_ERROR, "plot: error: effects chain empty");
+		return;
+	}
+	const int channels = e->istream.channels;
 	while (e != NULL) {
 		if (e->plot == NULL) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
 			return;
 		}
-		if (channels == -1)
-			channels = e->ostream.channels;
-		else if (channels != e->ostream.channels) {
+		if (channels != e->ostream.channels) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' changed the number of channels", e->name);
 			return;
 		}
+		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
 		e = e->next;
 	}
-	printf(
+	fputs(
 		"set xlabel 'frequency (Hz)'\n"
 		"set ylabel 'amplitude (dB)'\n"
 		"set logscale x\n"
 		"set samples 500\n"
 		"set grid xtics ytics\n"
 		"set key on\n"
-	);
+		"j={0,1}\n"
+	, stdout);
+	printf("set xrange [10:%d/2]\n", max_fs);
+	puts("set yrange [-30:20]");
+	if (plot_phase) {
+		puts("set ytics nomirror");
+		puts("set y2tics -180,90,180 format \"%g°\"");
+		puts("set y2range [-180:540]");
+	}
+	putchar('\n');
 	e = chain->head;
-	while (e != NULL) {
-		e->plot(e, i++);
-		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
+	for (int i = 0; e != NULL; ++i) {
+		e->plot(e, i);
 		e = e->next;
 	}
-	if (channels > 0) {
-		for (k = 0; k < channels; ++k) {
-			printf("Hsum%d(f)=H%d_%d(f)", k, k, 0);
-			for (j = 1; j < i; ++j)
-				printf("+H%d_%d(f)", k, j);
-			putchar('\n');
+	for (int k = 0; k < channels; ++k) {
+		printf("Ht%d(f)=", k);
+		e = chain->head;
+		for (int i = 0; e != NULL; ++i) {
+			printf("%sH%d_%d(2.0*pi*f/%d)", (i==0)?"":"*", k, i, e->ostream.fs);
+			e = e->next;
 		}
-		printf("plot [10:%d/2] [-30:20] Hsum%d(x) title 'Channel %d'", (max_fs == -1) ? input_fs : max_fs, 0, 0);
-		for (k = 1; k < channels; ++k)
-			printf(", Hsum%d(x) title 'Channel %d'", k, k);
-		puts("\npause mouse close");
+		putchar('\n');
+		printf("Ht%d_mag(f)=abs(Ht%d(f))\n", k, k);
+		printf("Ht%d_phase(f)=arg(Ht%d(f))\n", k, k);
+		printf("Hsum%d(f)=20*log10(Ht%d_mag(f))\n", k, k);
 	}
+	printf("\nplot ");
+	for (int k = 0; k < channels; ++k) {
+		printf("%s20*log10(Ht%d_mag(x)) lt %d title 'Channel %d'", (k==0)?"":", ", k, k+1, k);
+		if (plot_phase)
+			printf(", Ht%d_phase(x)/pi*180 axes x1y2 lt %d dt '-' notitle", k, k+1);
+	}
+	puts("\npause mouse close");
 }
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)

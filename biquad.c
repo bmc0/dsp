@@ -283,24 +283,13 @@ void biquad_effect_reset(struct effect *e)
 void biquad_effect_plot(struct effect *e, int i)
 {
 	struct biquad_state **state = (struct biquad_state **) e->data;
-	int k, header_printed = 0;
-	for (k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state[k]) {
-			if (!header_printed) {
-				printf(
-					"o%d=2*pi/%d\n"
-					"c%d0=%.15e; c%d1=%.15e; c%d2=%.15e; c%d3=%.15e; c%d4=%.15e\n",
-					i, e->ostream.fs, i, state[k]->c0, i, state[k]->c1, i, state[k]->c2, i, state[k]->c3, i, state[k]->c4
-				);
-				header_printed = 1;
-			}
-			printf(
-				"H%d_%d(f)=20*log10(sqrt((c%d0*c%d0+c%d1*c%d1+c%d2*c%d2+2.*(c%d0*c%d1+c%d1*c%d2)*cos(f*o%d)+2.*(c%d0*c%d2)*cos(2.*f*o%d))/(1.+c%d3*c%d3+c%d4*c%d4+2.*(c%d3+c%d3*c%d4)*cos(f*o%d)+2.*c%d4*cos(2.*f*o%d))))\n",
-				k, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i
-			);
+			printf("H%d_%d(w)=(abs(w)<=pi)?(%.15e+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w))/(1.0+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w)):0/0\n",
+				k, i, state[k]->c0, state[k]->c1, state[k]->c2, state[k]->c3, state[k]->c4);
 		}
 		else
-			printf("H%d_%d(f)=0\n", k, i);
+			printf("H%d_%d(w)=1.0\n", k, i);
 	}
 }
 

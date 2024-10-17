@@ -59,8 +59,13 @@ void delay_effect_reset(struct effect *e)
 void delay_effect_plot(struct effect *e, int i)
 {
 	int k;
-	for (k = 0; k < e->ostream.channels; ++k)
-		printf("H%d_%d(f)=0\n", k, i);
+	struct delay_state *state = (struct delay_state *) e->data;
+	for (k = 0; k < e->ostream.channels; ++k) {
+		if (state->bufs[k])
+			printf("H%d_%d(w)=exp(-j*w*%zd)\n", k, i, state->len);
+		else
+			printf("H%d_%d(w)=1.0\n", k, i);
+	}
 }
 
 void delay_effect_destroy(struct effect *e)
