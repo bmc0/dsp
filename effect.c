@@ -338,66 +338,87 @@ void signal_effects_chain(struct effects_chain *chain)
 	}
 }
 
-void plot_effects_chain(struct effects_chain *chain, int input_fs, int plot_phase)
+static const char gnuplot_header[] =
+	"set xlabel 'Frequency (Hz)'\n"
+	"set ylabel 'Magnitude (dB)'\n"
+	"set logscale x\n"
+	"set format x '10^{%L}'\n"
+	"set samples 500\n"
+	"set mxtics\n"
+	"set mytics\n"
+	"set grid xtics ytics mxtics mytics lw 0.8, lw 0.3\n"
+	"set key on\n"
+	"j={0,1}\n"
+	"\n"
+	"set yrange [-30:20]\n";
+
+static const char gnuplot_header_phase[] =
+	"set ytics nomirror\n"
+	"set y2tics -180,90,180 format '%g°'\n"
+	"set y2range [-180:720]\n";
+
+void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 {
-	int max_fs = input_fs;
-	struct effect *e = chain->head;
-	if (e == NULL) {
+	if (chain->head == NULL) {
 		LOG_S(LL_ERROR, "plot: error: effects chain empty");
 		return;
 	}
-	const int channels = e->istream.channels;
+	struct effect *e = chain->head;
+	int fs = e->istream.fs;
 	while (e != NULL) {
 		if (e->plot == NULL) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
 			return;
 		}
-		if (channels != e->ostream.channels) {
-			LOG_FMT(LL_ERROR, "plot: error: effect '%s' changed the number of channels", e->name);
+		if (e->istream.channels != e->ostream.channels && !(e->plot_info & PLOT_INFO_MIX)) {
+			LOG_FMT(LL_ERROR, "plot: BUG: effect '%s' changed the number of channels but does not have PLOT_INFO_MIX set!", e->name);
 			return;
 		}
-		max_fs = (e->ostream.fs > max_fs) ? e->ostream.fs : max_fs;
+		fs = e->ostream.fs;
 		e = e->next;
 	}
-	fputs(
-		"set xlabel 'frequency (Hz)'\n"
-		"set ylabel 'amplitude (dB)'\n"
-		"set logscale x\n"
-		"set samples 500\n"
-		"set grid xtics ytics\n"
-		"set key on\n"
-		"j={0,1}\n"
-	, stdout);
-	printf("set xrange [10:%d/2]\n", max_fs);
-	puts("set yrange [-30:20]");
-	if (plot_phase) {
-		puts("set ytics nomirror");
-		puts("set y2tics -180,90,180 format \"%g°\"");
-		puts("set y2range [-180:540]");
-	}
-	putchar('\n');
-	e = chain->head;
+	printf("%sset xrange [10:%d/2]\n%s\n",
+		gnuplot_header, fs, (plot_phase)?gnuplot_header_phase:"");
+	struct effect *start_e = chain->head;
+	e = start_e;
+	int channels = e->istream.channels, start_idx = 0;
 	for (int i = 0; e != NULL; ++i) {
+		if (e->plot_info & PLOT_INFO_MIX) {
+			for (int k = 0; k < e->istream.channels; ++k) {
+				printf("Ht%d_%d(f)=1.0", k, i);
+				struct effect *e2 = start_e;
+				for (int j = start_idx; e2 != NULL && e2 != e; ++j) {
+					printf("*H%d_%d(2.0*pi*f/%d)", k, j, e2->ostream.fs);
+					e2 = e2->next;
+				}
+				putchar('\n');
+			}
+			start_idx = i;
+			start_e = e;
+			channels = e->ostream.channels;
+		}
 		e->plot(e, i);
 		e = e->next;
 	}
 	for (int k = 0; k < channels; ++k) {
-		printf("Ht%d(f)=", k);
-		e = chain->head;
-		for (int i = 0; e != NULL; ++i) {
-			printf("%sH%d_%d(2.0*pi*f/%d)", (i==0)?"":"*", k, i, e->ostream.fs);
+		printf("Ht%d(f)=1.0", k);
+		e = start_e;
+		for (int i = start_idx; e != NULL; ++i) {
+			printf("*H%d_%d(2.0*pi*f/%d)", k, i, e->ostream.fs);
 			e = e->next;
 		}
 		putchar('\n');
 		printf("Ht%d_mag(f)=abs(Ht%d(f))\n", k, k);
+		printf("Ht%d_mag_dB(f)=20*log10(Ht%d_mag(f))\n", k, k);
 		printf("Ht%d_phase(f)=arg(Ht%d(f))\n", k, k);
-		printf("Hsum%d(f)=20*log10(Ht%d_mag(f))\n", k, k);
+		printf("Ht%d_phase_deg(f)=Ht%d_phase(f)*180/pi\n", k, k);
+		printf("Hsum%d(f)=Ht%d_mag_dB(f)\n", k, k);
 	}
 	printf("\nplot ");
 	for (int k = 0; k < channels; ++k) {
-		printf("%s20*log10(Ht%d_mag(x)) lt %d title 'Channel %d'", (k==0)?"":", ", k, k+1, k);
+		printf("%sHt%d_mag_dB(x) lt %d lw 2 title 'Channel %d'", (k==0)?"":", ", k, k+1, k);
 		if (plot_phase)
-			printf(", Ht%d_phase(x)/pi*180 axes x1y2 lt %d dt '-' notitle", k, k+1);
+			printf(", Ht%d_phase_deg(x) axes x1y2 lt %d lw 1 dt '-' notitle", k, k+1);
 	}
 	puts("\npause mouse close");
 }

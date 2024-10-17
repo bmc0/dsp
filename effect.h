@@ -28,11 +28,16 @@ struct effect_info {
 	int effect_number;
 };
 
+enum {
+	PLOT_INFO_MIX = 1<<0,
+};
+
 struct effect {
 	struct effect *next;
 	const char *name;
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
+	int plot_info;
 	/* All functions may be NULL */
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
@@ -67,7 +72,7 @@ sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *)
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);
-void plot_effects_chain(struct effects_chain *, int, int);
+void plot_effects_chain(struct effects_chain *, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);
