@@ -80,6 +80,21 @@ void fir_direct_effect_reset(struct effect *e)
 			memset(state->buf[i], 0, state->len * sizeof(sample_t));
 }
 
+void fir_direct_effect_plot(struct effect *e, int i)
+{
+	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->buf[k]) {
+			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			for (ssize_t j = 0; j < state->len; ++j)
+				printf("+exp(-j*w*%zd)*%.15e", j, state->filter[k][j]);
+			puts(":0/0");
+		}
+		else
+			printf("H%d_%d(w)=1.0\n", k, i);
+	}
+}
+
 void fir_direct_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
@@ -184,6 +199,26 @@ void fir_effect_reset(struct effect *e)
 			memset(state->overlap[i], 0, state->len * sizeof(sample_t));
 }
 
+void fir_effect_plot(struct effect *e, int i)
+{
+	struct fir_state *state = (struct fir_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->input[k]) {
+			for (ssize_t j = 0; j < state->fr_len; ++j)
+				state->tmp_fr[j] = state->filter_fr[k][j];
+			fftw_execute(state->c2r_plan[k]);
+			for (ssize_t j = 0; j < state->len * 2; ++j)
+				state->output[k][j] /= state->len * 2;
+			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			for (ssize_t j = 0; j < state->len; ++j)
+				printf("+exp(-j*w*%zd)*%.15e", j, state->output[k][j]);
+			puts(":0/0");
+		}
+		else
+			printf("H%d_%d(w)=1.0\n", k, i);
+	}
+}
+
 void fir_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
@@ -260,6 +295,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	if (filter_frames <= MAX_DIRECT_LEN || force_direct) {
 		e->run = fir_direct_effect_run;
 		e->reset = fir_direct_effect_reset;
+		e->plot = fir_direct_effect_plot;
 		e->drain = fir_direct_effect_drain;
 		e->destroy = fir_direct_effect_destroy;
 
@@ -296,6 +332,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->run = fir_effect_run;
 		e->delay = fir_effect_delay;
 		e->reset = fir_effect_reset;
+		e->plot = fir_effect_plot;
 		e->drain = fir_effect_drain;
 		e->destroy = fir_effect_destroy;
 
