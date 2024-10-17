@@ -27,12 +27,11 @@ struct remix_state {
 
 sample_t * remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, k, j;
 	struct remix_state *state = (struct remix_state *) e->data;
-	for (i = 0; i < *frames; ++i) {
-		for (k = 0; k < e->ostream.channels; ++k) {
+	for (ssize_t i = 0; i < *frames; ++i) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			obuf[i * e->ostream.channels + k] = 0;
-			for (j = 0; j < e->istream.channels; ++j) {
+			for (int j = 0; j < e->istream.channels; ++j) {
 				if (GET_BIT(state->channel_selectors[k], j))
 					obuf[i * e->ostream.channels + k] += ibuf[i * e->istream.channels + j];
 			}
@@ -41,12 +40,24 @@ sample_t * remix_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return obuf;
 }
 
+void remix_effect_plot(struct effect *e, int i)
+{
+	struct remix_state *state = (struct remix_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		printf("H%d_%d(w)=0.0", k, i);
+		for (int j = 0; j < e->istream.channels; ++j) {
+			if (GET_BIT(state->channel_selectors[k], j))
+				printf("+Ht%d_%d(w*%d/2.0/pi)", j, i, e->ostream.fs);
+		}
+		putchar('\n');
+	}
+}
+
 void remix_effect_destroy(struct effect *e)
 {
-	int i;
 	struct remix_state *state = (struct remix_state *) e->data;
-	for (i = 0; i < e->ostream.channels; ++i)
-		free(state->channel_selectors[i]);
+	for (int k = 0; k < e->ostream.channels; ++k)
+		free(state->channel_selectors[k]);
 	free(state->channel_selectors);
 	free(state);
 }
@@ -55,19 +66,18 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 {
 	struct effect *e;
 	struct remix_state *state;
-	int i, out_channels;
 
 	if (argc <= 1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 
-	out_channels = argc - 1;
+	const int out_channels = argc - 1;
 	state = calloc(1, sizeof(struct remix_state));
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
-	for (i = 0; i < out_channels; ++i) {
-		state->channel_selectors[i] = NEW_SELECTOR(istream->channels);
-		if (strcmp(argv[i + 1], ".") != 0 && parse_selector(argv[i + 1], state->channel_selectors[i], istream->channels))
+	for (int k = 0; k < out_channels; ++k) {
+		state->channel_selectors[k] = NEW_SELECTOR(istream->channels);
+		if (strcmp(argv[k + 1], ".") != 0 && parse_selector(argv[k + 1], state->channel_selectors[k], istream->channels))
 			goto fail;
 	}
 
@@ -76,15 +86,17 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
 	e->ostream.channels = out_channels;
+	e->plot_info |= PLOT_INFO_MIX;
 	e->run = remix_effect_run;
+	e->plot = remix_effect_plot;
 	e->destroy = remix_effect_destroy;
 	e->data = state;
 	return e;
 
 	fail:
 	if (state->channel_selectors)
-		for (i = 0; i < out_channels; ++i)
-			free(state->channel_selectors[i]);
+		for (int k = 0; k < out_channels; ++k)
+			free(state->channel_selectors[k]);
 	free(state->channel_selectors);
 	free(state);
 	return NULL;
