@@ -55,6 +55,22 @@ sample_t * ms2st_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
+void st2ms_effect_plot(struct effect *e, int i)
+{
+	struct st2ms_state *state = (struct st2ms_state *) e->data;
+	const int is_ms2st = (e->run == ms2st_effect_run);
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (k == state->c0)
+			printf("H%d_%d(w)=(Ht%d_%d(w*%d/2.0/pi)+Ht%d_%d(w*%d/2.0/pi))*%g\n",
+				k, i, state->c0, i, e->ostream.fs, state->c1, i, e->ostream.fs, (is_ms2st)?1.0:0.5);
+		else if (k == state->c1)
+			printf("H%d_%d(w)=(Ht%d_%d(w*%d/2.0/pi)-Ht%d_%d(w*%d/2.0/pi))*%g\n",
+				k, i, state->c0, i, e->ostream.fs, state->c1, i, e->ostream.fs, (is_ms2st)?1.0:0.5);
+		else
+			printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)\n", k, i, k, i, e->ostream.fs);
+	}
+}
+
 void st2ms_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -82,6 +98,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->plot_info |= PLOT_INFO_MIX;
 	switch (ei->effect_number) {
 	case ST2MS_EFFECT_NUMBER_ST2MS:
 		e->run = st2ms_effect_run;
@@ -94,6 +111,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 		free(e);
 		return NULL;
 	}
+	e->plot = st2ms_effect_plot;
 	e->destroy = st2ms_effect_destroy;
 
 	state = calloc(1, sizeof(struct st2ms_state));
