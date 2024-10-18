@@ -111,6 +111,24 @@ void decorrelate_effect_reset(struct effect *e)
 				sch_ap_reset(&state->ap[k][j]);
 }
 
+void decorrelate_effect_plot(struct effect *e, int i)
+{
+	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->ap[k]) {
+			printf("H%d_%d(w)=(abs(w)<=pi)?1.0", k, i);
+			for (int j = 0; j < state->n_stages; ++j) {
+				struct sch_ap_state *ap = &state->ap[k][j];
+				printf("*((%.15e+%.15e*exp(-j*w)+%.15e*exp(-j*w*%d)+%.15e*exp(-j*w*%d))/(1.0+%.15e*exp(-j*w)+%.15e*exp(-j*w*%d)+%.15e*exp(-j*w*%d)))",
+					ap->b1, ap->b0, ap->a1, ap->len-1, ap->a0, ap->len, ap->a1, ap->b0, ap->len-1, ap->b1, ap->len);
+			}
+			puts(":0/0");
+		}
+		else
+			printf("H%d_%d(w)=1.0\n", k, i);
+	}
+}
+
 void decorrelate_effect_destroy(struct effect *e)
 {
 	int k, j;
@@ -155,6 +173,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->run = decorrelate_effect_run;
 	e->reset = decorrelate_effect_reset;
+	e->plot = decorrelate_effect_plot;
 	e->destroy = decorrelate_effect_destroy;
 	state = calloc(1, sizeof(struct decorrelate_state));
 	state->n_stages = n_stages;
