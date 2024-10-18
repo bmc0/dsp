@@ -138,6 +138,32 @@ void fir_p_effect_reset(struct effect *e)
 	}
 }
 
+void fir_p_effect_plot(struct effect *e, int i)
+{
+	struct fir_p_state *state = (struct fir_p_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->part0.buf[k]) {
+			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			for (ssize_t m = 0; m < DIRECT_LEN; ++m)
+				printf("+exp(-j*w*%zd)*%.15e", m, state->part0.filter[k][m]);
+			ssize_t z = DIRECT_LEN;
+			for (ssize_t j = 0; j < state->nparts; ++j) {
+				struct fft_part *part = &state->part[j];
+				for (ssize_t l = 0; l < part->fr_len; ++l)
+					state->tmp_fr[l] = part->filter_fr[k][l];
+				fftw_execute(part->c2r_plan[k]);
+				for (ssize_t l = 0; l < part->len * 2; ++l)
+					part->obuf[k][l] /= part->len * 2;
+				for (ssize_t l = 0; l < part->len; ++l, ++z)
+					printf("+exp(-j*w*%zd)*%.15e", z, part->obuf[k][l]);
+			}
+			puts(":0/0");
+		}
+		else
+			printf("H%d_%d(w)=1.0\n", k, i);
+	}
+}
+
 void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
@@ -242,6 +268,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->run = fir_p_effect_run;
 	e->reset = fir_p_effect_reset;
+	e->plot = fir_p_effect_plot;
 	e->drain = fir_p_effect_drain;
 	e->destroy = fir_p_effect_destroy;
 
