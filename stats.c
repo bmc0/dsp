@@ -50,9 +50,8 @@ sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 void stats_effect_plot(struct effect *e, int i)
 {
-	int k;
-	for (k = 0; k < e->ostream.channels; ++k)
-		printf("H%d_%d(f)=0\n", k, i);
+	for (int k = 0; k < e->ostream.channels; ++k)
+		printf("H%d_%d(f)=1.0\n", k, i);
 }
 
 void stats_effect_destroy(struct effect *e)
