@@ -206,9 +206,7 @@ Example:
 	crossfeed.
 * `matrix4 [options] [surround_level]`  
 	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
-	plain (i.e. unencoded) stereo material. The matrix coefficients and the
-	main ideas behind the steering behavior come from David Griesinger's
-	published works on matrix surround.
+	plain (i.e. unencoded) stereo material.
 
 	The intended speaker configuration is fronts at ±30° and surrounds between
 	±60° and ±120°. The surround speakers must be calibrated correctly in
@@ -224,9 +222,9 @@ Example:
 	The settings shown above (-6dB surround level, 15ms delay, and 10kHz
 	rolloff) are a good starting point, but may be adjusted to taste. The
 	default `surround_level` is -6dB. Applying the `decorrelate` effect to the
-	surround outputs can be useful to eliminate coloration caused by comb
-	filtering (note: adjust `surround_delay` to compensate for the `decorrelate`
-	effect's group delay).
+	surround outputs (optionally with the `-m` flag) seems to further improve
+	the spatial impression (note: adjust `surround_delay` to compensate for
+	the `decorrelate` effect's group delay).
 
 	The front outputs replace the original input channels and the surround
 	outputs are appended to the end of the channel list.
@@ -249,7 +247,7 @@ Example:
 * `matrix4_mb [options] [surround_level]`  
 	Like the `matrix4` effect, but divides the input into ten individually
 	steered bands in order to improve separation of concurrent sound sources.
-	The usage and options are the same as the `matrix4` effect.
+	See the `matrix4` effect description for more information.
 * `remix channel_selector|. ...`  
 	Select and mix input channels into output channels. Each channel selector
 	specifies the input channels to be mixed to produce each output channel.
@@ -291,7 +289,7 @@ Example:
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
 	If `-m` is given, the same filter parameters are used for all input
 	channels. The default number of stages is 5, which results in an
-	average group delay of about 8.5ms at high frequencies.
+	average group delay of about 9.5ms at high frequencies.
 * `noise level`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	(dBFS).
