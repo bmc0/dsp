@@ -148,7 +148,7 @@ static void write_buf_floatp(sample_t *in, float **out, int channels, ssize_t s)
 
 struct effect * zita_convolver_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	int i, k, n_channels;
+	int i, k;
 	unsigned int min_part_len = 0, max_part_len = 0;
 	struct effect *e;
 	struct zita_convolver_state *state;
@@ -181,9 +181,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 		max_part_len = min_part_len;
 	}
 
-	for (i = n_channels = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
-			++n_channels;
+	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (n_channels > MINIMUM(Convproc::MAXINP, Convproc::MAXOUT)) {
 		LOG_FMT(LL_ERROR, "%s: error: number of channels must not exceed %d", argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
 		return NULL;

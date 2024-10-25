@@ -96,7 +96,7 @@ static struct {
 } ev_queue = { .lock = PTHREAD_MUTEX_INITIALIZER };
 
 static const char help_text[] =
-	"Usage: %s [options] path ... [!] [:channel_selector] [@[~/]effects_file] [effect [args ...]] ...\n"
+	"Usage: %s [options] path ... [effect [args]] ...\n"
 	"\n"
 	"Global options:\n"
 	"  -h         show this help\n"
@@ -122,10 +122,7 @@ static const char help_text[] =
 	"  -r frequency[k]  sample rate\n"
 	"  -c channels      number of channels\n"
 	"  -R ratio         buffer ratio\n"
-	"  -n               equivalent to '-t null null'\n"
-	"\n"
-	"Selector syntax:\n"
-	"  [[start][-[end]][,...]]\n";
+	"  -n               equivalent to '-t null null'\n";
 
 static const char interactive_help[] =
 	"Keys:\n"

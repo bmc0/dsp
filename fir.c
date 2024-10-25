@@ -270,14 +270,11 @@ void fir_effect_destroy(struct effect *e)
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
 {
-	int i, k, n_channels;
+	int i, k;
 	ssize_t j;
 	struct effect *e;
 
-	for (i = n_channels = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
-			++n_channels;
-
+	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
 		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;

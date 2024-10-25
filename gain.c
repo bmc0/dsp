@@ -23,7 +23,6 @@
 #include "util.h"
 
 struct gain_state {
-	int channel;
 	sample_t v;
 };
 
@@ -31,16 +30,10 @@ sample_t * gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sa
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
 	struct gain_state *state = (struct gain_state *) e->data;
-	if (state->channel == -1) {
-		for (i = 0; i < samples; i += e->ostream.channels)
-			for (k = 0; k < e->ostream.channels; ++k)
-				if (GET_BIT(e->channel_selector, k))
-					ibuf[i + k] *= state->v;
-	}
-	else {
-		for (i = state->channel; i < samples; i += e->ostream.channels)
-			ibuf[i] *= state->v;
-	}
+	for (i = 0; i < samples; i += e->ostream.channels)
+		for (k = 0; k < e->ostream.channels; ++k)
+			if (GET_BIT(e->channel_selector, k))
+				ibuf[i + k] *= state->v;
 	return ibuf;
 }
 
@@ -48,16 +41,10 @@ sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
 	struct gain_state *state = (struct gain_state *) e->data;
-	if (state->channel == -1) {
-		for (i = 0; i < samples; i += e->ostream.channels)
-			for (k = 0; k < e->ostream.channels; ++k)
-				if (GET_BIT(e->channel_selector, k))
-					ibuf[i + k] += state->v;
-	}
-	else {
-		for (i = state->channel; i < samples; i += e->ostream.channels)
-			ibuf[i] += state->v;
-	}
+	for (i = 0; i < samples; i += e->ostream.channels)
+		for (k = 0; k < e->ostream.channels; ++k)
+			if (GET_BIT(e->channel_selector, k))
+				ibuf[i + k] += state->v;
 	return ibuf;
 }
 
@@ -65,7 +52,7 @@ void gain_effect_plot(struct effect *e, int i)
 {
 	struct gain_state *state = (struct gain_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		if ((state->channel == -1 && GET_BIT(e->channel_selector, k)) || (state->channel != -1 && k == state->channel))
+		if (GET_BIT(e->channel_selector, k))
 			printf("H%d_%d(w)=%.15e\n", k, i, state->v);
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
@@ -76,7 +63,7 @@ void add_effect_plot(struct effect *e, int i)
 {
 	struct gain_state *state = (struct gain_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		if ((state->channel == -1 && GET_BIT(e->channel_selector, k)) || (state->channel != -1 && k == state->channel))
+		if (GET_BIT(e->channel_selector, k))
 			printf("H%d_%d(w)=(w==0.0)?1.0+%.15e:1.0\n", k, i, state->v);
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
@@ -94,20 +81,14 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	struct effect *e;
 	struct gain_state *state;
 	double v;
-	int channel = -1;
 	char *endptr;
 
-	if (argc != 2 && argc != 3) {
+	if (argc != 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	if (argc == 3) {
-		channel = strtol(argv[1], &endptr, 10);
-		CHECK_ENDPTR(argv[1], endptr, "channel", return NULL);
-		CHECK_RANGE(channel >= 0 && channel < istream->channels, "channel", return NULL);
-	}
-	const char *arg = argv[argc - 1];
 
+	const char *arg = argv[argc - 1];
 	switch (ei->effect_number) {
 	case GAIN_EFFECT_NUMBER_GAIN:
 		v = pow(10.0, strtod(arg, &endptr) / 20.0);
@@ -136,7 +117,6 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	e->plot = (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) ? add_effect_plot : gain_effect_plot;
 	e->destroy = gain_effect_destroy;
 	state = calloc(1, sizeof(struct gain_state));
-	state->channel = channel;
 	state->v = v;
 	e->data = state;
 	return e;

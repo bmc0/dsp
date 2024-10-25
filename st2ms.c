@@ -80,15 +80,13 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 {
 	struct effect *e;
 	struct st2ms_state *state;
-	int i, n_channels = 0;
+	int i;
 
 	if (argc != 1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	for (i = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
-			++n_channels;
+	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (n_channels != 2) {
 		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
 		return NULL;

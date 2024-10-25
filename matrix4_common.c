@@ -52,10 +52,7 @@ int get_args_and_channels(const struct effect_info *ei, const struct stream_info
 		LOG_FMT(LL_ERROR, "%s: error: sample rate out of range", argv[0]);
 		return 1;
 	}
-	for (int i = 0; i < istream->channels; ++i) {
-		if (GET_BIT(channel_selector, i))
-			++config->n_channels;
-	}
+	config->n_channels = num_bits_set(channel_selector, istream->channels);
 	if (config->n_channels != 2) {
 		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
 		return 1;

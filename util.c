@@ -147,6 +147,29 @@ int parse_selector(const char *s, char *b, int n)
 	return 0;
 }
 
+int parse_selector_masked(const char *s, char *b, const char *mask, int n)
+{
+	int r;
+	CLEAR_SELECTOR(b, n);
+	const int nb = num_bits_set(mask, n);
+	char *b_tmp = NEW_SELECTOR(nb);
+	if ((r = parse_selector(s, b_tmp, nb))) {
+		free(b_tmp);
+		return r;
+	}
+	for (int i = 0, k = 0; i < nb; ++i, ++k) {
+		while (k < n && !GET_BIT(mask, k)) ++k;
+		if (k == n) {
+			LOG_FMT(LL_ERROR, "%s(): BUG: too many channels", __func__);
+			break;
+		}
+		if (GET_BIT(b_tmp, i))
+			SET_BIT(b, k);
+	}
+	free(b_tmp);
+	return 0;
+}
+
 void print_selector(const char *b, int n)
 {
 	int i, c, l = 0, f = 1, range_start = -1;
@@ -169,6 +192,14 @@ void print_selector(const char *b, int n)
 		fprintf(stderr, "%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
 	else if (l)
 		fprintf(stderr, "%s%d", (f) ? "" : ",", n - 1);
+}
+
+int num_bits_set(const char *b, int n)
+{
+	int c = 0;
+	for (int i = 0; i < n; ++i)
+		if (GET_BIT(b, i)) ++c;
+	return c;
 }
 
 #define IS_WHITESPACE(x) (x == ' ' || x == '\t' || x == '\n')

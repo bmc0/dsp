@@ -21,6 +21,8 @@
 #include "remix.h"
 #include "util.h"
 
+#define DEBUG_CHANNEL_MAPPING 0
+
 struct remix_state {
 	char **channel_selectors;
 };
@@ -72,13 +74,32 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 		return NULL;
 	}
 
-	const int out_channels = argc - 1;
+	const int n_selectors = argc - 1, mask_bits = num_bits_set(channel_selector, istream->channels);
+	int delta = n_selectors - mask_bits;
+	const int out_channels = istream->channels + delta;
+
 	state = calloc(1, sizeof(struct remix_state));
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
-	for (int k = 0; k < out_channels; ++k) {
+	for (int k = 0, i = 0, ch = 0; k < out_channels; ++k, ++ch) {
 		state->channel_selectors[k] = NEW_SELECTOR(istream->channels);
-		if (strcmp(argv[k + 1], ".") != 0 && parse_selector(argv[k + 1], state->channel_selectors[k], istream->channels))
-			goto fail;
+		if (ch >= istream->channels || GET_BIT(channel_selector, ch)) {
+			if (i < n_selectors) {
+				if (strcmp(argv[i+1], ".") != 0 && parse_selector_masked(argv[i+1], state->channel_selectors[k], channel_selector, istream->channels))
+					goto fail;
+				++i;
+			}
+			else {
+				while (ch < istream->channels && GET_BIT(channel_selector, ch)) ++ch;
+				if (ch < istream->channels) SET_BIT(state->channel_selectors[k], ch);
+			}
+		}
+		else SET_BIT(state->channel_selectors[k], ch);
+
+		#if DEBUG_CHANNEL_MAPPING
+			fprintf(stderr, "%s: %s: info: channel map: %d <- ", dsp_globals.prog_name, argv[0], k);
+			print_selector(state->channel_selectors[k], istream->channels);
+			fputc('\n', stderr);
+		#endif
 	}
 
 	e = calloc(1, sizeof(struct effect));

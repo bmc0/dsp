@@ -229,7 +229,7 @@ void fir_p_effect_destroy(struct effect *e)
 
 struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t max_part_len)
 {
-	int i, k, j, l, n_channels;
+	int i, k, j, l;
 	ssize_t filter_pos = DIRECT_LEN, delay = 0, max_delay = 0;
 	struct effect *e;
 	struct fir_p_state *state;
@@ -238,10 +238,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	if (filter_frames < DIRECT_LEN)
 		return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 1);
 
-	for (i = n_channels = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
-			++n_channels;
-
+	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
 		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;

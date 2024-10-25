@@ -19,6 +19,7 @@
 #ifndef DSP_EFFECT_H
 #define DSP_EFFECT_H
 
+#include <string.h>
 #include "dsp.h"
 
 struct effect_info {
@@ -59,7 +60,9 @@ struct effects_chain {
 	get_effect_info(x) != NULL \
 	|| (x)[0] == ':' \
 	|| (x)[0] == '@' \
-	|| ((x)[0] == '!' && (x)[1] == '\0') )
+	|| strcmp(x, "!") == 0 \
+	|| strcmp(x, "{") == 0 \
+)
 
 const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);

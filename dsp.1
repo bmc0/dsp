@@ -3,8 +3,7 @@
 dsp \- an audio processing program with an interactive mode
 .SH SYNOPSIS
 .B dsp
-[\fIoptions\fR] \fIpath\fR ... [\fI!\fR] [:\fIchannel_selector\fR]
-[@[~/]\fIeffects_file\fR] [\fIeffect\fR [\fIargs\fR ...]] ...
+[\fIoptions\fR] \fIpath\fR ... [\fIeffect\fR [\fIargs\fR]] ...
 .SH DESCRIPTION
 .B dsp
 is an audio processing program with an interactive mode.
@@ -122,7 +121,7 @@ Example:
 	$ dsp -t sgen -c 2 sine@0:freq=500-1k/sine@1:freq=300-800+2 gain -10
 .EE
 .SH EFFECTS
-.SS Full effects list
+.SS Complete effects list
 .TP
 \fBlowpass_1\fR \fIf0\fR[\fBk\fR]
 First-order lowpass filter.
@@ -178,17 +177,14 @@ Compact Disc de-emphasis filter.
 \fBbiquad\fR \fIb0\fR \fIb1\fR \fIb2\fR \fIa0\fR \fIa1\fR \fIa2\fR
 Biquad filter.
 .TP
-\fBgain\fR [\fIchannel\fR] \fIgain\fR
-Gain adjustment. Ignores the channel selector when the \fIchannel\fR argument
-is given.
+\fBgain\fR \fIgain_dB\fR
+Gain adjustment in decibels.
 .TP
-\fBmult\fR [\fIchannel\fR] \fImultiplier\fR
-Multiplies each sample by \fImultiplier\fR. Ignores the channel selector when
-the \fIchannel\fR argument is given.
+\fBmult\fR \fImultiplier\fR
+Multiplies each sample by \fImultiplier\fR.
 .TP
-\fBadd\fR [\fIchannel\fR] \fIvalue\fR
-Applies a DC shift. Ignores the channel selector when the \fIchannel\fR
-argument is given.
+\fBadd\fR \fIvalue\fR
+Applies a DC shift.
 .TP
 \fBcrossfeed\fR \fIf0\fR[\fBk\fR] \fIseparation\fR
 Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
@@ -243,10 +239,10 @@ Like the \fBmatrix4\fR effect, but divides the input into ten individually
 steered bands in order to improve separation of concurrent sound sources.
 See the \fBmatrix4\fR effect description for more information.
 .TP
-\fBremix\fR \fIchannel_selector\fR|. ...
+\fBremix\fR \fIselector\fR|. ...
 Select and mix input channels into output channels. Each channel selector
-specifies the input channels to be mixed to produce each output channel.
-`.' selects no input channels. For example,
+specifies the input channels to be mixed to produce an output channel. `.'
+selects no input channels. For example,
 .EX
 	remix 0,1 2,3
 .EE
@@ -255,7 +251,8 @@ and 3 into output channel 1.
 .EX
 	remix -
 .EE
-mixes all input channels into a single output channel.
+mixes all input channels into a single output channel. The active channel
+selector is used as an input channel mask for the selector arguments.
 .TP
 \fBst2ms\fR
 Convert stereo to mid/side.
@@ -274,8 +271,8 @@ possible in that case).
 Sinc resampler. Ignores the channel selector.
 .TP
 \fBfir\fR [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
-Non-partitioned 64-bit direct/FFT convolution. Latency is zero for filters
-up to 16 samples. For longer filters, the latency is equal to the
+Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
+filters up to 16 taps. For longer filters, the latency is equal to the
 \fIfft_len\fR reported in verbose mode. Each \fIlist\fR is a comma-separated list
 of coefficients for one filter channel. Missing values are filled with
 zeros.
@@ -310,10 +307,9 @@ Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
 .TP
 \fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
-the exception of zero output ports). Plugins with zero input ports will
-replace selected input channels with their output(s). If a plugin has one
-or zero input ports, it will be instantiated multiple times to handle
-multi-channel input.
+the exception of zero output ports). If a plugin has one or zero input
+ports, it will be instantiated multiple times to handle multi-channel
+input.
 
 Controls which are not explicitly set or are set to `-' will use default
 values (if available).
@@ -326,9 +322,6 @@ Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 (dBFS), crest factor (dB), peak count, peak sample, number of samples, and
 length (s) for each channel. If \fIref_level\fR is given, peak and RMS levels
 relative to \fIref_level\fR will be shown as well (dBr).
-.SS Exclamation mark
-A `!' marks the effect that follows as `non-essential'. If an effect is marked
-non-essential and it fails to initialize, it will be skipped.
 .SS Selector syntax
 [[\fIstart\fR][-[\fIend\fR]][,...]]
 .TS
@@ -344,7 +337,10 @@ _
 1,3|1 and 3
 1-4,7,9-|1 through 4, 7, and 9 to n
 .TE
-.SS Width suffixes
+.PP
+Note: There is no difference between `1,3' and `3,1'. Order is not
+preserved.
+.SS Filter width suffixes
 .TS
 tab (|);
 lB lB
@@ -359,9 +355,8 @@ h|Bandwidth in Hz.
 k|Bandwidth in kHz.
 .TE
 .PP
-Note: The `\fBd\fR' width suffix also changes the definition of \fIf0\fR from
-center frequency to corner frequency (like Room EQ Wizard and the Behringer
-DCX2496).
+Note: The `\fBd\fR' width suffix also changes the definition of \fIf0\fR from center
+frequency to corner frequency (like Room EQ Wizard and the Behringer DCX2496).
 .SS File paths
 .IP *
 On the command line, relative paths are relative to `$PWD'.
@@ -370,52 +365,65 @@ Within an effects file, relative paths are relative to the directory
 containing said effects file.
 .IP *
 The `~/' prefix will be expanded to the contents of `$HOME'.
-.SS Effects file syntax
-.IP *
-Arguments are delimited by whitespace.
-.IP *
-If the first non-whitespace character in a line is `#', the line is ignored.
-.IP *
-The `\\' character removes any special meaning of the next character.
-.PP
-Example:
+.SS Channel selectors and masks
+A colon (`:') followed by a selector (see ``Selector syntax'') specifies the
+input channels for effects that follow. For example,
 .EX
-	gain -10
+	:0,2 eq 1k 1.0 -6
+.EE
+will apply an \fBeq\fR effect to channels 0 and 2. If an effect changes the total
+number of channels, the last channel selector given is parsed again. Additional
+channels are not added unless the selector includes an unbounded range.
+
+Channel numbers refer to the channels in the active channel mask, which is a
+property of the containing block. Blocks may be created using braces
+(`{ ... }') or by sourcing a file (see ``Effects files''). The channel mask is
+derived from the active channel selector at creation. For example,
+.EX
+	:1,3 { :0 gain -6 :1 gain +6 }
+.EE
+creates a block with the mask `1,3'. Within the block, `:0' selects the first
+channel in the mask (channel 1), and `:1' selects the second channel in the
+mask (channel 3). Channel selectors have block scope.
+
+Channels are automatically added or removed from the active channel mask if an
+effect changes the total number of channels. Additional channels are always
+appended to the end of the channel list.
+.SS Effects files
+Files may be sourced using the `@' directive:
+.EX
+	@[~/]path/to/file
+.EE
+See ``File paths'' for more information about how paths are interpreted. Note that sourcing
+a file implicitly creates a block (see ``Channel selectors and masks''). Within a
+file, lines in which the first non-whitespace character is `#' are ignored. A
+backslash (`\\') may be used to escape whitespace, `#', or `\\'. Example:
+.EX
+	gain -4.0
 	# This is a comment
-	eq 1k 1.0 +10.0 eq 3k 3.0 -4.0
-	lowshelf 90 0.7 +4.0
+	lowshelf 90 1s +4 eq 3k 1.5 -3
 .EE
-.PP
-Effects files inherit a copy of the current channel selector. In other words,
-if an effects chain is this:
-.EX
-	:2,4 @eq_file.txt eq 2k 1.0 -2.0
-.EE
-\fIeq_file.txt\fR will inherit the `2,4' selector, but any selector specified
-within \fIeq_file.txt\fR will not affect the `eq 2k 1.0 -2.0' effect that comes
-after it.
+.SS Other directives
+An exclamation mark (`!') allows initialization failure of the effect that
+follows.
 .SH EXAMPLES
 Read \fIfile.flac\fR, apply a bass boost, and write to alsa device \fIhw:2\fR:
 .EX
-	dsp file.flac -ot alsa -e s24_3 hw:2 lowshelf 60 0.5 +4.0
+	dsp file.flac -ot alsa -e s24_3 hw:2 lowshelf 60 0.5 +4
 .EE
 .PP
-Plot amplitude vs frequency for a complex effects chain:
+Plot the magnitude vs frequency response of an effects chain:
 .EX
-	dsp -pn gain -1.5 lowshelf 60 0.7 +7.8 eq 50 2.0 -2.7 eq 100 2.0 -3.9
-	  eq 242 1.0 -3.8 eq 628 2.0 +2.1 eq 700 1.5 -1.0
-	  lowshelf 1420 0.68 -12.5 eq 2500 1.3 +3.0 eq 3000 8.0 -1.8
-	  eq 3500 2.5 +1.4 eq 6000 1.1 -3.4 eq 9000 1.8 -5.6
-	  highshelf 10000 0.7 -0.5 | gnuplot
+	dsp -pn [effect [args]] ... | gnuplot
 .EE
 .PP
-Implement an LR4 crossover at 2.2KHz, where output channels 0 and 2 are the
-left and right woofers, and channels 1 and 3 are the left and right tweeters,
+Implement an LR4 crossover at 2.2KHz, where output channels 0 and 1 are the
+left and right tweeters, and channels 2 and 3 are the left and right woofers,
 respectively:
 .EX
-	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 0 1 1 :0,2
-	  lowpass 2.2k 0.707 lowpass 2.2k 0.707 :1,3 highpass 2.2k 0.707
-	  highpass 2.2k 0.707 :
+	dsp stereo_file.flac -ot alsa -e s32 hw:3 remix 0 1 0 1
+	  :0,1 highpass 2.2k 0.7071 highpass 2.2k 0.7071 :
+	  :2,3 lowpass 2.2k 0.7071 lowpass 2.2k 0.7071 :
 .EE
 .PP
 Apply effects from a file:
@@ -467,7 +475,7 @@ Example configuration:
 	input_channels=1
 	output_channels=1
 	LC_NUMERIC=C
-	effects_chain=gain -3.0 lowshelf 100 1.0s +3.0 @/path/to/eq_file
+	effects_chain=gain -3 lowshelf 100 1s +3 @/path/to/eq_file
 .EE
 .PP
 Relative file paths in the \fBeffects_chain\fR line are relative to the
