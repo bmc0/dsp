@@ -357,14 +357,10 @@ static const char gnuplot_header_phase[] =
 	"set y2tics -180,90,180 format '%g°'\n"
 	"set y2range [-180:720]\n";
 
-void plot_effects_chain(struct effects_chain *chain, int plot_phase)
+void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_channels, int plot_phase)
 {
-	if (chain->head == NULL) {
-		LOG_S(LL_ERROR, "plot: error: effects chain empty");
-		return;
-	}
 	struct effect *e = chain->head;
-	int fs = e->istream.fs;
+	int fs = input_fs;
 	while (e != NULL) {
 		if (e->plot == NULL) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
@@ -381,7 +377,7 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 		gnuplot_header, fs, (plot_phase)?gnuplot_header_phase:"");
 	struct effect *start_e = chain->head;
 	e = start_e;
-	int channels = e->istream.channels, start_idx = 0;
+	int channels = input_channels, start_idx = 0;
 	for (int i = 0; e != NULL; ++i) {
 		if (e->plot_info & PLOT_INFO_MIX) {
 			for (int k = 0; k < e->istream.channels; ++k) {

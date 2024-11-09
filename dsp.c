@@ -719,7 +719,7 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 
 	if (plot)
-		plot_effects_chain(&chain, (plot > 1));
+		plot_effects_chain(&chain, in_codecs.head->fs, in_codecs.head->channels, (plot > 1));
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));
 		sem_init(&ev_queue.items, 0, 0);
