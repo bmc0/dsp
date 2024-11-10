@@ -285,8 +285,8 @@ void biquad_effect_plot(struct effect *e, int i)
 	struct biquad_state **state = (struct biquad_state **) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state[k]) {
-			printf("H%d_%d(w)=(abs(w)<=pi)?(%.15e+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w))/(1.0+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w)):0/0\n",
-				k, i, state[k]->c0, state[k]->c1, state[k]->c2, state[k]->c3, state[k]->c4);
+			printf("H%d_%d(w)=(abs(w)<=pi)?(" BIQUAD_PLOT_FMT "):0/0\n",
+				k, i, BIQUAD_PLOT_FMT_ARGS(state[k]));
 		}
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);

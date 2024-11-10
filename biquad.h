@@ -90,4 +90,7 @@ static inline sample_t biquad(struct biquad_state *state, sample_t s)
 	return r;
 }
 
+#define BIQUAD_PLOT_FMT "%.15e+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w))/(1.0+%.15e*exp(-j*w)+%.15e*exp(-2.0*j*w)"
+#define BIQUAD_PLOT_FMT_ARGS(s) (s)->c0, (s)->c1, (s)->c2, (s)->c3, (s)->c4
+
 #endif
