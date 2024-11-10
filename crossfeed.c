@@ -39,12 +39,12 @@ sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibu
 	for (i = 0; i < samples; i += e->ostream.channels) {
 		s0 = ibuf[i + state->c0];
 		s1 = ibuf[i + state->c1];
-		ibuf[i + state->c0] = state->direct_gain * ((s0 * state->direct_gain)
+		ibuf[i + state->c0] = (s0 * state->direct_gain)
 			+ (biquad(&state->lp[0], s1) * state->cross_gain)
-			+ (biquad(&state->hp[0], s0) * state->cross_gain));
-		ibuf[i + state->c1] = state->direct_gain * ((s1 * state->direct_gain)
+			+ (biquad(&state->hp[0], s0) * state->cross_gain);
+		ibuf[i + state->c1] = (s1 * state->direct_gain)
 			+ (biquad(&state->lp[1], s0) * state->cross_gain)
-			+ (biquad(&state->hp[1], s1) * state->cross_gain));
+			+ (biquad(&state->hp[1], s1) * state->cross_gain);
 	}
 	return ibuf;
 }
@@ -58,11 +58,28 @@ void crossfeed_effect_reset(struct effect *e)
 	biquad_reset(&state->hp[1]);
 }
 
+static void crossfeed_plot_channel(struct crossfeed_state *state, int fs, int i, int c, int cc)
+{
+	printf("H%d_%d(w)=(abs(w)<=pi)?%.15e*Ht%d_%d(w*%d/2.0/pi)",
+		c, i, state->direct_gain, c, i, fs);
+	printf("+%.15e*Ht%d_%d(w*%d/2.0/pi)*(" BIQUAD_PLOT_FMT ")",
+		state->cross_gain, cc, i, fs, BIQUAD_PLOT_FMT_ARGS(&state->lp[0]));
+	printf("+%.15e*Ht%d_%d(w*%d/2.0/pi)*(" BIQUAD_PLOT_FMT ")",
+		state->cross_gain, c, i, fs, BIQUAD_PLOT_FMT_ARGS(&state->hp[0]));
+	puts(":0/0");
+}
+
 void crossfeed_effect_plot(struct effect *e, int i)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
-	printf("H0_%d(w)=%.15e\n", i, state->direct_gain);
-	printf("H1_%d(w)=%.15e\n", i, state->direct_gain);
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (k == state->c0)
+			crossfeed_plot_channel(state, e->ostream.fs, i, state->c0, state->c1);
+		else if (k == state->c1)
+			crossfeed_plot_channel(state, e->ostream.fs, i, state->c1, state->c0);
+		else
+			printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)\n", k, i, k, i, e->ostream.fs);
+	}
 }
 
 void crossfeed_effect_destroy(struct effect *e)
@@ -101,6 +118,7 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->plot_info |= PLOT_INFO_MIX;
 	e->run = crossfeed_effect_run;
 	e->reset = crossfeed_effect_reset;
 	e->plot = crossfeed_effect_plot;
