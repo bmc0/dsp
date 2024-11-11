@@ -37,6 +37,17 @@ sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
+void noise_effect_plot(struct effect *e, int i)
+{
+	struct noise_state *state = (struct noise_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)", k, i, k, i, e->ostream.fs);
+		if (GET_BIT(e->channel_selector, k))
+			printf("+%.15e*((rand(0)-rand(0))+j*(rand(0)-rand(0)))/sqrt(2.0)", state->mult*PM_RAND_MAX);
+		putchar('\n');
+	}
+}
+
 void noise_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -64,7 +75,9 @@ struct effect * noise_effect_init(const struct effect_info *ei, const struct str
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	e->plot_info |= PLOT_INFO_MIX;
 	e->run = noise_effect_run;
+	e->plot = noise_effect_plot;
 	e->destroy = noise_effect_destroy;
 	state = calloc(1, sizeof(struct noise_state));
 	state->mult = mult;
