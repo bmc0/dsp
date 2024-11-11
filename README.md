@@ -574,6 +574,8 @@ To load the LADSPA module at user login include settings in
 
 * No support for metadata.
 * Some effects do not support plotting.
+* When plotting the `noise` effect, the added noise component is always random
+  even when its outputs are duplicated (e.g. by the `remix` effect).
 
 ### License
 
