@@ -261,7 +261,10 @@ Example:
 	Convert mid/side to stereo.
 * `delay delay[s|m|S]`  
 	Delay line. The unit for the delay argument depends on the suffix used:
-	`s` is seconds (the default), `m` is milliseconds, and `S` is samples.
+	`s` is seconds (the default), `m` is milliseconds, and `S` is samples. If
+	`delay` is negative, a positive delay is applied to all channels which are
+	**not** selected (except when plotting—an actual negative delay is
+	possible in that case).
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [file:][~/]filter_path|coefs:list[/list...]`  

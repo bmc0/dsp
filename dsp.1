@@ -265,7 +265,10 @@ Convert mid/side to stereo.
 .TP
 \fBdelay\fR \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
-`\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples.
+`\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples. If
+\fIdelay\fR is negative, a positive delay is applied to all channels which are
+\fBnot\fR selected (except when plotting\(eman actual negative delay is
+possible in that case).
 .TP
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
 Sinc resampler. Ignores the channel selector.
