@@ -492,7 +492,9 @@ No support for metadata.
 .PP
 Some effects do not support plotting.
 .PP
-When plotting the \fBnoise\fR effect, the added noise component is always random
-even when its outputs are duplicated (e.g. by the \fBremix\fR effect).
+When plotting an effects chain containing the \fBnoise\fR effect, a different
+random sequence is generated for each output channel regardless of whether the
+noise should be correlated between outputs. Summing correlated noise works
+correctly.
 .SH LICENSE
 This software is released under the ISC license.

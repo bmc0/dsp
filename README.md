@@ -574,8 +574,10 @@ To load the LADSPA module at user login include settings in
 
 * No support for metadata.
 * Some effects do not support plotting.
-* When plotting the `noise` effect, the added noise component is always random
-  even when its outputs are duplicated (e.g. by the `remix` effect).
+* When plotting an effects chain containing the `noise` effect, a different
+  random sequence is generated for each output channel regardless of whether the
+  noise should be correlated between outputs. Summing correlated noise works
+  correctly.
 
 ### License
 

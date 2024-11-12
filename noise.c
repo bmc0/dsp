@@ -41,10 +41,16 @@ void noise_effect_plot(struct effect *e, int i)
 {
 	struct noise_state *state = (struct noise_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)", k, i, k, i, e->ostream.fs);
-		if (GET_BIT(e->channel_selector, k))
-			printf("+%.15e*((rand(0)-rand(0))+j*(rand(0)-rand(0)))/sqrt(2.0)", state->mult*PM_RAND_MAX);
-		putchar('\n');
+		if (GET_BIT(e->channel_selector, k)) {
+			printf("H%d_%d_lw=NaN\n", k, i);
+			printf("H%d_%d_lv=0\n", k, i);
+			printf("H%d_%d_tpdf(w)=(w==H%d_%d_lw)?H%d_%d_lv:"
+				"(H%d_%d_lw=w, H%d_%d_lv=%.15e*((rand(0)-rand(0))+j*(rand(0)-rand(0))))\n",
+				k, i, k, i, k, i, k, i, k, i, state->mult*PM_RAND_MAX*M_SQRT1_2);
+			printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)+H%d_%d_tpdf(w)\n", k, i, k, i, e->ostream.fs, k, i);
+		}
+		else
+			printf("H%d_%d(w)=Ht%d_%d(w*%d/2.0/pi)\n", k, i, k, i, e->ostream.fs);
 	}
 }
 
