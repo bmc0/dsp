@@ -22,64 +22,73 @@
 #include "gain.h"
 #include "util.h"
 
-struct gain_state {
-	sample_t v;
-};
-
 sample_t * gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, k, samples = *frames * e->ostream.channels;
-	struct gain_state *state = (struct gain_state *) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels)
-		for (k = 0; k < e->ostream.channels; ++k)
-			if (GET_BIT(e->channel_selector, k))
-				ibuf[i + k] *= state->v;
+	const ssize_t samples = *frames * e->ostream.channels;
+	sample_t *state = (sample_t *) e->data;
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels)
+		for (int k = 0; k < e->ostream.channels; ++k)
+			ibuf[i + k] *= state[k];
 	return ibuf;
 }
 
 sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, k, samples = *frames * e->ostream.channels;
-	struct gain_state *state = (struct gain_state *) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels)
-		for (k = 0; k < e->ostream.channels; ++k)
-			if (GET_BIT(e->channel_selector, k))
-				ibuf[i + k] += state->v;
+	const ssize_t samples = *frames * e->ostream.channels;
+	sample_t *state = (sample_t *) e->data;
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels)
+		for (int k = 0; k < e->ostream.channels; ++k)
+			ibuf[i + k] += state[k];
 	return ibuf;
 }
 
 void gain_effect_plot(struct effect *e, int i)
 {
-	struct gain_state *state = (struct gain_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k) {
-		if (GET_BIT(e->channel_selector, k))
-			printf("H%d_%d(w)=%.15e\n", k, i, state->v);
-		else
-			printf("H%d_%d(w)=1.0\n", k, i);
-	}
+	sample_t *state = (sample_t *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		printf("H%d_%d(w)=%.15e\n", k, i, state[k]);
 }
 
 void add_effect_plot(struct effect *e, int i)
 {
-	struct gain_state *state = (struct gain_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k) {
-		if (GET_BIT(e->channel_selector, k))
-			printf("H%d_%d(w)=(w==0.0)?1.0+%.15e:1.0\n", k, i, state->v);
-		else
-			printf("H%d_%d(w)=1.0\n", k, i);
-	}
+	sample_t *state = (sample_t *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		printf("H%d_%d(w)=(w==0.0)?1.0+%.15e:1.0\n", k, i, state[k]);
 }
 
 void gain_effect_destroy(struct effect *e)
 {
 	free(e->data);
-	free(e->channel_selector);
+}
+
+struct effect * gain_effect_merge(struct effect *dest, struct effect *src)
+{
+	if (dest->merge == src->merge) {
+		sample_t *dest_state = (sample_t *) dest->data;
+		sample_t *src_state = (sample_t *) src->data;
+		for (int k = 0; k < dest->ostream.channels; ++k)
+			dest_state[k] *= src_state[k];
+		return dest;
+	}
+	return NULL;
+}
+
+struct effect * add_effect_merge(struct effect *dest, struct effect *src)
+{
+	if (dest->merge == src->merge) {
+		sample_t *dest_state = (sample_t *) dest->data;
+		sample_t *src_state = (sample_t *) src->data;
+		for (int k = 0; k < dest->ostream.channels; ++k)
+			dest_state[k] += src_state[k];
+		return dest;
+	}
+	return NULL;
 }
 
 struct effect * gain_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
-	struct gain_state *state;
+	sample_t *state;
 	double v;
 	char *endptr;
 
@@ -111,13 +120,24 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_SELECTOR(istream->channels);
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->run = (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) ? add_effect_run : gain_effect_run;
-	e->plot = (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) ? add_effect_plot : gain_effect_plot;
+	sample_t v_noop;
+	if (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) {
+		v_noop = 0.0;
+		e->run = add_effect_run;
+		e->plot = add_effect_plot;
+		e->merge = add_effect_merge;
+	}
+	else {
+		v_noop = 1.0;
+		e->opt_info |= OPT_INFO_REORDERABLE;
+		e->run = gain_effect_run;
+		e->plot = gain_effect_plot;
+		e->merge = gain_effect_merge;
+	}
 	e->destroy = gain_effect_destroy;
-	state = calloc(1, sizeof(struct gain_state));
-	state->v = v;
+	state = calloc(istream->channels, sizeof(sample_t));
+	for (int k = 0; k < istream->channels; ++k)
+		state[k] = (GET_BIT(channel_selector, k)) ? v : v_noop;
 	e->data = state;
 	return e;
 }

@@ -96,6 +96,7 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->opt_info |= OPT_INFO_REORDERABLE;
 	e->run = delay_effect_run;
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;

@@ -288,6 +288,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->opt_info |= OPT_INFO_REORDERABLE;
 
 	if (filter_frames <= MAX_DIRECT_LEN || force_direct) {
 		e->run = fir_direct_effect_run;

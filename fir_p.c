@@ -263,6 +263,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->opt_info |= OPT_INFO_REORDERABLE;
 	e->run = fir_p_effect_run;
 	e->reset = fir_p_effect_reset;
 	e->plot = fir_p_effect_plot;

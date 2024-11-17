@@ -171,6 +171,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->opt_info |= OPT_INFO_REORDERABLE;
 	e->run = decorrelate_effect_run;
 	e->reset = decorrelate_effect_reset;
 	e->plot = decorrelate_effect_plot;

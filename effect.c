@@ -41,6 +41,8 @@
 #include "ladspa_host.h"
 #include "stats.h"
 
+#define DO_EFFECTS_CHAIN_OPTIMIZE 1
+
 static const struct effect_info effects[] = {
 	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_LOWPASS_1 },
 	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init,    BIQUAD_HIGHPASS_1 },
@@ -116,7 +118,10 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 	e->next = NULL;
 }
 
-int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *initial_channel_mask, const char *dir)
+static int build_effects_chain_block(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
+static int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, const char *, const char *, const char *);
+
+static int build_effects_chain_block(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *initial_channel_mask, const char *dir)
 {
 	int i, k = 0, allow_fail = 0, last_stream_channels = stream->channels;
 	char *channel_selector, *channel_mask;
@@ -203,7 +208,7 @@ int build_effects_chain(int argc, const char *const *argv, struct effects_chain 
 				LOG_S(LL_ERROR, "error: missing '}'");
 				goto fail;
 			}
-			if (build_effects_chain(i - k - 2, &argv[k + 1], chain, stream, channel_selector, dir))
+			if (build_effects_chain_block(i - k - 2, &argv[k + 1], chain, stream, channel_selector, dir))
 				goto fail;
 			k = i;
 			continue;
@@ -267,7 +272,7 @@ int build_effects_chain(int argc, const char *const *argv, struct effects_chain 
 	return 1;
 }
 
-int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, const char *path)
+static int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, const char *path)
 {
 	char **argv = NULL, *tmp, *d = NULL, *p, *c;
 	int i, ret = 0, argc = 0;
@@ -288,7 +293,7 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 	else
 		*tmp = '\0';
 	LOG_FMT(LL_VERBOSE, "info: begin effects file: %s", p);
-	if (build_effects_chain(argc, (const char *const *) argv, chain, stream, channel_mask, d))
+	if (build_effects_chain_block(argc, (const char *const *) argv, chain, stream, channel_mask, d))
 		goto fail;
 	LOG_FMT(LL_VERBOSE, "info: end effects file: %s", p);
 	done:
@@ -303,6 +308,59 @@ int build_effects_chain_from_file(struct effects_chain *chain, struct stream_inf
 	fail:
 	ret = 1;
 	goto done;
+}
+
+static void effects_chain_optimize(struct effects_chain *chain)
+{
+#if DO_EFFECTS_CHAIN_OPTIMIZE
+	ssize_t chain_len = 0, chain_len_opt = 0;
+	for (struct effect *e = chain->head; e; e = e->next) ++chain_len;
+	struct effect *m_dest = chain->head;
+	while (m_dest) {
+		if (m_dest->merge) {
+			struct effect *prev = m_dest;
+			struct effect *m_src = m_dest->next;
+			while (m_src) {
+				if (m_src->istream.fs != m_dest->istream.fs
+					|| m_src->istream.channels != m_dest->istream.channels
+					|| m_src->ostream.fs != m_dest->ostream.fs
+					|| m_src->ostream.channels != m_dest->ostream.channels
+					) break;
+				if (m_src->merge == NULL) {
+					if (m_src->opt_info & OPT_INFO_REORDERABLE) goto skip;
+					break;
+				}
+				if (m_dest->merge(m_dest, m_src)) {
+					/* LOG_FMT(LL_VERBOSE, "optimize: merged effect: %s <- %s", m_dest->name, m_src->name); */
+					struct effect *tmp = m_src->next;
+					destroy_effect(m_src);
+					if (tmp == NULL) chain->tail = prev;
+					prev->next = m_src = tmp;
+				}
+				else {
+					skip:
+					prev = m_src;
+					m_src = m_src->next;
+				}
+			}
+		}
+		m_dest = m_dest->next;
+	}
+	for (struct effect *e = chain->head; e; e = e->next) ++chain_len_opt;
+	if (chain_len_opt < chain_len)
+		LOG_FMT(LL_VERBOSE, "optimize: info: reduced number of effects from %zd to %zd", chain_len, chain_len_opt);
+#else
+	return;
+#endif
+}
+
+int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
+{
+	int r;
+	if ((r = build_effects_chain_block(argc, argv, chain, stream, NULL, dir)))
+		return r;
+	effects_chain_optimize(chain);
+	return 0;
 }
 
 ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames, int in_channels)

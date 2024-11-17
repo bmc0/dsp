@@ -629,7 +629,7 @@ static void handle_tstp(int is_paused)
 		destroy_effects_chain(&chain); \
 		stream.fs = in_codecs.head->fs; \
 		stream.channels = in_codecs.head->channels; \
-		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL)) \
+		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL)) \
 			cleanup_and_exit(1); \
 	} while (0)
 
@@ -712,7 +712,7 @@ int main(int argc, char *argv[])
 	chain_argc = argc - optind;
 	stream.fs = in_codecs.head->fs;
 	stream.channels = in_codecs.head->channels;
-	if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
+	if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 		cleanup_and_exit(1);
 
 	if (plot)

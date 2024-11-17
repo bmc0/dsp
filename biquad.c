@@ -262,31 +262,40 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 
 sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t samples = *frames * e->ostream.channels, i, k;
-	struct biquad_state **state = (struct biquad_state **) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels)
-		for (k = 0; k < e->ostream.channels; ++k)
-			if (state[k])
-				ibuf[i + k] = biquad(state[k], ibuf[i + k]);
+	const ssize_t samples = *frames * e->ostream.channels;
+	struct biquad_state *state = (struct biquad_state *) e->data;
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels)
+		for (int k = 0; k < e->ostream.channels; ++k)
+			if (GET_BIT(e->channel_selector, k))
+				ibuf[i + k] = biquad(&state[k], ibuf[i + k]);
+	return ibuf;
+}
+
+sample_t * biquad_effect_run_all(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+{
+	const ssize_t samples = *frames * e->ostream.channels;
+	struct biquad_state *state = (struct biquad_state *) e->data;
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels)
+		for (int k = 0; k < e->ostream.channels; ++k)
+			ibuf[i + k] = biquad(&state[k], ibuf[i + k]);
 	return ibuf;
 }
 
 void biquad_effect_reset(struct effect *e)
 {
-	int i;
-	struct biquad_state **state = (struct biquad_state **) e->data;
-	for (i = 0; i < e->ostream.channels; ++i)
-		if (state[i])
-			biquad_reset(state[i]);
+	struct biquad_state *state = (struct biquad_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		if (GET_BIT(e->channel_selector, k))
+			biquad_reset(&state[k]);
 }
 
 void biquad_effect_plot(struct effect *e, int i)
 {
-	struct biquad_state **state = (struct biquad_state **) e->data;
+	struct biquad_state *state = (struct biquad_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		if (state[k]) {
+		if (GET_BIT(e->channel_selector, k)) {
 			printf("H%d_%d(w)=(abs(w)<=pi)?(" BIQUAD_PLOT_FMT "):0/0\n",
-				k, i, BIQUAD_PLOT_FMT_ARGS(state[k]));
+				k, i, BIQUAD_PLOT_FMT_ARGS(&state[k]));
 		}
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
@@ -295,11 +304,42 @@ void biquad_effect_plot(struct effect *e, int i)
 
 void biquad_effect_destroy(struct effect *e)
 {
-	int i;
-	struct biquad_state **state = (struct biquad_state **) e->data;
-	for (i = 0; i < e->istream.channels; ++i)
-		free(state[i]);
-	free(state);
+	free(e->data);
+	free(e->channel_selector);
+}
+
+static int biquad_effect_can_merge(struct effect *dest, struct effect *src)
+{
+	if (dest->merge != src->merge) return 0;
+	for (int k = 0; k < dest->ostream.channels; ++k)
+		if (GET_BIT(dest->channel_selector, k) && GET_BIT(src->channel_selector, k))
+			return 0;
+	return 1;
+}
+
+static void biquad_effect_set_run_func(struct effect *e)
+{
+	const int n_ch = e->ostream.channels;
+	const int n_sel = num_bits_set(e->channel_selector, n_ch);
+	if (n_sel == n_ch) e->run = biquad_effect_run_all;
+	else e->run = biquad_effect_run;
+}
+
+struct effect * biquad_effect_merge(struct effect *dest, struct effect *src)
+{
+	if (biquad_effect_can_merge(dest, src)) {
+		struct biquad_state *dest_state = (struct biquad_state *) dest->data;
+		struct biquad_state *src_state = (struct biquad_state *) src->data;
+		for (int k = 0; k < dest->ostream.channels; ++k) {
+			if (GET_BIT(src->channel_selector, k)) {
+				SET_BIT(dest->channel_selector, k);
+				memcpy(&dest_state[k], &src_state[k], sizeof(struct biquad_state));
+			}
+		}
+		biquad_effect_set_run_func(dest);
+		return dest;
+	}
+	return NULL;
 }
 
 #define GET_ARG(v, str, name) \
@@ -343,7 +383,7 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	int i, type, width_type = BIQUAD_WIDTH_Q;
 	double arg0 = 0.0, arg1 = 0.0, arg2 = 0.0, arg3 = 0.0;
 	double b0 = 0.0, b1 = 0.0, b2 = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
-	struct biquad_state **state;
+	struct biquad_state *state;
 	struct effect *e;
 	char *endptr;
 
@@ -428,18 +468,21 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->run = biquad_effect_run;
+	e->channel_selector = NEW_SELECTOR(istream->channels);
+	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	e->opt_info |= OPT_INFO_REORDERABLE;
+	biquad_effect_set_run_func(e);
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;
 	e->destroy = biquad_effect_destroy;
-	state = calloc(istream->channels, sizeof(struct biquad_state *));
+	e->merge = biquad_effect_merge;
+	state = calloc(istream->channels, sizeof(struct biquad_state));
 	for (i = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
-			state[i] = calloc(1, sizeof(struct biquad_state));
 			if (type == BIQUAD_BIQUAD)
-				biquad_init(state[i], b0, b1, b2, a0, a1, a2);
+				biquad_init(&state[i], b0, b1, b2, a0, a1, a2);
 			else
-				biquad_init_using_type(state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
+				biquad_init_using_type(&state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
 		}
 	}
 	e->data = state;

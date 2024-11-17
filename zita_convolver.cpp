@@ -229,6 +229,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = (char *) NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	e->opt_info |= OPT_INFO_REORDERABLE;
 	e->run = zita_convolver_effect_run;
 	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;
