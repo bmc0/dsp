@@ -28,7 +28,7 @@ struct ap1_state {
 
 struct ap2_state {
 	sample_t c0, c1;
-	sample_t i0, i1, o0, o1;
+	sample_t i0, o0, i1, o1;
 };
 
 struct ap3_state {
@@ -49,8 +49,8 @@ void cap5_init(struct cap5_state *, double, double);
 
 static inline sample_t ap1_run(struct ap1_state *state, sample_t s)
 {
-	sample_t r = state->c0 * (s - state->o0)
-		+ state->i0;
+	sample_t r = state->i0
+		+ state->c0 * (s - state->o0);
 
 	state->i0 = s;
 	state->o0 = r;
@@ -60,9 +60,9 @@ static inline sample_t ap1_run(struct ap1_state *state, sample_t s)
 
 static inline sample_t ap2_run(struct ap2_state *state, sample_t s)
 {
-	sample_t r = state->c1 * (s - state->o1)
+	sample_t r = state->i1
 		+ state->c0 * (state->i0 - state->o0)
-		+ state->i1;
+		+ state->c1 * (s - state->o1);
 
 	state->i1 = state->i0;
 	state->i0 = s;
