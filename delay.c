@@ -25,44 +25,74 @@
 
 struct delay_state {
 	sample_t **bufs;
-	ssize_t len, p;
-	int negative;
+	ssize_t len, p, drain_frames;
+	char negative, is_draining, buf_full;
 };
 
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
+	if (!state->buf_full && state->p + *frames >= state->len)
+		state->buf_full = 1;
 	for (ssize_t i = 0; i < *frames; ++i) {
-		for (ssize_t k = 0; k < e->istream.channels; ++k) {
+		sample_t *ibuf_p = &ibuf[i * e->istream.channels];
+		sample_t *obuf_p = &obuf[i * e->istream.channels];
+		for (int k = 0; k < e->istream.channels; ++k) {
 			if (state->bufs[k]) {
-				obuf[i * e->istream.channels + k] = state->bufs[k][state->p];
-				state->bufs[k][state->p] = ibuf[i * e->istream.channels + k];
+				obuf_p[k] = state->bufs[k][state->p];
+				state->bufs[k][state->p] = (ibuf) ? ibuf_p[k] : 0.0;
 			}
 			else
-				obuf[i * e->istream.channels + k] = ibuf[i * e->istream.channels + k];
+				obuf_p[k] = (ibuf) ? ibuf_p[k] : 0.0;
 		}
 		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
 	}
 	return obuf;
 }
 
+ssize_t delay_effect_delay(struct effect *e)
+{
+	struct delay_state *state = (struct delay_state *) e->data;
+	return (state->negative) ? (state->buf_full) ? state->len : state->p : 0;
+}
+
 void delay_effect_reset(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
+	state->p = 0;
+	state->buf_full = 0;
 	for (int k = 0; k < e->istream.channels; ++k)
 		if (state->bufs[k])
 			memset(state->bufs[k], 0, state->len * sizeof(sample_t));
-	state->p = 0;
 }
 
 void delay_effect_plot(struct effect *e, int i)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0; k < e->istream.channels; ++k) {
 		if ((state->negative) ? !state->bufs[k] : !!state->bufs[k])
 			printf("H%d_%d(w)=exp(-j*w*%zd)\n", k, i, (state->negative) ? -state->len : state->len);
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
+	}
+}
+
+void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+{
+	struct delay_state *state = (struct delay_state *) e->data;
+	if (!state->buf_full && state->p == 0)
+		*frames = -1;
+	else {
+		if (!state->is_draining) {
+			state->drain_frames = state->len;
+			state->is_draining = 1;
+		}
+		if (state->drain_frames > 0) {
+			*frames = MINIMUM(*frames, state->drain_frames);
+			state->drain_frames -= *frames;
+			e->run(e, frames, NULL, obuf);
+		}
+		else *frames = -1;
 	}
 }
 
@@ -98,8 +128,10 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->opt_info |= OPT_INFO_REORDERABLE;
 	e->run = delay_effect_run;
+	e->delay = delay_effect_delay;
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;
+	e->drain = delay_effect_drain;
 	e->destroy = delay_effect_destroy;
 
 	LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd sample%s)",
