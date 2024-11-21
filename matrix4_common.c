@@ -113,77 +113,68 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 }
 
 struct matrix4_delay_state {
-	char has_output, is_draining;
-	int n_ch;
 	sample_t *buf;
 	ssize_t len, p, drain_frames;
+	int n_ch;
+	char buf_full, is_draining;
 };
 
 sample_t * matrix4_delay_surr_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
 	sample_t *ibuf_p = &ibuf[e->istream.channels-2];
-	for (ssize_t i = 0; i < *frames; ++i) {
+	if (!state->buf_full && state->p + *frames >= state->len)
+		state->buf_full = 1;
+	for (ssize_t i = *frames; i > 0; --i) {
 		sample_t *b = &state->buf[state->p*2];
 		const sample_t s0 = ibuf_p[0], s1 = ibuf_p[1];
 		ibuf_p[0] = b[0];
 		ibuf_p[1] = b[1];
 		b[0] = s0;
 		b[1] = s1;
-		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
 		ibuf_p += e->istream.channels;
+		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
 	}
 	return ibuf;
 }
 
 sample_t * matrix4_delay_front_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t oframes = 0;
 	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	for (ssize_t i = 0; i < *frames; ++i) {
-		int k;
+	sample_t *ibuf_p = ibuf;
+	if (!state->buf_full && state->p + *frames >= state->len)
+		state->buf_full = 1;
+	for (ssize_t i = *frames; i > 0; --i) {
 		sample_t *b = &state->buf[state->p*state->n_ch];
-		sample_t *ibuf_p = &ibuf[i*e->istream.channels];
-		sample_t *obuf_p = &obuf[oframes*e->istream.channels];
-		if (state->has_output) {
-			for (k = 0; k < state->n_ch; ++k) {
-				obuf_p[k] = b[k];
-				b[k] = (ibuf) ? ibuf_p[k] : 0.0;
-			}
-			obuf_p[k+0] = (ibuf) ? ibuf_p[k+0] : 0.0;
-			obuf_p[k+1] = (ibuf) ? ibuf_p[k+1] : 0.0;
-			++oframes;
+		for (int k = 0; k < state->n_ch; ++k) {
+			const sample_t s = ibuf_p[k];
+			ibuf_p[k] = b[k];
+			b[k] = s;
 		}
-		else {
-			for (k = 0; k < state->n_ch; ++k) {
-				b[k] = (ibuf) ? ibuf_p[k] : 0.0;
-			#ifdef SYMMETRIC_IO
-				obuf_p[k] = 0.0;
-			#endif
-			}
-		#ifdef SYMMETRIC_IO
-			obuf_p[k+0] = 0.0;
-			obuf_p[k+1] = 0.0;
-		#endif
-		}
+		ibuf_p += e->istream.channels;
 		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
-		if (state->p == 0)
-			state->has_output = 1;
 	}
-	*frames = oframes;
-	return obuf;
+	return ibuf;
 }
 
 ssize_t matrix4_delay_front_effect_delay(struct effect *e)
 {
 	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	return (state->has_output) ? state->len : state->p;
+	return (state->buf_full) ? state->len : state->p;
 }
 
-void matrix4_delay_front_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+void matrix4_delay_effect_reset(struct effect *e)
 {
 	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	if (!state->has_output && state->p == 0)
+	state->p = 0;
+	state->buf_full = 0;
+	memset(state->buf, 0, state->len * state->n_ch * sizeof(sample_t));
+}
+
+void matrix4_delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+{
+	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
+	if (!state->buf_full && state->p == 0)
 		*frames = -1;
 	else {
 		if (!state->is_draining) {
@@ -193,19 +184,32 @@ void matrix4_delay_front_effect_drain(struct effect *e, ssize_t *frames, sample_
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			e->run(e, frames, NULL, obuf);
+			sample_t *obuf_p = obuf;
+			for (ssize_t i = *frames; i > 0; --i) {
+				int k;
+				sample_t *b = &state->buf[state->p*state->n_ch];
+				if (e->run == matrix4_delay_surr_effect_run) {
+					for (k = 0; k < e->istream.channels-2; ++k)
+						obuf_p[k] = 0.0;
+					obuf_p[k+0] = b[0];
+					obuf_p[k+1] = b[1];
+					b[0] = 0.0;
+					b[1] = 0.0;
+				}
+				else {
+					for (k = 0; k < state->n_ch; ++k) {
+						obuf_p[k] = b[k];
+						b[k] = 0.0;
+					}
+					obuf_p[k+0] = 0.0;
+					obuf_p[k+1] = 0.0;
+				}
+				obuf_p += e->istream.channels;
+				state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+			}
 		}
-		else
-			*frames = -1;
+		else *frames = -1;
 	}
-}
-
-void matrix4_delay_effect_reset(struct effect *e)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	state->p = 0;
-	state->has_output = 0;
-	memset(state->buf, 0, state->len * state->n_ch * sizeof(sample_t));
 }
 
 void matrix4_delay_effect_destroy(struct effect *e)
@@ -225,15 +229,14 @@ struct effect * matrix4_delay_effect_init(const struct effect_info *ei, const st
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	if (frames > 0) {
+	if (frames > 0)
 		e->run = matrix4_delay_surr_effect_run;
-	}
 	else {
 		e->run = matrix4_delay_front_effect_run;
 		e->delay = matrix4_delay_front_effect_delay;
-		e->drain = matrix4_delay_front_effect_drain;
 	}
 	e->reset = matrix4_delay_effect_reset;
+	e->drain = matrix4_delay_effect_drain;
 	e->destroy = matrix4_delay_effect_destroy;
 
 	struct matrix4_delay_state *state = calloc(1, sizeof(struct matrix4_delay_state));
