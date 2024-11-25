@@ -500,13 +500,9 @@ static inline sample_t clip(sample_t s)
 {
 	const sample_t a = fabs(s);
 	peak = MAXIMUM(a, peak);
-	if (s > 1.0) {
+	if (a > 1.0) {
 		++clip_count;
-		return 1.0;
-	}
-	else if (s < -1.0) {
-		++clip_count;
-		return -1.0;
+		return (signbit(s)) ? -1.0 : 1.0;
 	}
 	return s;
 }
