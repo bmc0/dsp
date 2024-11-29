@@ -34,20 +34,19 @@ sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	struct delay_state *state = (struct delay_state *) e->data;
 	if (!state->buf_full && state->p + *frames >= state->len)
 		state->buf_full = 1;
-	for (ssize_t i = 0; i < *frames; ++i) {
-		sample_t *ibuf_p = &ibuf[i * e->istream.channels];
-		sample_t *obuf_p = &obuf[i * e->istream.channels];
+	sample_t *ibuf_p = ibuf;
+	for (ssize_t i = *frames; i > 0; --i) {
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (state->bufs[k]) {
-				obuf_p[k] = state->bufs[k][state->p];
-				state->bufs[k][state->p] = (ibuf) ? ibuf_p[k] : 0.0;
+				const sample_t s = ibuf_p[k];
+				ibuf_p[k] = state->bufs[k][state->p];
+				state->bufs[k][state->p] = s;
 			}
-			else
-				obuf_p[k] = (ibuf) ? ibuf_p[k] : 0.0;
 		}
+		ibuf_p += e->istream.channels;
 		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
 	}
-	return obuf;
+	return ibuf;
 }
 
 ssize_t delay_effect_delay(struct effect *e)
@@ -90,7 +89,18 @@ void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			e->run(e, frames, NULL, obuf);
+			sample_t *obuf_p = obuf;
+			for (ssize_t i = *frames; i > 0; --i) {
+				for (int k = 0; k < e->istream.channels; ++k) {
+					if (state->bufs[k]) {
+						obuf_p[k] = state->bufs[k][state->p];
+						state->bufs[k][state->p] = 0.0;
+					}
+					else obuf_p[k] = 0.0;
+				}
+				obuf_p += e->istream.channels;
+				state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+			}
 		}
 		else *frames = -1;
 	}
@@ -115,7 +125,6 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-
 	ssize_t samples = parse_len(argv[1], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "delay", return NULL);
 	e = calloc(1, sizeof(struct effect));
