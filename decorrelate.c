@@ -148,23 +148,24 @@ void decorrelate_effect_destroy(struct effect *e)
 
 struct effect * decorrelate_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	int k = 1, j, n_stages = 5, mono = 0;
 	struct decorrelate_state *state;
 	struct effect *e;
 	char *endptr;
 
-	if (argc > 3) {
+	int arg_i = 1, mono = 0, n_stages = 5;
+	if (arg_i < argc && strcmp(argv[arg_i], "-m") == 0) {
+		mono = 1;
+		++arg_i;
+	}
+	if (arg_i < argc) {
+		n_stages = strtol(argv[arg_i], &endptr, 10);
+		CHECK_ENDPTR(argv[arg_i], endptr, "stages", return NULL);
+		CHECK_RANGE(n_stages > 0, "stages", return NULL);
+		++arg_i;
+	}
+	if (arg_i != argc) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
-	}
-	if (k < argc && strcmp(argv[k], "-m") == 0) {
-		mono = 1;
-		++k;
-	}
-	if (k < argc) {
-		n_stages = strtol(argv[k], &endptr, 10);
-		CHECK_ENDPTR(argv[k], endptr, "stages", return NULL);
-		CHECK_RANGE(n_stages > 0, "stages", return NULL);
 	}
 
 	e = calloc(1, sizeof(struct effect));
@@ -179,13 +180,13 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	state = calloc(1, sizeof(struct decorrelate_state));
 	state->n_stages = n_stages;
 	state->ap = calloc(istream->channels, sizeof(struct sch_ap_state *));
-	for (k = 0; k < istream->channels; ++k) {
+	for (int k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(channel_selector, k))
 			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
 	}
-	for (j = 0; j < n_stages; ++j) {
+	for (int j = 0; j < n_stages; ++j) {
 		const double d = (mono) ? RANDOM_FILTER_DELAY : 0.0;
-		for (k = 0; k < istream->channels; ++k) {
+		for (int k = 0; k < istream->channels; ++k) {
 			if (GET_BIT(channel_selector, k))
 				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY);
 		}

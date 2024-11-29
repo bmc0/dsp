@@ -26,32 +26,30 @@
 
 struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	ssize_t taps, i = 1, k;
-	sample_t *h;
 	char *endptr;
-	int use_fir_p = 0;
 	struct effect *e;
 
-	if (argc > 3 || argc < 2) {
+	int arg_i = 1, use_fir_p = 0;
+	if (argc == 3 && strcmp(argv[arg_i], "-p") == 0) {
+		use_fir_p = 1;
+		++arg_i;
+	}
+	else if (argc != 2) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	if (strcmp(argv[i], "-p") == 0) {
-		use_fir_p = 1;
-		++i;
-	}
-	taps = strtol(argv[i], &endptr, 10);
-	CHECK_ENDPTR(argv[i], endptr, "taps", return NULL);
+	const ssize_t taps = strtol(argv[arg_i], &endptr, 10);
+	CHECK_ENDPTR(argv[arg_i], endptr, "taps", return NULL);
 	if (taps < 3) {
 		LOG_FMT(LL_ERROR, "%s: error: taps must be > 3", argv[0]);
 		return NULL;
 	}
-	if (taps%2 == 0) {
+	if (taps % 2 == 0) {
 		LOG_FMT(LL_ERROR, "%s: error: taps must be odd", argv[0]);
 		return NULL;
 	}
-	h = calloc(taps, sizeof(sample_t));
-	for (i = 0, k = -taps/2; i < taps; ++i, ++k) {
+	sample_t *h = calloc(taps, sizeof(sample_t));
+	for (ssize_t i = 0, k = -taps / 2; i < taps; ++i, ++k) {
 		if (k%2 == 0)
 			h[i] = 0;
 		else {
