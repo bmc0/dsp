@@ -79,14 +79,15 @@ void biquad_reset(struct biquad_state *state)
 void biquad_init_using_type(struct biquad_state *b, int type, double fs, double arg0, double arg1, double arg2, double arg3, int width_type)
 {
 	double b0 = 1.0, b1 = 0.0, b2 = 0.0, a0 = 1.0, a1 = 0.0, a2 = 0.0;
-	if (type == BIQUAD_LINKWITZ_TRANSFORM) {
+	if (type == BIQUAD_LOWPASS_TRANSFORM || type == BIQUAD_HIGHPASS_TRANSFORM) {
 		const double fz = arg0, qz = arg1;
 		const double fp = arg2, qp = arg3;
 
 		const double w0z = 2*M_PI*fz / fs, w0p = 2*M_PI*fp / fs;
 		const double cos_w0z = cos(w0z), cos_w0p = cos(w0p);
 		const double alpha_z = sin(w0z) / (2.0*qz), alpha_p = sin(w0p) / (2.0*qp);
-		const double kz = 2.0/(1.0+cos_w0z), kp = 2.0/(1.0+cos_w0p);
+		const double kz = (type == BIQUAD_LOWPASS_TRANSFORM) ? 2.0/(1.0-cos_w0z) : 2.0/(1.0+cos_w0z);
+		const double kp = (type == BIQUAD_LOWPASS_TRANSFORM) ? 2.0/(1.0-cos_w0p) : 2.0/(1.0+cos_w0p);
 
 		b0 = (1.0 + alpha_z)*kz;
 		b1 = (-2.0 * cos_w0z)*kz;
@@ -109,7 +110,7 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 		}
 
 		const double a = pow(10.0, gain / 40.0);
-		const double w0 = 2.0*M_PI*f0 / fs;
+		const double w0 = 2*M_PI*f0 / fs;
 		const double sin_w0 = sin(w0), cos_w0 = cos(w0);
 
 		switch (width_type) {
@@ -422,8 +423,9 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 		if (ei->effect_number == BIQUAD_PEAK) CHECK_WIDTH_TYPE(BIQUAD_WIDTH_TEST_NO_SLOPE);
 		GET_ARG(arg2, argv[3], "gain");
 		break;
-	case BIQUAD_LINKWITZ_TRANSFORM:
-		INIT_COMMON(4, BIQUAD_LINKWITZ_TRANSFORM);
+	case BIQUAD_LOWPASS_TRANSFORM:
+	case BIQUAD_HIGHPASS_TRANSFORM:
+		INIT_COMMON(4, ei->effect_number);
 		GET_FREQ_ARG(arg0, argv[1], "fz");
 		GET_ARG(arg1, argv[2], "qz");
 		CHECK_RANGE(arg1 > 0.0, "qz", return NULL);

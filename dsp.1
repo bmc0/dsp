@@ -168,8 +168,18 @@ Second-order lowshelf filter.
 \fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
 Second-order highshelf filter.
 .TP
+\fBlowpass_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
+Second-order lowpass transformation filter. Cancels the poles defined by
+\fIfz\fR and \fIqz\fR and replaces them with new poles defined by \fIfp\fR and \fIqp\fR.
+Gain is unity at DC.
+.TP
+\fBhighpass_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
+Second-order highpass transformation filter. Also known as a Linkwitz
+transform (see http://www.linkwitzlab.com/filters.htm#9). Same as
+\fBlowpass_transform\fR except the gain is unity at Fs/2.
+.TP
 \fBlinkwitz_transform\fR \fIfz\fR[\fBk\fR] \fIqz\fR \fIfp\fR[\fBk\fR] \fIqp\fR
-Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+Alias for \fBhighpass_transform\fR.
 .TP
 \fBdeemph\fR
 Compact Disc de-emphasis filter.

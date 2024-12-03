@@ -185,8 +185,16 @@ Example:
 	Second-order lowshelf filter.
 * `highshelf f0[k] width[q|s|d|o|h|k] gain`  
 	Second-order highshelf filter.
+* `lowpass_transform fz[k] qz fp[k] qp`  
+	Second-order lowpass transformation filter. Cancels the poles defined by
+	`fz` and `qz` and replaces them with new poles defined by `fp` and `qp`.
+	Gain is unity at DC.
+* `highpass_transform fz[k] qz fp[k] qp`  
+	Second-order highpass transformation filter. Also known as a Linkwitz
+	transform (see http://www.linkwitzlab.com/filters.htm#9). Same as
+	`lowpass_transform` except the gain is unity at Fs/2.
 * `linkwitz_transform fz[k] qz fp[k] qp`  
-	Linkwitz transform (see http://www.linkwitzlab.com/filters.htm#9).
+	Alias for `highpass_transform`.
 * `deemph`  
 	Compact Disc de-emphasis filter.
 * `biquad b0 b1 b2 a0 a1 a2`  
