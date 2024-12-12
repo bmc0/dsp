@@ -298,9 +298,10 @@ Example:
 	If `-m` is given, the same filter parameters are used for all input
 	channels. The default number of stages is 5, which results in an
 	average group delay of about 9.5ms at high frequencies.
-* `noise level`  
+* `noise level[b]`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
-	(dBFS).
+	in dBFS if no suffix is given, or the effective precision in bits if the
+	`b` suffix is given.
 * `ladspa_host module_path plugin_label [control ...]`  
 	Apply a LADSPA plugin. Supports any number of input/output ports (with
 	the exception of zero output ports). If a plugin has one or zero input

@@ -26,6 +26,20 @@ struct noise_state {
 	sample_t mult;
 };
 
+double noise_parse_level(const char *s, char **endptr)
+{
+	const double v = strtod(s, endptr);
+	double l = pow(10.0, v/20.0);
+	if (*endptr != NULL && *endptr != s) {
+		if (**endptr == 'b') {
+			l = 2.0 / exp2(v);
+			++(*endptr);
+		}
+		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+	}
+	return l;
+}
+
 sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
@@ -72,7 +86,7 @@ struct effect * noise_effect_init(const struct effect_info *ei, const struct str
 		return NULL;
 	}
 
-	mult = pow(10.0, strtod(argv[1], &endptr) / 20.0) / PM_RAND_MAX;
+	mult = noise_parse_level(argv[1], &endptr) / PM_RAND_MAX;
 	CHECK_ENDPTR(argv[1], endptr, "level", return NULL);
 
 	e = calloc(1, sizeof(struct effect));

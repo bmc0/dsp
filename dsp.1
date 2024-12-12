@@ -311,9 +311,10 @@ If \fI\-m\fR is given, the same filter parameters are used for all input
 channels. The default number of stages is 5, which results in an
 average group delay of about 9.5ms at high frequencies.
 .TP
-\fBnoise\fR \fIlevel\fR
+\fBnoise\fR \fIlevel\fR[\fBb\fR]
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
-(dBFS).
+in dBFS if no suffix is given, or the effective precision in bits if the
+`\fBb\fR' suffix is given.
 .TP
 \fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
