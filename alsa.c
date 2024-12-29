@@ -266,6 +266,9 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 		}
 	}
 
+	if (hw_p) snd_pcm_hw_params_free(hw_p);
+	if (sw_p) snd_pcm_sw_params_free(sw_p);
+
 	#if DUMP_PCM_INFO
 		snd_output_t *output = NULL;
 		if (snd_output_stdio_attach(&output, stderr, 0) == 0)
@@ -295,8 +298,6 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	c->pause = alsa_pause;
 	c->destroy = alsa_destroy;
 	c->data = state;
-
-	snd_pcm_hw_params_free(hw_p);
 
 	return c;
 
