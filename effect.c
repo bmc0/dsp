@@ -106,7 +106,10 @@ const struct effect_info * get_effect_info(const char *name)
 
 void destroy_effect(struct effect *e)
 {
-	if (e->destroy != NULL) e->destroy(e);
+	if (e == NULL)
+		return;
+	if (e->destroy != NULL)
+		e->destroy(e);
 	free(e);
 }
 

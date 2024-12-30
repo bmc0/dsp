@@ -229,6 +229,8 @@ struct codec * init_codec(const struct codec_params *p_in)
 
 void destroy_codec(struct codec *c)
 {
+	if (c == NULL)
+		return;
 	c->destroy(c);
 	free(c);
 }
