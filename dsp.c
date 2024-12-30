@@ -241,8 +241,8 @@ static void cleanup_and_exit(int s)
 		sem_destroy(&ev_queue.items);
 	}
 	destroy_codec_list(&in_codecs);
-	if (out_codec_buf) out_codec_buf->destroy(out_codec_buf);
-	if (out_codec) destroy_codec(out_codec);
+	codec_write_buf_destroy(out_codec_buf);
+	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
 	free(buf1);
 	free(buf2);
@@ -428,10 +428,7 @@ static void print_io_info(struct codec *c, int ll, const char *n)
 static void get_delay_sec(double *chain_delay, double *out_delay)
 {
 	*chain_delay = get_effects_chain_delay(&chain);
-	if (out_codec_buf)
-		*out_delay = (double) out_codec_buf->delay(out_codec_buf) / out_codec->fs;
-	else
-		*out_delay = (double) out_codec->delay(out_codec) / out_codec->fs;
+	*out_delay = (double) codec_write_buf_delay(out_codec_buf) / out_codec->fs;
 }
 
 static ssize_t get_delay_frames(double fs, double chain_delay_s, double out_delay_s)
@@ -518,12 +515,7 @@ static void write_out(ssize_t frames, sample_t *buf, int do_dither)
 		for (ssize_t i = 0; i < samples; ++i)
 			buf[i] = clip(buf[i]);
 	}
-	if (out_codec_buf)
-		out_codec_buf->write(out_codec_buf, buf, frames);
-	else {
-		if (out_codec->write(out_codec, buf, frames) != frames)
-			write_buf_error_cb(CODEC_BUF_ERROR_SHORT_WRITE);
-	}
+	codec_write_buf_write(out_codec_buf, buf, frames, write_buf_error_cb);
 }
 
 static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence, int pause_state)
@@ -541,11 +533,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 	}
 	if ((s = in->seek(in, s)) >= 0) {
 		reset_effects_chain(&chain);
-		if (out_codec_buf) {
-			out_codec_buf->drop(out_codec_buf, pause_state);
-			if (pause_state) out_codec_buf->sync(out_codec_buf);
-		}
-		else out_codec->drop(out_codec);
+		codec_write_buf_drop(out_codec_buf, pause_state, pause_state);
 		return s;
 	}
 	return pos;
@@ -554,11 +542,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 static void do_pause(struct codec *in, int pause_state, int sync)
 {
 	if (in) in->pause(in, pause_state);
-	if (out_codec_buf) {
-		out_codec_buf->pause(out_codec_buf, pause_state);
-		if (sync) out_codec_buf->sync(out_codec_buf);
-	}
-	else out_codec->pause(out_codec, pause_state);
+	codec_write_buf_pause(out_codec_buf, pause_state, sync);
 }
 
 static struct codec * init_out_codec(struct codec_params *out_p, struct stream_info *stream, ssize_t frames, int write_buf_blocks)
@@ -584,11 +568,7 @@ static struct codec * init_out_codec(struct codec_params *out_p, struct stream_i
 	out_codec->frames = frames;
 	print_io_info(out_codec, LL_NORMAL, "output");
 
-	if (write_buf_blocks > 1 && !(out_codec->hints & CODEC_HINT_NO_OUT_BUF))
-		out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks, write_buf_error_cb);
-	if (out_codec_buf)
-		LOG_S(LL_VERBOSE, "info: write buffer enabled");
-
+	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks);
 	return out_codec;
 }
 
@@ -633,7 +613,7 @@ static void handle_tstp(int is_paused)
 	do { \
 		if (out_codec->fs != stream.fs || out_codec->channels != stream.channels) { \
 			LOG_S(LL_NORMAL, "info: output sample rate and/or channels changed; reopening output"); \
-			if (out_codec_buf) out_codec_buf->destroy(out_codec_buf); \
+			codec_write_buf_destroy(out_codec_buf); \
 			out_codec_buf = NULL; \
 			destroy_codec(out_codec); \
 			if (init_out_codec(&out_p, &stream, -1, write_buf_blocks) == NULL) \
@@ -802,8 +782,7 @@ int main(int argc, char *argv[])
 							pos = do_seek(in_codecs.head, pos, 0, SEEK_SET, is_paused);
 							break;
 						case 'n':
-							if (out_codec_buf) out_codec_buf->drop(out_codec_buf, is_paused);
-							else out_codec->drop(out_codec);
+							codec_write_buf_drop(out_codec_buf, is_paused, 0);
 							reset_effects_chain(&chain);
 							goto next_input;
 						case 'c':
@@ -838,8 +817,7 @@ int main(int argc, char *argv[])
 							signal_effects_chain(&chain);
 							break;
 						case 'q':
-							if (out_codec_buf) out_codec_buf->drop(out_codec_buf, 1);
-							else out_codec->drop(out_codec);
+							codec_write_buf_drop(out_codec_buf, 1, 0);
 							goto end_rw_loop;
 						}
 						break;
@@ -883,7 +861,6 @@ int main(int argc, char *argv[])
 	got_term_sig:
 	clear_progress(1);
 	LOG_FMT(LL_NORMAL, "info: signal %d: terminating...", term_sig);
-	if (out_codec_buf) out_codec_buf->drop(out_codec_buf, 1);
-	else if (out_codec) out_codec->drop(out_codec);
+	codec_write_buf_drop(out_codec_buf, 1, 0);
 	goto end_rw_loop;
 }
