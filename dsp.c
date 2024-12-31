@@ -515,7 +515,7 @@ static void write_out(ssize_t frames, sample_t *buf, int do_dither)
 		for (ssize_t i = 0; i < samples; ++i)
 			buf[i] = clip(buf[i]);
 	}
-	codec_write_buf_write(out_codec_buf, buf, frames, write_buf_error_cb);
+	codec_write_buf_write(out_codec_buf, buf, frames);
 }
 
 static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence, int pause_state)
@@ -568,7 +568,7 @@ static struct codec * init_out_codec(struct codec_params *out_p, struct stream_i
 	out_codec->frames = frames;
 	print_io_info(out_codec, LL_NORMAL, "output");
 
-	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks);
+	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks, write_buf_error_cb);
 	return out_codec;
 }
 

@@ -30,7 +30,6 @@
 
 struct write_block {
 	sample_t *data;
-	void (*error_cb)(int);
 	int frames;
 };
 
@@ -70,7 +69,7 @@ void codec_write_buf_cmd_push(void *state_data, enum codec_write_buf_cmd cmd)
 		while (sem_wait(&state->queue.sync) != 0);
 }
 
-void codec_write_buf_push(void *state_data, sample_t *data, ssize_t frames, void (*error_cb)(int))
+void codec_write_buf_push(void *state_data, sample_t *data, ssize_t frames)
 {
 	struct write_state *state = (struct write_state *) state_data;
 	while (frames > 0) {
@@ -81,7 +80,6 @@ void codec_write_buf_push(void *state_data, sample_t *data, ssize_t frames, void
 		if (!state->queue.error) {
 			struct write_block *block = &state->queue.block.b[state->queue.block.back];
 			block->frames = block_frames;
-			block->error_cb = error_cb;
 			memcpy(block->data, data, block_samples * sizeof(sample_t));
 			state->queue.block.back = (state->queue.block.back+1 < state->queue.block.len) ? state->queue.block.back+1 : 0;
 			state->queue.block.fill_frames += block_frames;
@@ -193,8 +191,8 @@ static void * write_worker(void *arg)
 					state->queue.error = 1;
 					write_queue_drop(state);
 					pthread_mutex_unlock(&state->queue.lock);
-					if (block->error_cb)
-						block->error_cb(CODEC_BUF_ERROR_SHORT_WRITE);
+					if (wb->error_cb)
+						wb->error_cb(CODEC_BUF_ERROR_SHORT_WRITE);
 				}
 			}
 			sem_post(&state->queue.block.slots);
@@ -242,10 +240,11 @@ void codec_write_buf_destroy_nw(struct codec_write_buf *wb)
 	write_state_destroy(state);
 }
 
-struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_frames, int n_blocks)
+struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_frames, int n_blocks, void (*error_cb)(int))
 {
 	struct codec_write_buf *wb = calloc(1, sizeof(struct codec_write_buf));
 	wb->codec = codec;
+	wb->error_cb = error_cb;
 
 	if (n_blocks < 2 || (codec->hints & CODEC_HINT_NO_OUT_BUF))
 		return wb;

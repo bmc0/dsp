@@ -36,11 +36,12 @@ enum codec_write_buf_cmd {
 
 struct codec_write_buf {
 	struct codec *codec;
+	void (*error_cb)(int);
 	void *data;
 };
 
 void codec_write_buf_cmd_push(void *, enum codec_write_buf_cmd);
-void codec_write_buf_push(void *, sample_t *, ssize_t, void (*)(int));
+void codec_write_buf_push(void *, sample_t *, ssize_t);
 ssize_t codec_write_buf_delay_nw(struct codec_write_buf *);
 void codec_write_buf_destroy_nw(struct codec_write_buf *);
 
@@ -50,14 +51,14 @@ enum {
 	CODEC_BUF_ERROR_SHORT_WRITE = 1,
 };
 
-struct codec_write_buf * codec_write_buf_init(struct codec *, int, int);
+struct codec_write_buf * codec_write_buf_init(struct codec *, int, int, void (*)(int));
 
-static inline void codec_write_buf_write(struct codec_write_buf *wb, sample_t *data, ssize_t frames, void (*error_cb)(int))
+static inline void codec_write_buf_write(struct codec_write_buf *wb, sample_t *data, ssize_t frames)
 {
-	if (wb->data) codec_write_buf_push(wb->data, data, frames, error_cb);
+	if (wb->data) codec_write_buf_push(wb->data, data, frames);
 	else {
 		if (wb->codec->write(wb->codec, data, frames) != frames)
-			error_cb(CODEC_BUF_ERROR_SHORT_WRITE);
+			wb->error_cb(CODEC_BUF_ERROR_SHORT_WRITE);
 	}
 }
 
