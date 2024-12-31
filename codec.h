@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -36,7 +36,7 @@ enum {
 enum {
 	CODEC_HINT_INTERACTIVE = 1<<0,
 	CODEC_HINT_CAN_DITHER  = 1<<1,
-	CODEC_HINT_NO_OUT_BUF  = 1<<2,
+	CODEC_HINT_NO_BUF      = 1<<2,
 	CODEC_HINT_REALTIME    = 1<<3,
 };
 
@@ -72,7 +72,7 @@ struct codec_params {
 	.endian = CODEC_ENDIAN_DEFAULT, \
 	.mode = mode_arg, \
 	.block_frames = DEFAULT_BLOCK_FRAMES, \
-	.buf_ratio = DEFAULT_BUF_RATIO, \
+	.buf_ratio = ((mode_arg) == CODEC_MODE_WRITE) ? DEFAULT_OUTPUT_BUF_RATIO : DEFAULT_INPUT_BUF_RATIO, \
 }
 
 #define CODEC_DEFAULT_DEVICE "default"

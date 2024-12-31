@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,11 +33,13 @@ enum {
 #define LOG_FMT(l, fmt, ...) do { if (LOGLEVEL(l)) dsp_log_printf("%s: " fmt "\n", dsp_globals.prog_name, __VA_ARGS__); } while (0)
 #define LOG_S(l, s) do { if (LOGLEVEL(l)) dsp_log_printf("%s: %s\n", dsp_globals.prog_name, s); } while (0)
 
-#define DEFAULT_FS           44100
+#define DEFAULT_FS       44100
 #define DEFAULT_CHANNELS     1
-#define DEFAULT_BLOCK_FRAMES 2048
-#define DEFAULT_BUF_RATIO    32
 #define BIT_PERFECT          1
+
+#define DEFAULT_BLOCK_FRAMES     2048
+#define DEFAULT_INPUT_BUF_RATIO    64
+#define DEFAULT_OUTPUT_BUF_RATIO    8
 
 typedef double sample_t;
 

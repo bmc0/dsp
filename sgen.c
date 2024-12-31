@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2018-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2018-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -196,6 +196,7 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 	c->fs = p->fs;
 	c->channels = p->channels;
 	c->prec = 53;
+	c->hints |= CODEC_HINT_NO_BUF;
 	c->frames = -1;
 	c->read = sgen_read;
 	c->seek = sgen_seek;

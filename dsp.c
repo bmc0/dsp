@@ -74,13 +74,14 @@ struct event {
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0,
 	force_dither = 0, drain_effects = 1, verbose_progress = 0, progress_cleared = 0,
-	block_frames = DEFAULT_BLOCK_FRAMES, input_buf_ratio = DEFAULT_BUF_RATIO,
-	output_buf_ratio = DEFAULT_BUF_RATIO;
+	block_frames = DEFAULT_BLOCK_FRAMES, input_buf_ratio = DEFAULT_INPUT_BUF_RATIO,
+	output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
 enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
 static sample_t peak = 0.0, dither_mult = 0.0;
 static struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
 static struct codec_list in_codecs = CODEC_LIST_INITIALIZER;
+static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
 static struct codec_write_buf *out_codec_buf = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL;
@@ -240,6 +241,7 @@ static void cleanup_and_exit(int s)
 		sem_destroy(&ev_queue.slots);
 		sem_destroy(&ev_queue.items);
 	}
+	codec_read_buf_destroy(in_codec_buf);
 	destroy_codec_list(&in_codecs);
 	codec_write_buf_destroy(out_codec_buf);
 	destroy_codec(out_codec);
@@ -455,8 +457,7 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 	static struct timespec then;
 	if (has_elapsed(&then, 0.1) || force) {
 #endif
-		double in_delay_s, chain_delay_s, out_delay_s;
-		in_delay_s = (double) in->delay(in) / in->fs;
+		double chain_delay_s, out_delay_s;
 		get_delay_sec(&chain_delay_s, &out_delay_s);
 		ssize_t delay = get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 		ssize_t p = (pos > delay) ? pos - delay : 0;
@@ -466,12 +467,15 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 		int pl = snprintf(progress_line, PROGRESS_MAX_LEN, "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
-		if (pl < PROGRESS_MAX_LEN - 1 && verbose_progress)
+		if (pl < PROGRESS_MAX_LEN - 1 && verbose_progress) {
+			double in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
 			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
-		if (pl < PROGRESS_MAX_LEN - 1 && (verbose_progress || clip_count != 0))
+		}
+		if (pl < PROGRESS_MAX_LEN - 1 && (verbose_progress || clip_count != 0)) {
 			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%ld  ",
 				20.0*log10(peak), clip_count);
+		}
 		pthread_mutex_lock(&log_lock);
 		fprintf(stderr, "\r%s\033[K", progress_line);
 		progress_cleared = 0;
@@ -528,10 +532,9 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 	else {
 		double chain_delay_s, out_delay_s;
 		get_delay_sec(&chain_delay_s, &out_delay_s);
-		ssize_t delay = in->delay(in) + get_delay_frames(in->fs, chain_delay_s, out_delay_s);
-		s = pos + offset - delay;
+		s = pos + offset - get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 	}
-	if ((s = in->seek(in, s)) >= 0) {
+	if ((s = codec_read_buf_seek(in_codec_buf, s)) >= 0) {
 		reset_effects_chain(&chain);
 		codec_write_buf_drop(out_codec_buf, pause_state || (in->hints & CODEC_HINT_REALTIME), pause_state);
 		return s;
@@ -541,7 +544,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 
 static void do_pause(struct codec *in, int pause_state, int sync)
 {
-	if (in) in->pause(in, pause_state);
+	codec_read_buf_pause(in_codec_buf, pause_state, sync);
 	codec_write_buf_pause(out_codec_buf, pause_state, sync);
 }
 
@@ -638,6 +641,7 @@ static void handle_tstp(int is_paused)
 int main(int argc, char *argv[])
 {
 	int is_paused = 0, do_dither = 0, chain_start, chain_argc, term_sig, err;
+	int read_buf_blocks = 0;
 	double in_time = 0.0;
 	struct codec *c = NULL;
 	struct stream_info stream;
@@ -657,11 +661,15 @@ int main(int argc, char *argv[])
 		else {
 			p.fs = CHOOSE_INPUT_FS(p.fs);
 			p.channels = CHOOSE_INPUT_CHANNELS(p.channels);
+			const int req_blocks = p.buf_ratio;
+			if (p.buf_ratio - CODEC_BUF_MIN_BLOCKS >= 2)
+				p.buf_ratio = 2;
 			c = init_codec(&p);
 			if (c == NULL) {
 				LOG_FMT(LL_ERROR, "error: failed to open input: %s", p.path);
 				cleanup_and_exit(1);
 			}
+			read_buf_blocks = MAXIMUM(read_buf_blocks, req_blocks - c->buf_ratio);
 			print_io_info(c, LL_VERBOSE, "input");
 			if (input_mode != INPUT_MODE_SEQUENCE) {
 				if (in_codecs.head != NULL && c->fs != in_codecs.head->fs) {
@@ -717,6 +725,9 @@ int main(int argc, char *argv[])
 			cleanup_and_exit(1);
 		}
 		have_sig_thread = 1;
+
+		if ((in_codec_buf = codec_read_buf_init(&in_codecs, block_frames, read_buf_blocks, NULL)) == NULL)
+			cleanup_and_exit(1);
 
 		ssize_t out_frames = (in_time < 0.0) ? -1 : (ssize_t) llround(in_time * stream.fs);
 		const int write_buf_blocks = out_p.buf_ratio;
@@ -833,7 +844,7 @@ int main(int argc, char *argv[])
 					}
 					print_progress(in_codecs.head, pos, is_paused, 1);
 				}
-				ssize_t w = r = in_codecs.head->read(in_codecs.head, buf1, block_frames);
+				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
 				pos += r;
 				obuf = run_effects_chain(chain.head, &w, buf1, buf2);
 				write_out(w, obuf, do_dither);
@@ -844,6 +855,7 @@ int main(int argc, char *argv[])
 				}
 			} while (r > 0);
 			next_input:
+			codec_read_buf_next(in_codec_buf);
 			stream.fs = in_codecs.head->fs;
 			stream.channels = in_codecs.head->channels;
 			destroy_codec_list_head(&in_codecs);
