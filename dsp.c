@@ -568,7 +568,7 @@ static struct codec * init_out_codec(struct codec_params *out_p, struct stream_i
 	out_codec->frames = frames;
 	print_io_info(out_codec, LL_NORMAL, "output");
 
-	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks, write_buf_error_cb);
+	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks - out_codec->buf_ratio, write_buf_error_cb);
 	return out_codec;
 }
 
@@ -715,9 +715,9 @@ int main(int argc, char *argv[])
 		have_sig_thread = 1;
 
 		ssize_t out_frames = (in_time < 0.0) ? -1 : (ssize_t) llround(in_time * stream.fs);
-		const int write_buf_blocks = out_p.buf_ratio - 1;
-		if (write_buf_blocks > 1)
-			out_p.buf_ratio = 1;
+		const int write_buf_blocks = out_p.buf_ratio;
+		if (out_p.buf_ratio - CODEC_BUF_MIN_BLOCKS >= 2)
+			out_p.buf_ratio = 2;
 		if (init_out_codec(&out_p, &stream, out_frames, write_buf_blocks) == NULL)
 			cleanup_and_exit(1);
 

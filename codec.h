@@ -42,7 +42,7 @@ enum {
 struct codec {
 	struct codec *next;
 	const char *path, *type, *enc;
-	int fs, channels, prec, hints;
+	int fs, channels, prec, hints, buf_ratio;
 	ssize_t frames;
 	ssize_t (*read)(struct codec *, sample_t *, ssize_t);   /* should be NULL if mode == CODEC_MODE_WRITE */
 	ssize_t (*write)(struct codec *, sample_t *, ssize_t);  /* should be NULL if mode == CODEC_MODE_READ */

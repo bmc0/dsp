@@ -246,7 +246,7 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 	wb->codec = codec;
 	wb->error_cb = error_cb;
 
-	if (n_blocks < 2 || (codec->hints & CODEC_HINT_NO_OUT_BUF))
+	if (n_blocks < CODEC_BUF_MIN_BLOCKS || (codec->hints & CODEC_HINT_NO_OUT_BUF))
 		return wb;
 
 	struct write_state *state = calloc(1, sizeof(struct write_state));

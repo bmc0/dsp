@@ -123,7 +123,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	format.channels = p->channels;
 	format.byte_format = AO_FMT_NATIVE;
 	format.matrix = NULL;
-	const double buf_time = MINIMUM(1000.0 * p->block_frames * p->buf_ratio / p->fs, 1000.0);
+	const double buf_time = (1000.0 / p->fs) * p->buf_ratio * p->block_frames;
 	snprintf(buf_time_str, sizeof(buf_time_str), "%.2f", buf_time);
 	if (LOGLEVEL(LL_VERBOSE))
 		ao_append_option(&opts, "verbose", "");
@@ -150,6 +150,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	c->prec = enc_info->prec;
 	c->hints |= CODEC_HINT_CAN_DITHER;  /* all formats are fixed-point LPCM */
 	c->hints |= CODEC_HINT_INTERACTIVE;
+	c->buf_ratio = p->buf_ratio;
 	c->frames = -1;
 	c->write = ao_write;
 	c->seek = ao_seek;

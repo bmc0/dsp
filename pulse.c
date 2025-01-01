@@ -159,6 +159,7 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	c->prec = enc_info->prec;
 	if (enc_info->can_dither) c->hints |= CODEC_HINT_CAN_DITHER;
 	if (p->mode == CODEC_MODE_WRITE) c->hints |= CODEC_HINT_INTERACTIVE;
+	c->buf_ratio = p->buf_ratio;
 	c->frames = -1;
 	if (p->mode == CODEC_MODE_READ) c->read = pulse_read;
 	else c->write = pulse_write;

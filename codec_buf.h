@@ -47,6 +47,8 @@ void codec_write_buf_destroy_nw(struct codec_write_buf *);
 
 /* Public API */
 
+#define CODEC_BUF_MIN_BLOCKS 2
+
 enum {
 	CODEC_BUF_ERROR_SHORT_WRITE = 1,
 };
