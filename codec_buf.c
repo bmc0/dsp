@@ -255,13 +255,14 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 	sem_init(&state->queue.sync, 0, 0);
 	sem_init(&state->queue.cmd.slots, 0, CMD_QUEUE_LEN);
 	state->queue.block.stopped = 1;
-	state->queue.block.len = MAXIMUM(n_blocks, 2);
+	state->queue.block.len = n_blocks;
 	state->queue.block.channels = codec->channels;
 	state->queue.block.max_block_frames = MAXIMUM(block_frames, 8);
 	state->queue.block.b = calloc(n_blocks, sizeof(struct write_block));
-	state->queue.block.b[0].data = calloc(block_frames * n_blocks * codec->channels, sizeof(sample_t));
+	const size_t block_samples = state->queue.block.max_block_frames * codec->channels;
+	state->queue.block.b[0].data = calloc(block_samples * n_blocks, sizeof(sample_t));
 	for (int i = 1; i < n_blocks; ++i)
-		state->queue.block.b[i].data = state->queue.block.b[0].data + (block_frames * codec->channels * i);
+		state->queue.block.b[i].data = state->queue.block.b[0].data + (block_samples * i);
 	sem_init(&state->queue.block.slots, 0, n_blocks);
 
 	if ((errno = pthread_create(&state->thread, NULL, write_worker, wb)) != 0) {
