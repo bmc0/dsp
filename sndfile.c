@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -96,24 +96,38 @@ static struct sndfile_enc_info encodings[] = {
 
 ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
+	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
-	return sf_readf_double(state->f, buf, frames);
+	const sf_count_t r = sf_readf_double(state->f, buf, frames);
+	if (r != frames && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
+		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+	return (ssize_t) r;
 }
 
 ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
+	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
-	return sf_writef_double(state->f, buf, frames);
+	const sf_count_t r = sf_writef_double(state->f, buf, frames);
+	if (r != frames && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
+		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+	return (ssize_t) r;
 }
 
 ssize_t sndfile_seek(struct codec *c, ssize_t pos)
 {
+	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
+	if (!state->info->seekable)
+		return -1;
 	if (pos < 0)
 		pos = 0;
 	else if (pos >= c->frames)
 		pos = c->frames - 1;
-	return sf_seek(state->f, pos, SEEK_SET);
+	const sf_count_t r = sf_seek(state->f, pos, SEEK_SET);
+	if (r < 0 && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
+		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+	return (ssize_t) r;
 }
 
 ssize_t sndfile_delay(struct codec *c)
