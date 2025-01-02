@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -119,6 +119,10 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 
 ssize_t alsa_seek(struct codec *c, ssize_t pos)
 {
+	if (pos <= 0) {
+		c->drop(c);
+		return 0;
+	}
 	return -1;
 }
 

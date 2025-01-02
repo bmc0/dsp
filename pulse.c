@@ -67,6 +67,10 @@ ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t pulse_seek(struct codec *c, ssize_t pos)
 {
+	if (pos <= 0) {
+		c->drop(c);
+		return 0;
+	}
 	return -1;
 }
 
