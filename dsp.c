@@ -533,7 +533,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 	}
 	if ((s = in->seek(in, s)) >= 0) {
 		reset_effects_chain(&chain);
-		codec_write_buf_drop(out_codec_buf, pause_state, pause_state);
+		codec_write_buf_drop(out_codec_buf, pause_state || (in->hints & CODEC_HINT_REALTIME), pause_state);
 		return s;
 	}
 	return pos;

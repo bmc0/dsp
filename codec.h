@@ -37,6 +37,7 @@ enum {
 	CODEC_HINT_INTERACTIVE = 1<<0,
 	CODEC_HINT_CAN_DITHER  = 1<<1,
 	CODEC_HINT_NO_OUT_BUF  = 1<<2,
+	CODEC_HINT_REALTIME    = 1<<3,
 };
 
 struct codec {

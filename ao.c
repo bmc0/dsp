@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -150,6 +150,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	c->prec = enc_info->prec;
 	c->hints |= CODEC_HINT_CAN_DITHER;  /* all formats are fixed-point LPCM */
 	c->hints |= CODEC_HINT_INTERACTIVE;
+	c->hints |= CODEC_HINT_REALTIME;
 	c->buf_ratio = p->buf_ratio;
 	c->frames = -1;
 	c->write = ao_write;
