@@ -43,28 +43,23 @@ struct sgen_state {
 
 void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf, ssize_t frames)
 {
-	sample_t s;
-	double t;
-	ssize_t i, k, samples;
+	ssize_t samples;
 	switch (g->type) {
 	case SGEN_TYPE_DELTA:
-		if (g->offset >= 0) {
-			if (g->offset < frames)
-				for (i = 0; i < c->channels; ++i)
-					if (GET_BIT(g->channel_selector, i))
-						buf[g->offset * c->channels + i] += 1.0;
-			g->offset -= frames;
-		}
+		if (g->pos <= g->offset && g->offset - g->pos < frames)
+			for (int i = 0; i < c->channels; ++i)
+				if (GET_BIT(g->channel_selector, i))
+					buf[(g->offset - g->pos) * c->channels + i] += 1.0;
+		g->pos += frames;
 		break;
 	case SGEN_TYPE_SINE:
 		samples = frames * c->channels;
-		for (i = 0; i < samples; i += c->channels) {
-			t = (double) g->pos / c->fs;
-			if (g->v != 0.0)
-				s = sin(g->freq0 / g->v * (exp(t * g->v) - 1.0));
-			else
-				s = sin(g->freq0 * t);
-			for (k = 0; k < c->channels; ++k)
+		for (ssize_t i = 0; i < samples; i += c->channels) {
+			const double t = (double) g->pos / c->fs;
+			const sample_t s = (g->v != 0) ?
+				sin(g->freq0 / g->v * (exp(t * g->v) - 1.0))
+				: sin(g->freq0 * t);
+			for (int k = 0; k < c->channels; ++k)
 				if (GET_BIT(g->channel_selector, k))
 					buf[i + k] += s;
 			++g->pos;
@@ -75,13 +70,12 @@ void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf
 
 ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	int i;
 	struct sgen_state *state = (struct sgen_state *) c->data;
 	if (c->frames > 0 && state->w + frames > c->frames)
 		frames = c->frames - state->w;
 	if (frames > 0) {
 		memset(buf, 0, frames * c->channels * sizeof(sample_t));
-		for (i = 0; i < state->n; ++i)
+		for (int i = 0; i < state->n; ++i)
 			sgen_run_generator(&state->g[i], c, buf, frames);
 		state->w += frames;
 	}
@@ -90,7 +84,15 @@ ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t sgen_seek(struct codec *c, ssize_t pos)
 {
-	return -1;
+	struct sgen_state *state = (struct sgen_state *) c->data;
+	if (pos < 0)
+		pos = 0;
+	else if (c->frames > 0 && pos > c->frames)
+		pos = c->frames;
+	state->w = pos;
+	for (int i = 0; i < state->n; ++i)
+		state->g[i].pos = pos;
+	return pos;
 }
 
 ssize_t sgen_delay(struct codec *c)
@@ -110,9 +112,8 @@ void sgen_pause(struct codec *c, int p)
 
 void sgen_destroy(struct codec *c)
 {
-	int i;
 	struct sgen_state *state = (struct sgen_state *) c->data;
-	for (i = 0; i < state->n; ++i)
+	for (int i = 0; i < state->n; ++i)
 		free(state->g[i].channel_selector);
 	free(state->g);
 	free(state);
