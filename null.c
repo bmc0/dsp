@@ -34,7 +34,7 @@ ssize_t null_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t null_seek(struct codec *c, ssize_t pos)
 {
-	return -1;
+	return (pos > 0) ? pos : 0;
 }
 
 ssize_t null_delay(struct codec *c)
