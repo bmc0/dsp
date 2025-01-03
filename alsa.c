@@ -61,7 +61,7 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 		return 0;
 
 	try_again:
-	n = snd_pcm_readi(state->dev, buf, frames);
+	n = snd_pcm_readi(state->dev, buf, frames - r);
 	if (n < 0) {
 		if (n == -EAGAIN)
 			goto try_again;
@@ -95,7 +95,7 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 
 	state->enc_info->write_func(sbuf, sbuf, frames * c->channels);
 	try_again:
-	n = snd_pcm_writei(state->dev, buf, frames);
+	n = snd_pcm_writei(state->dev, buf, frames - w);
 	if (n < 0) {
 		if (n == -EAGAIN)
 			goto try_again;
