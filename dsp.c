@@ -551,7 +551,11 @@ static struct codec * init_out_codec(struct codec_params *out_p, struct stream_i
 	if (p.path == NULL)  p.path = CODEC_DEFAULT_DEVICE;
 	if (p.fs == 0)       p.fs = stream->fs;
 	if (p.channels == 0) p.channels = stream->channels;
-	p.block_frames = get_effects_chain_max_out_frames(&chain, block_frames);
+
+	/* FIXME: Not ideal in sequence mode if the resample effect is used and
+	   the input sample rate changes after the first input. */
+	const ssize_t chain_max_frames = get_effects_chain_max_out_frames(&chain, p.block_frames);
+	if (p.block_frames < chain_max_frames) p.block_frames = chain_max_frames;
 
 	if ((out_codec = init_codec(&p)) == NULL) {
 		LOG_S(LL_ERROR, "error: failed to open output");
