@@ -545,7 +545,7 @@ static void do_pause(struct codec *in, int pause_state, int sync)
 	codec_write_buf_pause(out_codec_buf, pause_state, sync);
 }
 
-static struct codec * init_out_codec(struct codec_params *out_p, struct stream_info *stream, ssize_t frames, int write_buf_blocks)
+static struct codec_write_buf * init_out_codec(struct codec_params *out_p, struct stream_info *stream, ssize_t frames, int write_buf_blocks)
 {
 	struct codec_params p = *out_p;
 	if (p.path == NULL)  p.path = CODEC_DEFAULT_DEVICE;
@@ -573,7 +573,7 @@ static struct codec * init_out_codec(struct codec_params *out_p, struct stream_i
 	print_io_info(out_codec, LL_NORMAL, "output");
 
 	out_codec_buf = codec_write_buf_init(out_codec, p.block_frames, write_buf_blocks - out_codec->buf_ratio, write_buf_error_cb);
-	return out_codec;
+	return out_codec_buf;
 }
 
 static void handle_tstp(int is_paused)

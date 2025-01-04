@@ -264,15 +264,15 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 	for (int i = 1; i < n_blocks; ++i)
 		state->queue.block.b[i].data = state->queue.block.b[0].data + (block_samples * i);
 	sem_init(&state->queue.block.slots, 0, n_blocks);
+	wb->data = state;
 
 	if ((errno = pthread_create(&state->thread, NULL, write_worker, wb)) != 0) {
 		LOG_FMT(LL_ERROR, "%s(): error: pthread_create() failed: %s", __func__, strerror(errno));
 		write_state_destroy(state);
-		return wb;
+		free(wb);
+		return NULL;
 	}
 
-	wb->data = state;
 	LOG_S(LL_VERBOSE, "info: write buffer enabled");
-
 	return wb;
 }
