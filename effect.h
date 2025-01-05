@@ -68,11 +68,13 @@ struct effects_chain {
 	|| strcmp(x, "!") == 0 \
 	|| strcmp(x, "{") == 0 \
 )
+#define EFFECTS_FILE_EOF_MARKER "#EOF#"
 
 const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);
 void append_effect(struct effects_chain *, struct effect *);
 int build_effects_chain(int, const char *const *, struct effects_chain *, struct stream_info *, const char *);
+int build_effects_chain_from_file(const char *, struct effects_chain *, struct stream_info *, const char *, const char *, int);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);
 int effects_chain_needs_dither(struct effects_chain *);

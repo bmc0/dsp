@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -52,6 +52,7 @@
 #endif
 #define TEST_BIT(x, o, s) (!!GET_BIT(x, o) == !!(s))
 #define IS_POWER_OF_2(x) ((x) && !((x)&((x)-1)))
+#define IS_WHITESPACE(x) ((x) == ' ' || (x) == '\t' || (x) == '\n' || (x) == '\r')
 #define PM_RAND_MAX 0x7fffffff
 
 int check_endptr(const char *, const char *, const char *, const char *);

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
@@ -57,9 +58,17 @@ struct dsp_globals dsp_globals = {
 static int n_configs = 0;
 static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
+static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
-void dsp_log_acquire(void) { /* do nothing */ }
-void dsp_log_release(void) { /* do nothing */ }
+void dsp_log_acquire(void)
+{
+	pthread_mutex_lock(&log_lock);
+}
+
+void dsp_log_release(void)
+{
+	pthread_mutex_unlock(&log_lock);
+}
 
 static void init_config(struct ladspa_dsp_config *config, const char *file_name, const char *dir_path)
 {

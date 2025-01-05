@@ -373,6 +373,32 @@ Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 (dBFS), crest factor (dB), peak count, peak sample, number of samples, and
 length (s) for each channel. If \fIref_level\fR is given, peak and RMS levels
 relative to \fIref_level\fR will be shown as well (dBr).
+.TP
+\fBwatch\fR [\fI\-e\fR] [~/]\fIpath\fR
+Load effects from a file into a sub-chain and reload if the file is
+modified. Other than the automatic reload, the behavior is similar to
+sourcing a file using the `@' directive (see ``Effects Files''). Some
+restrictions apply to automatic reload:
+.RS
+.IP \(bu 3
+The new sub-chain must have the same output sample rate and number of
+channels as the previous sub-chain.
+.IP \(bu 3
+The new sub-chain must not require larger buffers than the previous
+sub-chain.
+.RE
+.TP
+\ 
+If these conditions are not met, the new sub-chain will not be applied and
+an error message will be printed.
+.sp 0.5
+Currently, this effect polls for file modifications once per second.
+Support `inotify` events my be added in the future. Ideally, file
+modifications should be atomic (i.e. by writing to a temporary file, then
+\fIrename\fR(3)-ing it over top of the original file). If this is not possible,
+the \fI\-e\fR flag may be given, which enforces an end-of-file marker in order
+to detect partially-written files. This marker, `#EOF#', must be placed at
+the beginning of a line and may only be followed by whitespace characters.
 .SS Selector syntax
 .TS
 tab (|);

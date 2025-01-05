@@ -22,6 +22,7 @@ DSP_OBJ := dsp.o \
 	noise.o \
 	dither.o \
 	stats.o \
+	watch.o \
 	null.o \
 	sgen.o \
 	pcm.o
@@ -42,20 +43,21 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	decorrelate.o \
 	noise.o \
 	dither.o \
-	stats.o
+	stats.o \
+	watch.o
 LADSPA_DSP_CPP_OBJ :=
 
-BASE_CFLAGS        := -Os -Wall -std=gnu99
-BASE_CXXFLAGS      := -Os -Wall -std=gnu++11
-BASE_LDFLAGS       :=
+BASE_CFLAGS        := -Os -Wall -std=gnu99 -pthread
+BASE_CXXFLAGS      := -Os -Wall -std=gnu++11 -pthread
+BASE_LDFLAGS       := -pthread
 BASE_LIBS          := -lm
 
 include config.mk
 
 DEPFLAGS            := -MMD -MP
-DSP_CFLAGS          := ${DEPFLAGS} ${BASE_CFLAGS} -pthread ${DSP_EXTRA_CFLAGS} ${CFLAGS} ${CPPFLAGS}
-DSP_CXXFLAGS        := ${DEPFLAGS} ${BASE_CXXFLAGS} -pthread ${DSP_EXTRA_CFLAGS} ${CXXFLAGS} ${CPPFLAGS}
-DSP_LDFLAGS         := ${BASE_LDFLAGS} -pthread ${LDFLAGS}
+DSP_CFLAGS          := ${DEPFLAGS} ${BASE_CFLAGS} ${DSP_EXTRA_CFLAGS} ${CFLAGS} ${CPPFLAGS}
+DSP_CXXFLAGS        := ${DEPFLAGS} ${BASE_CXXFLAGS} ${DSP_EXTRA_CFLAGS} ${CXXFLAGS} ${CPPFLAGS}
+DSP_LDFLAGS         := ${BASE_LDFLAGS} ${LDFLAGS}
 DSP_LIBS            := ${DSP_EXTRA_LIBS} ${BASE_LIBS}
 LADSPA_DSP_CFLAGS   := ${DEPFLAGS} ${BASE_CFLAGS} -fPIC -DPIC -DLADSPA_FRONTEND -DSYMMETRIC_IO ${LADSPA_DSP_EXTRA_CFLAGS} ${CFLAGS} ${CPPFLAGS}
 LADSPA_DSP_CXXFLAGS := ${DEPFLAGS} ${BASE_CXXFLAGS} -fPIC -DPIC -DLADSPA_FRONTEND -DSYMMETRIC_IO ${LADSPA_DSP_EXTRA_CFLAGS} ${CXXFLAGS} ${CPPFLAGS}

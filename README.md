@@ -347,6 +347,27 @@ Example:
 	(dBFS), crest factor (dB), peak count, peak sample, number of samples, and
 	length (s) for each channel. If `ref_level` is given, peak and RMS levels
 	relative to `ref_level` will be shown as well (dBr).
+* `watch [-e] [~/]path`  
+	Load effects from a file into a sub-chain and reload if the file is
+	modified. Other than the automatic reload, the behavior is similar to
+	sourcing a file using the `@` directive (see "Effects Files"). Some
+	restrictions apply to automatic reload:
+
+	* The new sub-chain must have the same output sample rate and number of
+	  channels as the previous sub-chain.
+	* The new sub-chain must not require larger buffers than the previous
+	  sub-chain.
+
+	If these conditions are not met, the new sub-chain will not be applied and
+	an error message will be printed.
+
+	Currently, this effect polls for file modifications once per second.
+	Support `inotify` events my be added in the future. Ideally, file
+	modifications should be atomic (i.e. by writing to a temporary file, then
+	`rename(3)`-ing it over top of the original file). If this is not possible,
+	the `-e` flag may be given, which enforces an end-of-file marker in order
+	to detect partially-written files. This marker, `#EOF#`, must be placed at
+	the beginning of a line and may only be followed by whitespace characters.
 
 #### Selector syntax
 

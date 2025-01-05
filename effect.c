@@ -42,6 +42,7 @@
 #include "dither.h"
 #include "ladspa_host.h"
 #include "stats.h"
+#include "watch.h"
 
 #define DO_EFFECTS_CHAIN_OPTIMIZE 1
 
@@ -96,6 +97,7 @@ static const struct effect_info effects[] = {
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
 #endif
 	{ "stats",              "stats [ref_level]",                       stats_effect_init,     0 },
+	{ "watch",              "watch [-e] [~/]path",                     watch_effect_init,     0 },
 };
 
 const struct effect_info * get_effect_info(const char *name)
@@ -127,7 +129,7 @@ void append_effect(struct effects_chain *chain, struct effect *e)
 }
 
 static int build_effects_chain_block(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
-static int build_effects_chain_from_file(struct effects_chain *, struct stream_info *, const char *, const char *, const char *);
+static int build_effects_chain_block_from_file(const char *, struct effects_chain *, struct stream_info *, const char *, const char *, int);
 
 static int build_effects_chain_block(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *initial_channel_mask, const char *dir)
 {
@@ -201,7 +203,7 @@ static int build_effects_chain_block(int argc, const char *const *argv, struct e
 			last_stream_channels = stream->channels;
 		}
 		if (argv[k][0] == '@') {
-			if (build_effects_chain_from_file(chain, stream, channel_selector, dir, &argv[k][1]))
+			if (build_effects_chain_block_from_file(&argv[k][1], chain, stream, channel_selector, dir, 0))
 				goto fail;
 			++k;
 			continue;
@@ -282,7 +284,7 @@ static int build_effects_chain_block(int argc, const char *const *argv, struct e
 	return 1;
 }
 
-static int build_effects_chain_from_file(struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, const char *path)
+static int build_effects_chain_block_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
 {
 	char **argv = NULL, *tmp, *d = NULL, *p, *c;
 	int i, ret = 0, argc = 0;
@@ -291,6 +293,15 @@ static int build_effects_chain_from_file(struct effects_chain *chain, struct str
 	if (!(c = get_file_contents(p))) {
 		LOG_FMT(LL_ERROR, "error: failed to load effects file: %s: %s", p, strerror(errno));
 		goto fail;
+	}
+	if (enforce_eof_marker) {
+		const ssize_t l = LENGTH(EFFECTS_FILE_EOF_MARKER)-1;
+		ssize_t k = strlen(c);
+		while (k > l && IS_WHITESPACE(c[k-1])) --k;
+		if (k < l || strncmp(&c[k-l], EFFECTS_FILE_EOF_MARKER, l) != 0 || (k > l && c[k-l-1] != '\n')) {
+			LOG_FMT(LL_ERROR, "error: no valid end-of-file marker: %s", p);
+			goto fail;
+		}
 	}
 	if (gen_argv_from_string(c, &argc, &argv))
 		goto fail;
@@ -364,11 +375,19 @@ static void effects_chain_optimize(struct effects_chain *chain)
 #endif
 }
 
+
 int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
 {
-	int r;
-	if ((r = build_effects_chain_block(argc, argv, chain, stream, NULL, dir)))
-		return r;
+	int r = build_effects_chain_block(argc, argv, chain, stream, NULL, dir);
+	if (r) return r;
+	effects_chain_optimize(chain);
+	return 0;
+}
+
+int build_effects_chain_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
+{
+	int r = build_effects_chain_block_from_file(path, chain, stream, channel_mask, dir, enforce_eof_marker);
+	if (r) return r;
 	effects_chain_optimize(chain);
 	return 0;
 }

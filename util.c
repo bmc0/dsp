@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -223,8 +223,6 @@ int num_bits_set(const char *b, int n)
 		if (GET_BIT(b, i)) ++c;
 	return c;
 }
-
-#define IS_WHITESPACE(x) (x == ' ' || x == '\t' || x == '\n')
 
 static void strip_char(char *str, char c, int is_esc)
 {
