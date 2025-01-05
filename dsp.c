@@ -786,7 +786,7 @@ int main(int argc, char *argv[])
 							pos = do_seek(in_codecs.head, pos, 0, SEEK_SET, is_paused);
 							break;
 						case 'n':
-							codec_write_buf_drop(out_codec_buf, is_paused, 0);
+							codec_write_buf_drop(out_codec_buf, 1, 0);
 							reset_effects_chain(&chain);
 							goto next_input;
 						case 'c':
