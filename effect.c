@@ -446,7 +446,7 @@ static const char gnuplot_header[] =
 	"set xlabel 'Frequency (Hz)'\n"
 	"set ylabel 'Magnitude (dB)'\n"
 	"set logscale x\n"
-	"set format x '10^{%L}'\n"
+	/* "set format x '10^{%L}'\n" */  /* problematic when zooming */
 	"set samples 500\n"
 	"set mxtics\n"
 	"set mytics\n"
