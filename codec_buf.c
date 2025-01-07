@@ -274,7 +274,7 @@ static void * read_worker(void *arg)
 				done = 1;
 				break;
 			default:
-				LOG_FMT(LL_ERROR, "read_worker: BUG: unrecognized command: %d", cmd);
+				LOG_FMT(LL_ERROR, "read_worker: BUG: unrecognized command: %d", cmd.cc);
 			}
 			pthread_mutex_unlock(&state->queue.lock);
 			sem_post(&state->queue.cmd.slots);
