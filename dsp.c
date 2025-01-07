@@ -145,20 +145,18 @@ struct dsp_globals dsp_globals = {
 	"dsp",                  /* prog_name */
 };
 
-int dsp_log_printf(const char *fmt, ...)
+void dsp_log_acquire(void)
 {
-	int r;
 	pthread_mutex_lock(&log_lock);
 	if (progress_line && !progress_cleared)
 		fputs(CLEAR_PROGRESS, stderr);
-	va_list v;
-	va_start(v, fmt);
-	r = vfprintf(stderr, fmt, v);
-	va_end(v);
+}
+
+void dsp_log_release(void)
+{
 	if (progress_line && !progress_cleared)
 		fputs(progress_line, stderr);
 	pthread_mutex_unlock(&log_lock);
-	return r;
 }
 
 void ev_queue_push(enum event_type type, int val)
@@ -457,18 +455,20 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 	static struct timespec then;
 	if (has_elapsed(&then, 0.1) || force) {
 #endif
-		double chain_delay_s, out_delay_s;
+		double in_delay_s = 0.0, chain_delay_s, out_delay_s;
 		get_delay_sec(&chain_delay_s, &out_delay_s);
 		ssize_t delay = get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 		ssize_t p = (pos > delay) ? pos - delay : 0;
 		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
+		if (verbose_progress)
+			in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
+		pthread_mutex_lock(&log_lock);
 		if (progress_line == NULL)
 			progress_line = calloc(PROGRESS_MAX_LEN, sizeof(char));
 		int pl = snprintf(progress_line, PROGRESS_MAX_LEN, "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
 		if (pl < PROGRESS_MAX_LEN - 1 && verbose_progress) {
-			double in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
 			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
 		}
@@ -476,8 +476,7 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%ld  ",
 				20.0*log10(peak), clip_count);
 		}
-		pthread_mutex_lock(&log_lock);
-		fprintf(stderr, "\r%s\033[K", progress_line);
+		dsp_log_printf("\r%s\033[K", progress_line);
 		progress_cleared = 0;
 		pthread_mutex_unlock(&log_lock);
 #ifdef HAVE_CLOCK_GETTIME
@@ -782,7 +781,9 @@ int main(int argc, char *argv[])
 					case EVENT_TYPE_KEY:
 						switch (ev.val) {
 						case 'h':
+							dsp_log_acquire();
 							dsp_log_printf("\n%s\n", interactive_help);
+							dsp_log_release();
 							break;
 						case ',':
 							pos = do_seek(in_codecs.head, pos, (ssize_t) in_codecs.head->fs * -5, SEEK_CUR, is_paused);

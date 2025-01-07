@@ -235,12 +235,14 @@ static int build_effects_chain_block(int argc, const char *const *argv, struct e
 		}
 		else {
 			if (LOGLEVEL(LL_VERBOSE)) {
-				fprintf(stderr, "%s: effect:", dsp_globals.prog_name);
+				dsp_log_acquire();
+				dsp_log_printf("%s: effect:", dsp_globals.prog_name);
 				for (int j = 0; j < i - k; ++j)
-					fprintf(stderr, " %s", argv[k + j]);
-				fprintf(stderr, "; channels=%d [", stream->channels);
+					dsp_log_printf(" %s", argv[k + j]);
+				dsp_log_printf("; channels=%d [", stream->channels);
 				print_selector(channel_selector, stream->channels);
-				fprintf(stderr, "] fs=%d\n", stream->fs);
+				dsp_log_printf("] fs=%d\n", stream->fs);
+				dsp_log_release();
 			}
 			e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
 			if (e == NULL) {

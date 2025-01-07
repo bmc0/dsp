@@ -178,20 +178,20 @@ void print_selector(const char *b, int n)
 		if (c && l)
 			range_start = (range_start == -1) ? i - 1 : range_start;
 		else if (!c && range_start != -1) {
-			fprintf(stderr, "%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
+			dsp_log_printf("%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
 			range_start = -1;
 			f = 0;
 		}
 		else if (l) {
-			fprintf(stderr, "%s%d", (f) ? "" : ",", i - 1);
+			dsp_log_printf("%s%d", (f) ? "" : ",", i - 1);
 			f = 0;
 		}
 		l = c;
 	}
 	if (range_start != -1)
-		fprintf(stderr, "%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
+		dsp_log_printf("%s%d%s%d", (f) ? "" : ",", range_start, (i - range_start == 2) ? "," : "-", i - 1);
 	else if (l)
-		fprintf(stderr, "%s%d", (f) ? "" : ",", n - 1);
+		dsp_log_printf("%s%d", (f) ? "" : ",", n - 1);
 }
 
 int num_bits_set(const char *b, int n)

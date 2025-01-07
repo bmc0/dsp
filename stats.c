@@ -58,50 +58,52 @@ void stats_effect_destroy(struct effect *e)
 {
 	ssize_t i;
 	struct stats_state *state = (struct stats_state *) e->data;
-	fprintf(stderr, "\n%-18s", "Channel");
+	dsp_log_acquire();
+	dsp_log_printf("\n%-18s", "Channel");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12zd", i);
-	fprintf(stderr, "\n%-18s", "DC offset");
+		dsp_log_printf(" %12zd", i);
+	dsp_log_printf("\n%-18s", "DC offset");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.8f", state[i].sum / state[i].samples);
-	fprintf(stderr, "\n%-18s", "Minimum");
+		dsp_log_printf(" %12.8f", state[i].sum / state[i].samples);
+	dsp_log_printf("\n%-18s", "Minimum");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.8f", state[i].min);
-	fprintf(stderr, "\n%-18s", "Maximum");
+		dsp_log_printf(" %12.8f", state[i].min);
+	dsp_log_printf("\n%-18s", "Maximum");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.8f", state[i].max);
-	fprintf(stderr, "\n%-18s", "Peak level (dBFS)");
+		dsp_log_printf(" %12.8f", state[i].max);
+	dsp_log_printf("\n%-18s", "Peak level (dBFS)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max))));
+		dsp_log_printf(" %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max))));
 	if (state->ref != -HUGE_VAL) {
-		fprintf(stderr, "\n%-18s", "Peak level (dBr)");
+		dsp_log_printf("\n%-18s", "Peak level (dBr)");
 		for (i = 0; i < e->ostream.channels; ++i)
-			fprintf(stderr, " %12.4f", state->ref + (20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max)))));
+			dsp_log_printf(" %12.4f", state->ref + (20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max)))));
 	}
-	fprintf(stderr, "\n%-18s", "RMS level (dBFS)");
+	dsp_log_printf("\n%-18s", "RMS level (dBFS)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.4f", 20 * log10(sqrt(state[i].sum_sq / state[i].samples)));
+		dsp_log_printf(" %12.4f", 20 * log10(sqrt(state[i].sum_sq / state[i].samples)));
 	if (state->ref != -HUGE_VAL) {
-		fprintf(stderr, "\n%-18s", "RMS level (dBr)");
+		dsp_log_printf("\n%-18s", "RMS level (dBr)");
 		for (i = 0; i < e->ostream.channels; ++i)
-			fprintf(stderr, " %12.4f", state->ref + (20 * log10(sqrt(state[i].sum_sq / state[i].samples))));
+			dsp_log_printf(" %12.4f", state->ref + (20 * log10(sqrt(state[i].sum_sq / state[i].samples))));
 	}
-	fprintf(stderr, "\n%-18s", "Crest factor (dB)");
+	dsp_log_printf("\n%-18s", "Crest factor (dB)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max)) / sqrt(state[i].sum_sq / state[i].samples)));
-	fprintf(stderr, "\n%-18s", "Peak count");
+		dsp_log_printf(" %12.4f", 20 * log10(MAXIMUM(fabs(state[i].min), fabs(state[i].max)) / sqrt(state[i].sum_sq / state[i].samples)));
+	dsp_log_printf("\n%-18s", "Peak count");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12zd", state[i].peak_count);
-	fprintf(stderr, "\n%-18s", "Peak sample");
+		dsp_log_printf(" %12zd", state[i].peak_count);
+	dsp_log_printf("\n%-18s", "Peak sample");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12zd", state[i].peak_frame);
-	fprintf(stderr, "\n%-18s", "Samples");
+		dsp_log_printf(" %12zd", state[i].peak_frame);
+	dsp_log_printf("\n%-18s", "Samples");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12zd", state[i].samples);
-	fprintf(stderr, "\n%-18s", "Length (s)");
+		dsp_log_printf(" %12zd", state[i].samples);
+	dsp_log_printf("\n%-18s", "Length (s)");
 	for (i = 0; i < e->ostream.channels; ++i)
-		fprintf(stderr, " %12.2f", (double) state[i].samples / e->ostream.fs);
-	fputc('\n', stderr);
+		dsp_log_printf(" %12.2f", (double) state[i].samples / e->ostream.fs);
+	dsp_log_printf("\n");
+	dsp_log_release();
 	free(state);
 }
 

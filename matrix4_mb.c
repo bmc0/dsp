@@ -390,20 +390,22 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	#ifndef LADSPA_FRONTEND
 		/* TODO: Implement a proper way for effects to show status lines. */
 		if (state->show_status) {
+			dsp_log_acquire();
 			for (i = 0; i < N_BANDS; ++i) {
-				fprintf(stderr, "\n%s%s: band %zd: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: l:%05.3f r:%05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r",
+				dsp_log_printf("\n%s%s: band %zd: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: l:%05.3f r:%05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r",
 					e->name, (state->disable) ? " [off]" : "", i,
 					TO_DEGREES(state->band[i].ax.lr), TO_DEGREES(state->band[i].ax_ev.lr), TO_DEGREES(state->band[i].ax.cs), TO_DEGREES(state->band[i].ax_ev.cs),
 					state->band[i].fl_boost, state->band[i].fr_boost, state->band[i].ev.adj, state->band[i].ev.ord_count, state->band[i].ev.diff_count, state->band[i].ev.early_count);
 			}
-			fprintf(stderr, "\n%s%s: weighted RMS dir_boost: l:%05.3f r:%05.3f\033[K\r",
+			dsp_log_printf("\n%s%s: weighted RMS dir_boost: l:%05.3f r:%05.3f\033[K\r",
 				e->name, (state->disable) ? " [off]" : "",
 				#if DOWNSAMPLE_FACTOR > 1
 					state->fl_boost[1], state->fr_boost[1]);
 				#else
 					state->fl_boost, state->fr_boost);
 				#endif
-			fprintf(stderr, "\033[%zdA", i+1);
+			dsp_log_printf("\033[%zdA", i+1);
+			dsp_log_release();
 		}
 	#endif
 
@@ -470,8 +472,10 @@ void matrix4_mb_effect_destroy(struct effect *e)
 		event_state_cleanup(&state->band[i].ev);
 	#ifndef LADSPA_FRONTEND
 		if (state->show_status) {
-			for (int i = 0; i < N_BANDS+1; ++i) fprintf(stderr, "\033[K\n");
-			fprintf(stderr, "\033[K\r\033[%dA", N_BANDS+1);
+			dsp_log_acquire();
+			for (int i = 0; i < N_BANDS+1; ++i) dsp_log_printf("\033[K\n");
+			dsp_log_printf("\033[K\r\033[%dA", N_BANDS+1);
+			dsp_log_release();
 		}
 	#endif
 	free(state);

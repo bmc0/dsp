@@ -57,15 +57,8 @@ static int n_configs = 0;
 static struct ladspa_dsp_config *configs = NULL;
 static LADSPA_Descriptor *descriptors = NULL;
 
-int dsp_log_printf(const char *fmt, ...)
-{
-	int r;
-	va_list v;
-	va_start(v, fmt);
-	r = vfprintf(stderr, fmt, v);
-	va_end(v);
-	return r;
-}
+void dsp_log_acquire(void) { /* do nothing */ }
+void dsp_log_release(void) { /* do nothing */ }
 
 static void init_config(struct ladspa_dsp_config *config, const char *file_name, const char *dir_path)
 {

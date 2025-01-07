@@ -30,8 +30,23 @@ enum {
 	LL_VERBOSE,
 };
 #define LOGLEVEL(l) (dsp_globals.loglevel >= (l))
-#define LOG_FMT(l, fmt, ...) do { if (LOGLEVEL(l)) dsp_log_printf("%s: " fmt "\n", dsp_globals.prog_name, __VA_ARGS__); } while (0)
-#define LOG_S(l, s) do { if (LOGLEVEL(l)) dsp_log_printf("%s: %s\n", dsp_globals.prog_name, s); } while (0)
+#define dsp_log_printf(...) fprintf(stderr, __VA_ARGS__)
+#define LOG_FMT(l, fmt, ...) \
+	do { \
+		if (LOGLEVEL(l)) { \
+			dsp_log_acquire(); \
+			dsp_log_printf("%s: " fmt "\n", dsp_globals.prog_name, __VA_ARGS__); \
+			dsp_log_release(); \
+		} \
+	} while (0)
+#define LOG_S(l, s) \
+	do { \
+		if (LOGLEVEL(l)) { \
+			dsp_log_acquire(); \
+			dsp_log_printf("%s: %s\n", dsp_globals.prog_name, s); \
+			dsp_log_release(); \
+		} \
+	} while (0)
 
 #define DEFAULT_FS       44100
 #define DEFAULT_CHANNELS     1
@@ -53,6 +68,7 @@ struct stream_info {
 };
 
 extern struct dsp_globals dsp_globals;
-extern int dsp_log_printf(const char *, ...);
+extern void dsp_log_acquire(void);
+extern void dsp_log_release(void);
 
 #endif
