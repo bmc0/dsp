@@ -38,6 +38,7 @@
 #include "hilbert.h"
 #include "decorrelate.h"
 #include "noise.h"
+#include "dither.h"
 #include "ladspa_host.h"
 #include "stats.h"
 
@@ -89,6 +90,7 @@ static const struct effect_info effects[] = {
 #endif
 	{ "decorrelate",        "decorrelate [-m] [stages]",               decorrelate_effect_init, 0 },
 	{ "noise",              "noise level[b]",                          noise_effect_init,     0 },
+	{ "dither",             "dither [shape] [[quantize_bits] bits]",   dither_effect_init,    0 },
 #ifdef ENABLE_LADSPA_HOST
 	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
 #endif
@@ -405,11 +407,26 @@ int effects_chain_needs_dither(struct effects_chain *chain)
 {
 	struct effect *e = chain->head;
 	while (e != NULL) {
-		if (!(e->flags & EFFECT_FLAG_NO_DITHER))
+		if (!(e->flags & EFFECT_FLAG_NO_DITHER) && !effect_is_dither(e))
 			return 1;
 		e = e->next;
 	}
 	return 0;
+}
+
+int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int enabled)
+{
+	struct effect *e = chain->head;
+	int r = 1;
+	while (e != NULL) {
+		if (effect_is_dither(e)) {
+			dither_effect_set_params(e, prec, enabled);
+			r = 0;
+		}
+		else if (!(e->flags & EFFECT_FLAG_NO_DITHER)) r = 1;
+		e = e->next;
+	}
+	return r && enabled;  /* note: non-zero return value means dither should be added */
 }
 
 sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)

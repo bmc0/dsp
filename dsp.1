@@ -316,6 +316,42 @@ Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
 in dBFS if no suffix is given, or the effective precision in bits if the
 `\fBb\fR' suffix is given.
 .TP
+\fBdither\fR [\fIshape\fR] [[\fIquantize_bits\fR] \fIbits\fR]
+Apply dither with optional noise shaping. The \fIshape\fR argument determines
+the type of dither and the noise shaping filter (if any):
+
+.TS
+tab (|);
+lB lB
+lI l.
+Name|Description
+_
+flat|Flat TPDF with no feedback.
+sloped|Flat TPDF with feedback. First-order highpass response.
+sloped2|Sloped TPDF with feedback. Stronger HF emphasis than \fIsloped\fR.
+lipshitz|5-tap E-weighted curve from [1]. Notches around 4k and 12k.
+wan3|3-tap F-weighted curve from [2]. Notch around 4k.
+wan9|9-tap F-weighted curve from [2]. Notches around 3.5k and 12k.
+.TE
+
+The \fIbits\fR argument sets the dither level in bits. The \fIquantize_bits\fR
+argument sets the number of levels to quantize to. The default setting for
+both is `auto'. If \fIbits\fR is not `auto', dither is applied at the specified
+bit depth regardless of the output sample format. \fIbits\fR may be any number.
+\fIquantize_bits\fR must be an integer between 2 and 32. If \fIquantize_bits\fR is
+not given, it is set to the same value as \fIbits\fR (rounded to the nearest
+integer).
+
+.RS
+.IP [1] 4
+S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
+``Minimally Audible Noise Shaping,'' J. AES, vol. 39, no. 11,
+November 1991
+.IP [2] 4
+R. A. Wannamaker, "Psychoacoustically Optimal Noise Shaping,"
+J. AES, vol. 40, no. 7/8, July 1992
+.RE
+.TP
 \fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
 the exception of zero output ports). If a plugin has one or zero input

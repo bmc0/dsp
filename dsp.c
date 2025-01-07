@@ -38,9 +38,9 @@
 	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : (x))
 #define CHOOSE_INPUT_CHANNELS(x) \
 	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : (x))
-#define SHOULD_DITHER(in, out, chain_dither) \
+#define SHOULD_DITHER(in, out, chain_needs_dither) \
 	(force_dither != -1 && ((out)->hints & CODEC_HINT_CAN_DITHER) && \
-		(force_dither == 1 || ((out)->prec < 24 && ((chain_dither) || (in)->prec > (out)->prec || !((in)->hints & CODEC_HINT_CAN_DITHER)))))
+		(force_dither == 1 || ((out)->prec < 24 && ((chain_needs_dither) || (in)->prec > (out)->prec || !((in)->hints & CODEC_HINT_CAN_DITHER)))))
 #define TIME_FMT "%.2zd:%.2zd:%05.2lf"
 #define TIME_FMT_ARGS(frames, fs) \
 	((frames) != -1) ? (frames) / (fs) / 3600 : 0, \
@@ -507,10 +507,10 @@ static inline sample_t clip(sample_t s)
 	return s;
 }
 
-static void write_out(ssize_t frames, sample_t *buf, int do_dither)
+static void write_out(ssize_t frames, sample_t *buf, int add_dither)
 {
 	const ssize_t samples = frames * out_codec->channels;
-	if (do_dither) {
+	if (add_dither) {
 		for (ssize_t i = 0; i < samples; ++i)
 			buf[i] = clip(buf[i] + tpdf_noise(dither_mult));
 	}
@@ -603,7 +603,7 @@ static void handle_tstp(int is_paused)
 		ssize_t w = block_frames; \
 		obuf = drain_effects_chain(&chain, &w, buf1, buf2); \
 		if (w < 0) break; \
-		write_out(w, obuf, do_dither); \
+		write_out(w, obuf, add_dither); \
 	} while (1)
 
 #define REBUILD_EFFECTS_CHAIN \
@@ -613,6 +613,7 @@ static void handle_tstp(int is_paused)
 		stream.channels = in_codecs.head->channels; \
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL)) \
 			cleanup_and_exit(1); \
+		chain_needs_dither = effects_chain_needs_dither(&chain); \
 	} while (0)
 
 #define REOPEN_OUTPUT \
@@ -625,7 +626,6 @@ static void handle_tstp(int is_paused)
 			if (init_out_codec(&out_p, &stream, -1, write_buf_blocks) == NULL) \
 				cleanup_and_exit(1); \
 		} \
-		chain_dither = effects_chain_needs_dither(&chain); \
 	} while (0)
 
 #define REALLOC_BUFS \
@@ -638,10 +638,17 @@ static void handle_tstp(int is_paused)
 		} \
 	} while (0)
 
+#define SET_DITHER \
+	do { \
+		const int do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_needs_dither); \
+		add_dither = effects_chain_set_dither_params(&chain, out_codec->prec, do_dither); \
+		LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off"); \
+	} while (0)
+
 int main(int argc, char *argv[])
 {
-	int is_paused = 0, do_dither = 0, term_sig, err;
-	int chain_start, chain_argc, chain_dither;
+	int is_paused = 0, add_dither = 0, term_sig, err;
+	int chain_start, chain_argc, chain_needs_dither;
 	int read_buf_blocks = 0;
 	double in_time = 0.0;
 	struct codec *c = NULL;
@@ -730,6 +737,7 @@ int main(int argc, char *argv[])
 
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 			cleanup_and_exit(1);
+		chain_needs_dither = effects_chain_needs_dither(&chain);
 		if ((in_codec_buf = codec_read_buf_init(&in_codecs, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
 
@@ -755,13 +763,11 @@ int main(int argc, char *argv[])
 		int buf_len = 0;
 		REALLOC_BUFS;
 		dither_mult = tpdf_dither_get_mult(out_codec->prec);
-		chain_dither = effects_chain_needs_dither(&chain);
 
 		while (in_codecs.head != NULL) {
 			ssize_t r, pos = 0;
 			int k = 0;
-			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_dither);
-			LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
+			SET_DITHER;
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
 			print_progress(in_codecs.head, pos, is_paused, 1);
 			do {
@@ -829,8 +835,7 @@ int main(int argc, char *argv[])
 							}
 							else REOPEN_OUTPUT;
 							REALLOC_BUFS;
-							do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_dither);
-							LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
+							SET_DITHER;
 							break;
 						case 'v':
 							verbose_progress = !verbose_progress;
@@ -854,7 +859,7 @@ int main(int argc, char *argv[])
 				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
 				pos += r;
 				obuf = run_effects_chain(chain.head, &w, buf1, buf2);
-				write_out(w, obuf, do_dither);
+				write_out(w, obuf, add_dither);
 				k += w;
 				if (k >= out_codec->fs) {
 					print_progress(in_codecs.head, pos, is_paused, 0);

@@ -302,6 +302,33 @@ Example:
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	in dBFS if no suffix is given, or the effective precision in bits if the
 	`b` suffix is given.
+* `dither [shape] [[quantize_bits] bits]`  
+	Apply dither with optional noise shaping. The `shape` argument determines
+	the type of dither and the noise shaping filter (if any):
+
+	`shape`    | Description
+	---------- | ----------------------
+	`flat`     | Flat TPDF with no feedback.
+	`sloped`   | Flat TPDF with feedback. First-order highpass response.
+	`sloped2`  | Sloped TPDF with feedback. Stronger HF emphasis than `sloped`.
+	`lipshitz` | 5-tap E-weighted curve from [1]. Notches around 4k and 12k.
+	`wan3`     | 3-tap F-weighted curve from [2]. Notch around 4k.
+	`wan9`     | 9-tap F-weighted curve from [2]. Notches around 3.5k and 12k.
+
+	The `bits` argument sets the dither level in bits. The `quantize_bits`
+	argument sets the number of levels to quantize to. The default setting for
+	both is `auto`. If `bits` is not `auto`, dither is applied at the specified
+	bit depth regardless of the output sample format. `bits` may be any number.
+	`quantize_bits` must be an integer between 2 and 32. If `quantize_bits` is
+	not given, it is set to the same value as `bits` (rounded to the nearest
+	integer).
+
+	[1] S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
+	"Minimally Audible Noise Shaping," J. AES, vol. 39, no. 11,
+	November 1991  
+	[2] R. A. Wannamaker, "Psychoacoustically Optimal Noise Shaping,"
+	J. AES, vol. 40, no. 7/8, July 1992
+
 * `ladspa_host module_path plugin_label [control ...]`  
 	Apply a LADSPA plugin. Supports any number of input/output ports (with
 	the exception of zero output ports). If a plugin has one or zero input

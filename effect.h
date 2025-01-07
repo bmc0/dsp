@@ -74,6 +74,7 @@ int build_effects_chain(int, const char *const *, struct effects_chain *, struct
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);
 int effects_chain_needs_dither(struct effects_chain *);
+int effects_chain_set_dither_params(struct effects_chain *, int, int);
 sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
