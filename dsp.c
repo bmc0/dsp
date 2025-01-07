@@ -700,11 +700,12 @@ int main(int argc, char *argv[])
 	chain_argc = argc - optind;
 	stream.fs = in_codecs.head->fs;
 	stream.channels = in_codecs.head->channels;
-	if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
-		cleanup_and_exit(1);
 
-	if (plot)
+	if (plot) {
+		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
+			cleanup_and_exit(1);
 		plot_effects_chain(&chain, in_codecs.head->fs, in_codecs.head->channels, (plot > 1));
+	}
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));
 		sem_init(&ev_queue.items, 0, 0);
@@ -726,6 +727,8 @@ int main(int argc, char *argv[])
 		}
 		have_sig_thread = 1;
 
+		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
+			cleanup_and_exit(1);
 		if ((in_codec_buf = codec_read_buf_init(&in_codecs, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
 
