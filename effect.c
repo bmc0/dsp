@@ -401,6 +401,17 @@ ssize_t get_effects_chain_max_out_frames(struct effects_chain *chain, ssize_t in
 	return frames;
 }
 
+int effects_chain_needs_dither(struct effects_chain *chain)
+{
+	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (!(e->flags & EFFECT_FLAG_NO_DITHER))
+			return 1;
+		e = e->next;
+	}
+	return 0;
+}
+
 sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;

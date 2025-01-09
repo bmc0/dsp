@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,9 +38,9 @@
 	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : (x))
 #define CHOOSE_INPUT_CHANNELS(x) \
 	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : (x))
-#define SHOULD_DITHER(in, out, has_effects) \
+#define SHOULD_DITHER(in, out, chain_dither) \
 	(force_dither != -1 && ((out)->hints & CODEC_HINT_CAN_DITHER) && \
-		(force_dither == 1 || ((out)->prec < 24 && ((has_effects) || (in)->prec > (out)->prec || !((in)->hints & CODEC_HINT_CAN_DITHER)))))
+		(force_dither == 1 || ((out)->prec < 24 && ((chain_dither) || (in)->prec > (out)->prec || !((in)->hints & CODEC_HINT_CAN_DITHER)))))
 #define TIME_FMT "%.2zd:%.2zd:%05.2lf"
 #define TIME_FMT_ARGS(frames, fs) \
 	((frames) != -1) ? (frames) / (fs) / 3600 : 0, \
@@ -625,6 +625,7 @@ static void handle_tstp(int is_paused)
 			if (init_out_codec(&out_p, &stream, -1, write_buf_blocks) == NULL) \
 				cleanup_and_exit(1); \
 		} \
+		chain_dither = effects_chain_needs_dither(&chain); \
 	} while (0)
 
 #define REALLOC_BUFS \
@@ -639,7 +640,8 @@ static void handle_tstp(int is_paused)
 
 int main(int argc, char *argv[])
 {
-	int is_paused = 0, do_dither = 0, chain_start, chain_argc, term_sig, err;
+	int is_paused = 0, do_dither = 0, term_sig, err;
+	int chain_start, chain_argc, chain_dither;
 	int read_buf_blocks = 0;
 	double in_time = 0.0;
 	struct codec *c = NULL;
@@ -753,11 +755,12 @@ int main(int argc, char *argv[])
 		int buf_len = 0;
 		REALLOC_BUFS;
 		dither_mult = tpdf_dither_get_mult(out_codec->prec);
+		chain_dither = effects_chain_needs_dither(&chain);
 
 		while (in_codecs.head != NULL) {
 			ssize_t r, pos = 0;
 			int k = 0;
-			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
+			do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_dither);
 			LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
 			print_progress(in_codecs.head, pos, is_paused, 1);
@@ -826,7 +829,7 @@ int main(int argc, char *argv[])
 							}
 							else REOPEN_OUTPUT;
 							REALLOC_BUFS;
-							do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain.head != NULL);
+							do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_dither);
 							LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off" );
 							break;
 						case 'v':

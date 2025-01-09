@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -127,6 +127,7 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->flags |= EFFECT_FLAG_NO_DITHER;
 	e->run = stats_effect_run;
 	e->plot = stats_effect_plot;
 	e->destroy = stats_effect_destroy;

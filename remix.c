@@ -138,7 +138,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 
 	state = calloc(1, sizeof(struct remix_state));
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
-	int use_run_1a = 1, use_run_4 = 1;
+	int use_run_1a = 1, use_run_4 = 1, set_no_dither = 1;
 	for (int k = 0, i = 0, ch = 0; k < out_channels; ++k, ++ch) {
 		state->channel_selectors[k] = NEW_SELECTOR(istream->channels);
 		if (ch >= istream->channels || GET_BIT(channel_selector, ch)) {
@@ -146,6 +146,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 				if (strcmp(argv[i+1], ".") != 0 && parse_selector_masked(argv[i+1], state->channel_selectors[k], channel_selector, istream->channels))
 					goto fail;
 				const int n_sel = num_bits_set(state->channel_selectors[k], istream->channels);
+				if (n_sel > 1) set_no_dither = 0;
 				if (n_sel != 1) use_run_1a = 0;
 				if (n_sel > 4) use_run_4 = 0;
 				++i;
@@ -170,6 +171,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	e->istream.channels = istream->channels;
 	e->ostream.channels = out_channels;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
+	if (set_no_dither) e->flags |= EFFECT_FLAG_NO_DITHER;
 	if (use_run_1a) {
 		state->fast_sel.s1 = calloc(out_channels, sizeof(int));
 		for (int k = 0; k < out_channels; ++k) {

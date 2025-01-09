@@ -32,6 +32,7 @@ struct effect_info {
 enum {
 	EFFECT_FLAG_PLOT_MIX        = 1<<0,
 	EFFECT_FLAG_OPT_REORDERABLE = 1<<1,
+	EFFECT_FLAG_NO_DITHER       = 1<<2,  /* does not modify the signal such that dither is useful */
 };
 
 struct effect {
@@ -72,6 +73,7 @@ void append_effect(struct effects_chain *, struct effect *);
 int build_effects_chain(int, const char *const *, struct effects_chain *, struct stream_info *, const char *);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);
+int effects_chain_needs_dither(struct effects_chain *);
 sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
