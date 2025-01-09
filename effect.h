@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,11 +30,8 @@ struct effect_info {
 };
 
 enum {
-	PLOT_INFO_MIX = 1<<0,
-};
-
-enum {
-	OPT_INFO_REORDERABLE = 1<<0,
+	EFFECT_FLAG_PLOT_MIX        = 1<<0,
+	EFFECT_FLAG_OPT_REORDERABLE = 1<<1,
 };
 
 struct effect {
@@ -42,7 +39,7 @@ struct effect {
 	const char *name;
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
-	int plot_info, opt_info;
+	int flags;
 	/* All functions may be NULL */
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */

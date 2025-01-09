@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -334,7 +334,7 @@ static void effects_chain_optimize(struct effects_chain *chain)
 					|| m_src->ostream.channels != m_dest->ostream.channels
 					) break;
 				if (m_src->merge == NULL) {
-					if (m_src->opt_info & OPT_INFO_REORDERABLE) goto skip;
+					if (m_src->flags & EFFECT_FLAG_OPT_REORDERABLE) goto skip;
 					break;
 				}
 				if (m_dest->merge(m_dest, m_src)) {
@@ -472,8 +472,8 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
 			return;
 		}
-		if (e->istream.channels != e->ostream.channels && !(e->plot_info & PLOT_INFO_MIX)) {
-			LOG_FMT(LL_ERROR, "plot: BUG: effect '%s' changed the number of channels but does not have PLOT_INFO_MIX set!", e->name);
+		if (e->istream.channels != e->ostream.channels && !(e->flags & EFFECT_FLAG_PLOT_MIX)) {
+			LOG_FMT(LL_ERROR, "plot: BUG: effect '%s' changed the number of channels but does not have EFFECT_FLAG_PLOT_MIX set!", e->name);
 			return;
 		}
 		fs = e->ostream.fs;
@@ -485,7 +485,7 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 	e = start_e;
 	int channels = input_channels, start_idx = 0;
 	for (int i = 0; e != NULL; ++i) {
-		if (e->plot_info & PLOT_INFO_MIX) {
+		if (e->flags & EFFECT_FLAG_PLOT_MIX) {
 			for (int k = 0; k < e->istream.channels; ++k) {
 				printf("Ht%d_%d(f)=1.0", k, i);
 				struct effect *e2 = start_e;

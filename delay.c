@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -135,7 +135,7 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->opt_info |= OPT_INFO_REORDERABLE;
+	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->run = delay_effect_run;
 	e->delay = delay_effect_delay;
 	e->reset = delay_effect_reset;

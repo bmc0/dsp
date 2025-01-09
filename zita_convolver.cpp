@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2016-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2016-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -229,7 +229,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = (char *) NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->opt_info |= OPT_INFO_REORDERABLE;
+	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->run = zita_convolver_effect_run;
 	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;

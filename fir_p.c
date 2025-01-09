@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -263,7 +263,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->opt_info |= OPT_INFO_REORDERABLE;
+	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->run = fir_p_effect_run;
 	e->reset = fir_p_effect_reset;
 	e->plot = fir_p_effect_plot;

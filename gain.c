@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -129,7 +129,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	}
 	else {
 		v_noop = 1.0;
-		e->opt_info |= OPT_INFO_REORDERABLE;
+		e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 		e->run = gain_effect_run;
 		e->plot = gain_effect_plot;
 		e->merge = gain_effect_merge;

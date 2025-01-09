@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2018-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2018-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -96,7 +96,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->plot_info |= PLOT_INFO_MIX;
+	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	switch (ei->effect_number) {
 	case ST2MS_EFFECT_NUMBER_ST2MS:
 		e->run = st2ms_effect_run;

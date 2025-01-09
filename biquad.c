@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -472,7 +472,7 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
-	e->opt_info |= OPT_INFO_REORDERABLE;
+	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	biquad_effect_set_run_func(e);
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;
