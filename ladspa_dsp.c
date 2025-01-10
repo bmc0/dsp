@@ -68,6 +68,7 @@ static void init_config(struct ladspa_dsp_config *config, const char *file_name,
 	if (strcmp(file_name, "config") != 0)
 		config->name = strdup(&file_name[7]);
 	config->dir_path = strdup(dir_path);
+	config->lc_n = strdup("C");
 }
 
 static int read_config(struct ladspa_dsp_config *config, const char *path)
@@ -103,7 +104,9 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 			}
 			else if (strcmp(key, "LC_NUMERIC") == 0) {
 				free(config->lc_n);
-				config->lc_n = strdup(value);
+				config->lc_n = NULL;
+				if (strcmp(value, "none") != 0)
+					config->lc_n = strdup(value);
 			}
 			else if (strcmp(key, "effects_chain") == 0) {
 				for (k = 0; k < config->chain_argc; ++k)

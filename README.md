@@ -442,13 +442,16 @@ ignored. The valid keys are:
 	Number of input channels. Default value is `1`. May be left unset unless
 	you want individual control over each channel.
 * `output_channels`  
-	Number of output channels. Default value is `1`. Initialization will fail
-	if this value is set incorrectly.
+	Number of output channels. Default value is `1`. This parameter is not
+	currently set automatically because the number of LADSPA ports must be
+	known before the effects chain is built. Initialization will fail if it
+	does not match the effects chain.
 * `LC_NUMERIC`  
-	Set `LC_NUMERIC` to the given value while building the effects chain. If
-	the decimal separator defined by your system locale is something other than
-	`.`, you should set this to `C` (to use `.` as the decimal separator) or an
-	empty value (to use the decimal separator defined by your locale).
+	Set `LC_NUMERIC` to the given value while building the effects chain.
+	Default value is `C`, which gives consistent number parsing behavior
+	regardless of the system locale and LADSPA host behavior. Setting this to
+	an empty value uses the default system locale. The special value `none`
+	leaves `LC_NUMERIC` up to the LADSPA host (not generally recommended).
 * `effects_chain`  
 	String to build the effects chain. The format is the same as an effects
 	file, but only a single line is interpreted.
