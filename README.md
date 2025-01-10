@@ -321,8 +321,6 @@ Example:
 
 #### Selector syntax
 
-	[[start][-[end]][,...]]
-
 Example    | Description
 ---------- | --------------------------
 `<empty>`  | all
@@ -351,10 +349,9 @@ frequency to corner frequency (like Room EQ Wizard and the Behringer DCX2496).
 
 #### File paths
 
-* On the command line, relative paths are relative to `$PWD`.
-* Within an effects file, relative paths are relative to the directory
-  containing said effects file.
-* The `~/` prefix will be expanded to the contents of `$HOME`.
+On the command line, relative paths are relative to `$PWD`. Within an effects
+file, relative paths are relative to the directory containing said effects
+file. The `~/` prefix will be expanded to the contents of `$HOME`.
 
 #### Channel selectors and masks
 

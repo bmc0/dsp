@@ -107,7 +107,7 @@ argument is as follows:
 \fItype\fR may be `sine' for sine sweeps or tones, or `delta' for a delta function
 (impulse). `sine' accepts the following arguments:
 .TP
-\fBfreq\fR=\fIf0\fR[\fBk\fR][-\fIf1\fR[\fBk\fR]]
+\fBfreq\fR=\fIf0\fR[\fBk\fR][\-\fIf1\fR[\fBk\fR]]
 Frequency. If \fIlen\fR is set and \fIf1\fR is given, an exponential sine sweep
 is generated.
 .PP
@@ -207,15 +207,15 @@ plain (i.e. unencoded) stereo material.
 The intended speaker configuration is fronts at ±30° and surrounds between
 ±60° and ±120°. The surround speakers must be calibrated correctly in
 level and frequency response for best results. The surrounds should be
-delayed by about 10-25ms (acoustically) relative to the fronts. No
+delayed by about 10\-25ms (acoustically) relative to the fronts. No
 frequency contouring is done internally, so applying low pass and/or
 shelving filters to the surround outputs is recommended:
 .EX
 	matrix4 surround_delay=15m -6 :2,3 lowpass_1 10k :
 .EE
-The settings shown above (-6dB surround level, 15ms delay, and 10kHz
+The settings shown above (\-6dB surround level, 15ms delay, and 10kHz
 rolloff) are a good starting point, but may be adjusted to taste. The
-default \fIsurround_level\fR is -6dB. Applying the \fBdecorrelate\fR effect to the
+default \fIsurround_level\fR is \-6dB. Applying the \fBdecorrelate\fR effect to the
 surround outputs (optionally with the \fI\-m\fR flag) seems to further improve
 the spatial impression (note: adjust `surround_delay' to compensate for
 the \fBdecorrelate\fR effect's group delay).
@@ -334,7 +334,6 @@ Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 length (s) for each channel. If \fIref_level\fR is given, peak and RMS levels
 relative to \fIref_level\fR will be shown as well (dBr).
 .SS Selector syntax
-[[\fIstart\fR][-[\fIend\fR]][,...]]
 .TS
 tab (|);
 lB lB
@@ -343,10 +342,10 @@ Example|Description
 _
 <empty>|all
 \-|all
-2-|2 to n
+2\-|2 to n
 \-4|0 through 4
 1,3|1 and 3
-1-4,7,9-|1 through 4, 7, and 9 to n
+1\-4,7,9\-|1 through 4, 7, and 9 to n
 .TE
 .PP
 Note: There is no difference between `1,3' and `3,1'. Order is not
@@ -369,13 +368,9 @@ k|Bandwidth in kHz.
 Note: The `\fBd\fR' width suffix also changes the definition of \fIf0\fR from center
 frequency to corner frequency (like Room EQ Wizard and the Behringer DCX2496).
 .SS File paths
-.IP *
-On the command line, relative paths are relative to `$PWD'.
-.IP *
-Within an effects file, relative paths are relative to the directory
-containing said effects file.
-.IP *
-The `~/' prefix will be expanded to the contents of `$HOME'.
+On the command line, relative paths are relative to `$PWD'. Within an effects
+file, relative paths are relative to the directory containing said effects
+file. The `~/' prefix will be expanded to the contents of `$HOME'.
 .SS Channel selectors and masks
 A colon (`:') followed by a selector (see ``Selector syntax'') specifies the
 input channels for effects that follow. For example,
@@ -444,12 +439,11 @@ Apply effects from a file:
 .SH LADSPA FRONTEND
 .SS Configuration
 \fBladspa_dsp\fR looks for configuration files in the following directories:
-
-.IP *
+.IP \(bu 3
 $XDG_CONFIG_HOME/ladspa_dsp
-.IP *
+.IP \(bu 3
 $HOME/.config/ladspa_dsp (if $XDG_CONFIG_HOME is not set)
-.IP *
+.IP \(bu 3
 /etc/ladspa_dsp
 .PP
 To override the default directories, set the `LADSPA_DSP_CONFIG_PATH'
