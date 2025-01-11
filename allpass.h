@@ -16,37 +16,57 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#ifndef DSP_CAP5_H
-#define DSP_CAP5_H
+#ifndef DSP_ALLPASS_H
+#define DSP_ALLPASS_H
 
 #include "dsp.h"
-#include "allpass.h"
 
-struct ap3_state {
-	struct ap2_state ap2;
-	struct ap1_state ap1;
+struct ap1_state {
+	sample_t c0;
+	sample_t i0, o0;
 };
 
-struct cap5_state {
-	struct ap2_state a1;
-	struct ap3_state a2;
+struct ap2_state {
+	sample_t c0, c1;
+	sample_t i0, o0, i1, o1;
 };
 
-void ap3_reset(struct ap3_state *);
-void cap5_reset(struct cap5_state *);
-void cap5_init(struct cap5_state *, double, double);
-
-static inline sample_t ap3_run(struct ap3_state *state, sample_t s)
+static inline void ap1_reset(struct ap1_state *state)
 {
-	return ap1_run(&state->ap1, ap2_run(&state->ap2, s));
+	state->i0 = 0.0;
+	state->o0 = 0.0;
 }
 
-static inline void cap5_run(struct cap5_state *state, sample_t s, sample_t *lp, sample_t *hp)
+static inline void ap2_reset(struct ap2_state *state)
 {
-	sample_t a1 = ap2_run(&state->a1, s);
-	sample_t a2 = ap3_run(&state->a2, s);
-	*lp = (a1+a2)*0.5;
-	*hp = (a1-a2)*0.5;
+	state->i0 = state->i1 = 0.0;
+	state->o0 = state->o1 = 0.0;
+}
+
+static inline sample_t ap1_run(struct ap1_state *state, sample_t s)
+{
+	sample_t r = state->i0
+		+ state->c0 * (s - state->o0);
+
+	state->i0 = s;
+	state->o0 = r;
+
+	return r;
+}
+
+static inline sample_t ap2_run(struct ap2_state *state, sample_t s)
+{
+	sample_t r = state->i1
+		+ state->c0 * (state->i0 - state->o0)
+		+ state->c1 * (s - state->o1);
+
+	state->i1 = state->i0;
+	state->i0 = s;
+
+	state->o1 = state->o0;
+	state->o0 = r;
+
+	return r;
 }
 
 #endif

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2022-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2022-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,18 +19,6 @@
 #include <complex.h>
 #include <math.h>
 #include "cap5.h"
-
-void ap1_reset(struct ap1_state *state)
-{
-	state->i0 = 0.0;
-	state->o0 = 0.0;
-}
-
-void ap2_reset(struct ap2_state *state)
-{
-	state->i0 = state->i1 = 0.0;
-	state->o0 = state->o1 = 0.0;
-}
 
 void ap3_reset(struct ap3_state *state)
 {
