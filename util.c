@@ -70,6 +70,28 @@ ssize_t parse_len(const char *s, int fs, char **endptr)
 	return samples;
 }
 
+double parse_len_frac(const char *s, double fs, char **endptr)
+{
+	double d = strtod(s, endptr);
+	double samples = d * fs;
+	if (*endptr != NULL && *endptr != s) {
+		switch (**endptr) {
+		case 'm':
+			d /= 1000.0;
+		case 's':
+			samples = d * fs;
+			++(*endptr);
+			break;
+		case 'S':
+			samples = d;
+			++(*endptr);
+			break;
+		}
+		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+	}
+	return samples;
+}
+
 static void set_range(char *b, int n, int start, int end, int dash)
 {
 	if (start == -1 && end == -1) {

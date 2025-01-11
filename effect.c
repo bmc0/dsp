@@ -74,7 +74,7 @@ static const struct effect_info effects[] = {
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
 	{ "st2ms",              "st2ms",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_ST2MS },
 	{ "ms2st",              "ms2st",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_MS2ST },
-	{ "delay",              "delay delay[s|m|S]",                      delay_effect_init,     0 },
+	{ "delay",              "delay [-f] delay[s|m|S]",                 delay_effect_init,     0 },
 #ifdef HAVE_FFTW3
 #ifndef SYMMETRIC_IO
 	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init,  0 },
