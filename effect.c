@@ -373,16 +373,23 @@ int build_effects_chain(int argc, const char *const *argv, struct effects_chain 
 	return 0;
 }
 
+static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
+{
+	if (e->buffer_frames != NULL)
+		return e->buffer_frames(e, in_frames);
+	if (e->ostream.fs != e->istream.fs) {
+		const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
+		return ratio_mult_ceil(in_frames, e->ostream.fs / gcd, e->istream.fs / gcd);
+	}
+	return in_frames;
+}
+
 ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames, int in_channels)
 {
-	int gcd;
 	ssize_t frames = in_frames, len, max_len = in_frames * in_channels;
 	struct effect *e = chain->head;
 	while (e != NULL) {
-		if (e->ostream.fs != e->istream.fs) {
-			gcd = find_gcd(e->ostream.fs, e->istream.fs);
-			frames = ratio_mult_ceil(frames, e->ostream.fs / gcd, e->istream.fs / gcd);
-		}
+		frames = effect_max_out_frames(e, frames);
 		len = frames * e->ostream.channels;
 		if (len  > max_len) max_len = len;
 		e = e->next;
@@ -395,10 +402,7 @@ ssize_t get_effects_chain_max_out_frames(struct effects_chain *chain, ssize_t in
 	ssize_t frames = in_frames;
 	struct effect *e = chain->head;
 	while (e != NULL) {
-		if (e->ostream.fs != e->istream.fs) {
-			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
-			frames = ratio_mult_ceil(frames, e->ostream.fs / gcd, e->istream.fs / gcd);
-		}
+		frames = effect_max_out_frames(e, frames);
 		e = e->next;
 	}
 	return frames;
@@ -556,15 +560,21 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
-	int gcd;
 	ssize_t ftmp = *frames, dframes = -1;
 	struct effect *e = chain->head;
 	while (e != NULL && dframes == -1) {
 		dframes = ftmp;
-		if (e->drain != NULL) e->drain(e, &dframes, buf1);
+		if (e->drain2 != NULL) {
+			sample_t *rbuf = e->drain2(e, &dframes, buf1, buf2);
+			if (rbuf == buf2) {
+				buf2 = buf1;
+				buf1 = rbuf;
+			}
+		}
+		else if (e->drain != NULL) e->drain(e, &dframes, buf1);
 		else dframes = -1;
 		if (e->ostream.fs != e->istream.fs) {
-			gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 			ftmp = ratio_mult_ceil(ftmp, e->ostream.fs / gcd, e->istream.fs / gcd);
 		}
 		e = e->next;

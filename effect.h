@@ -48,8 +48,10 @@ struct effect {
 	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);
 	void (*drain)(struct effect *, ssize_t *, sample_t *);
+	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
 	struct effect * (*merge)(struct effect *, struct effect *);
+	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void *data;
 };
 
