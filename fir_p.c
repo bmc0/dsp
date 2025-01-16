@@ -55,10 +55,9 @@ struct fir_p_state {
 sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	ssize_t i, k, j, l;
 
-	for (i = 0; i < *frames; ++i) {
-		for (k = 0; k < e->istream.channels; ++k) {
+	for (ssize_t i = 0; i < *frames; ++i) {
+		for (int k = 0; k < e->istream.channels; ++k) {
 			sample_t s = (ibuf) ? ibuf[i*e->istream.channels + k] : 0.0;
 			if (state->part0.buf[k]) {
 				for (ssize_t n = state->part0.p, m = 0; m < DIRECT_LEN; ++m) {
@@ -67,7 +66,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 				}
 				obuf[i*e->ostream.channels + k] = state->part0.buf[k][state->part0.p];
 				state->part0.buf[k][state->part0.p] = 0.0;
-				for (j = 0; j < state->nparts; ++j) {
+				for (ssize_t j = 0; j < state->nparts; ++j) {
 					struct fft_part *part = &state->part[j];
 					obuf[i*e->ostream.channels + k] += part->obuf[k][part->p];
 					part->ibuf[k][part->p] = (part->delay > 0) ? state->ibuf[k][part->in_p] : s;
@@ -80,7 +79,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 			}
 		}
 		state->part0.p = (state->part0.p+1) & (DIRECT_LEN-1);
-		for (j = 0; j < state->nparts; ++j) {
+		for (ssize_t j = 0; j < state->nparts; ++j) {
 			struct fft_part *part = &state->part[j];
 			part->in_p = (part->in_p+1 >= state->len) ? 0 : part->in_p+1;
 			++part->p;
@@ -89,18 +88,18 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 		/* All partition lengths must be some multiple of DIRECT_LEN */
 		if (state->part0.p == 0) {
-			for (j = 0; j < state->nparts; ++j) {
+			for (ssize_t j = 0; j < state->nparts; ++j) {
 				struct fft_part *part = &state->part[j];
 				if (part->p == part->len) {
-					for (k = 0; k < e->ostream.channels; ++k) {
+					for (int k = 0; k < e->ostream.channels; ++k) {
 						if (part->ibuf[k]) {
 							fftw_execute(part->r2c_plan[k]);
-							for (l = 0; l < part->fr_len; ++l)
+							for (ssize_t l = 0; l < part->fr_len; ++l)
 								state->tmp_fr[l] *= part->filter_fr[k][l];
 							fftw_execute(part->c2r_plan[k]);
-							for (l = 0; l < part->len * 2; ++l)
+							for (ssize_t l = 0; l < part->len * 2; ++l)
 								part->obuf[k][l] /= part->len * 2;
-							for (l = 0; l < part->len; ++l) {
+							for (ssize_t l = 0; l < part->len; ++l) {
 								part->obuf[k][l] += part->olap[k][l];
 								part->olap[k][l] = part->obuf[k][l + part->len];
 							}
@@ -119,17 +118,17 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 void fir_p_effect_reset(struct effect *e)
 {
-	int k, j;
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	if (state->ibuf) {
-		for (k = 0; k < e->ostream.channels; ++k)
+		for (int k = 0; k < e->ostream.channels; ++k)
 			if (state->ibuf[k])
 				memset(state->ibuf[k], 0, state->len * sizeof(sample_t));
 	}
-	for (j = 0; j < state->nparts; ++j) {
+	state->part0.p = 0;
+	for (ssize_t j = 0; j < state->nparts; ++j) {
 		struct fft_part *part = &state->part[j];
 		part->p = 0;
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			if (state->part0.buf[k]) {
 				memset(part->obuf[k], 0, part->len * 2 * sizeof(sample_t));
 				memset(part->olap[k], 0, part->len * sizeof(sample_t));
@@ -186,11 +185,10 @@ void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 
 void fir_p_effect_destroy(struct effect *e)
 {
-	int k, j;
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	for (j = 0; j < state->nparts; ++j) {
+	for (ssize_t j = 0; j < state->nparts; ++j) {
 		struct fft_part *part = &state->part[j];
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			if (part->ibuf[k]) {
 				fftw_free(part->ibuf[k]);
 				fftw_free(part->obuf[k]);
@@ -198,7 +196,7 @@ void fir_p_effect_destroy(struct effect *e)
 				break;
 			}
 		}
-		for (k = 0; k < e->ostream.channels; ++k) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
 			fftw_free(part->filter_fr[k]);
 			fftw_destroy_plan(part->r2c_plan[k]);
 			fftw_destroy_plan(part->c2r_plan[k]);
@@ -210,7 +208,7 @@ void fir_p_effect_destroy(struct effect *e)
 		free(part->r2c_plan);
 		free(part->c2r_plan);
 	}
-	for (k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state->part0.buf[k]) {
 			free(state->part0.filter[k]);
 			free(state->part0.buf[k]);
@@ -229,7 +227,7 @@ void fir_p_effect_destroy(struct effect *e)
 
 struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t max_part_len)
 {
-	int i, k, j, l;
+	ssize_t i, k, j, l;
 	ssize_t filter_pos = DIRECT_LEN, delay = 0, max_delay = 0;
 	struct effect *e;
 	struct fir_p_state *state;
@@ -299,7 +297,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 			k *= 2;
 		else
 			delay += state->part[i].len;
-		LOG_FMT(LL_VERBOSE, "%s: info: partition %d: len=%zd delay=%zd total=%d", ei->name, i+1, state->part[i].len, state->part[i].delay, j);
+		LOG_FMT(LL_VERBOSE, "%s: info: partition %zd: len=%zd delay=%zd total=%zd", ei->name, i+1, state->part[i].len, state->part[i].delay, j);
 	}
 	if (max_delay > 0) {
 		state->len = max_delay;
