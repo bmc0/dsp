@@ -84,4 +84,21 @@ sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sa
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);
 
+struct effects_chain_xfade_state {
+	sample_t *buf;
+	struct effects_chain chain[2];
+	struct stream_info istream, ostream;
+	ssize_t frames, pos;
+	int has_output;
+};
+
+#define EFFECTS_CHAIN_XFADE_TIME 100  /* milliseconds */
+#define EFFECTS_CHAIN_XFADE_STATE_INITIALIZER ((struct effects_chain_xfade_state) { \
+	.chain[0] = EFFECTS_CHAIN_INITIALIZER, \
+	.chain[1] = EFFECTS_CHAIN_INITIALIZER, \
+})
+
+void effects_chain_xfade_reset(struct effects_chain_xfade_state *);
+sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *, ssize_t *, sample_t *, sample_t *);
+
 #endif
