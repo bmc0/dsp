@@ -80,6 +80,7 @@ enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
 static sample_t peak = 0.0, dither_mult = 0.0;
 static struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
+static struct effects_chain_xfade_state xfade_state = EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
 static struct codec_list in_codecs = CODEC_LIST_INITIALIZER;
 static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
@@ -244,6 +245,7 @@ static void cleanup_and_exit(int s)
 	codec_write_buf_destroy(out_codec_buf);
 	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
+	destroy_effects_chain(&xfade_state.chain[1]);
 	free(buf1);
 	free(buf2);
 	free(progress_line);
@@ -521,6 +523,13 @@ static void write_out(ssize_t frames, sample_t *buf, int add_dither)
 	codec_write_buf_write(out_codec_buf, buf, frames);
 }
 
+static void finish_xfade(void)
+{
+	destroy_effects_chain(&chain);
+	chain = xfade_state.chain[1];
+	effects_chain_xfade_reset(&xfade_state);
+}
+
 static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence, int pause_state)
 {
 	ssize_t s;
@@ -534,6 +543,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 		s = pos + offset - get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 	}
 	if ((s = codec_read_buf_seek(in_codec_buf, s)) >= 0) {
+		if (xfade_state.pos > 0) finish_xfade();
 		reset_effects_chain(&chain);
 		codec_write_buf_drop(out_codec_buf, pause_state || (in->hints & CODEC_HINT_REALTIME), pause_state);
 		return s;
@@ -628,13 +638,15 @@ static void handle_tstp(int is_paused)
 		} \
 	} while (0)
 
-#define REALLOC_BUFS \
+#define REALLOC_BUFS(chain) \
 	do { \
-		const int new_buf_len = get_effects_chain_buffer_len(&chain, block_frames, in_codecs.head->channels); \
+		const int new_buf_len = get_effects_chain_buffer_len(chain, block_frames, in_codecs.head->channels); \
 		if (new_buf_len > buf_len) { \
 			buf_len = new_buf_len; \
-			buf1 = realloc(buf1, buf_len*sizeof(sample_t)); \
-			buf2 = realloc(buf2, buf_len*sizeof(sample_t)); \
+			free(buf1); free(buf2); free(xfade_state.buf); \
+			buf1 = calloc(buf_len, sizeof(sample_t)); \
+			buf2 = calloc(buf_len, sizeof(sample_t)); \
+			xfade_state.buf = (!drain_effects) ? calloc(buf_len, sizeof(sample_t)) : NULL; \
 		} \
 	} while (0)
 
@@ -761,7 +773,7 @@ int main(int argc, char *argv[])
 		}
 
 		int buf_len = 0;
-		REALLOC_BUFS;
+		REALLOC_BUFS(&chain);
 		dither_mult = tpdf_dither_get_mult(out_codec->prec);
 
 		while (in_codecs.head != NULL) {
@@ -811,6 +823,7 @@ int main(int argc, char *argv[])
 							break;
 						case 'n':
 							codec_write_buf_drop(out_codec_buf, 1, 0);
+							if (xfade_state.pos > 0) finish_xfade();
 							reset_effects_chain(&chain);
 							goto next_input;
 						case 'c':
@@ -820,9 +833,27 @@ int main(int argc, char *argv[])
 						case 'e':
 							clear_progress(0);
 							LOG_S(LL_NORMAL, "info: rebuilding effects chain");
-							if (!is_paused && drain_effects)
-								DRAIN_EFFECTS_CHAIN;
-							REBUILD_EFFECTS_CHAIN;
+							if (xfade_state.pos > 0) finish_xfade();
+							if (!is_paused && !drain_effects) {  /* attempt crossfade */
+								struct stream_info tmp_stream;
+								tmp_stream.fs = in_codecs.head->fs;
+								tmp_stream.channels = in_codecs.head->channels;
+								xfade_state.istream = tmp_stream;
+								xfade_state.chain[0] = chain;
+								if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &tmp_stream, NULL))
+									cleanup_and_exit(1);
+								xfade_state.ostream = tmp_stream;
+								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
+								xfade_state.pos = xfade_state.frames;
+								if (xfade_state.pos == 0 || tmp_stream.fs != stream.fs || tmp_stream.channels != stream.channels) {
+									finish_xfade();  /* no crossfade */
+									chain_needs_dither = effects_chain_needs_dither(&chain);
+								}
+							}
+							else {
+								if (!is_paused) DRAIN_EFFECTS_CHAIN;
+								REBUILD_EFFECTS_CHAIN;
+							}
 							if (input_mode != INPUT_MODE_SEQUENCE) {
 								if (out_codec->fs != stream.fs) {
 									LOG_FMT(LL_ERROR, "error: sample rate mismatch: %s", out_codec->path);
@@ -834,7 +865,8 @@ int main(int argc, char *argv[])
 								}
 							}
 							else REOPEN_OUTPUT;
-							REALLOC_BUFS;
+							if (xfade_state.pos > 0) REALLOC_BUFS(&xfade_state.chain[1]);
+							else REALLOC_BUFS(&chain);
 							SET_DITHER;
 							break;
 						case 'v':
@@ -858,7 +890,15 @@ int main(int argc, char *argv[])
 				}
 				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
 				pos += r;
-				obuf = run_effects_chain(chain.head, &w, buf1, buf2);
+				if (xfade_state.pos > 0) {
+					obuf = effects_chain_xfade_run(&xfade_state, &w, buf1, buf2);
+					if (xfade_state.pos == 0) {
+						finish_xfade();
+						chain_needs_dither = effects_chain_needs_dither(&chain);
+						LOG_S(LL_VERBOSE, "info: end of crossfade");
+					}
+				}
+				else obuf = run_effects_chain(chain.head, &w, buf1, buf2);
 				write_out(w, obuf, add_dither);
 				k += w;
 				if (k >= out_codec->fs) {
@@ -878,7 +918,7 @@ int main(int argc, char *argv[])
 					DRAIN_EFFECTS_CHAIN;
 				REBUILD_EFFECTS_CHAIN;
 				REOPEN_OUTPUT;
-				REALLOC_BUFS;
+				REALLOC_BUFS(&chain);
 			}
 		}
 		DRAIN_EFFECTS_CHAIN;
