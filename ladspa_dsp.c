@@ -34,6 +34,7 @@
 #define DEFAULT_CONFIG_DIR     "/ladspa_dsp"
 #define DEFAULT_XDG_CONFIG_DIR "/.config"
 #define GLOBAL_CONFIG_DIR      "/etc"DEFAULT_CONFIG_DIR
+#define DEFAULT_LOGLEVEL       LL_OPEN_ERROR
 
 struct ladspa_dsp {
 	sample_t *buf1, *buf2;
@@ -49,7 +50,7 @@ struct ladspa_dsp_config {
 };
 
 struct dsp_globals dsp_globals = {
-	LL_NORMAL,              /* loglevel */
+	DEFAULT_LOGLEVEL,       /* loglevel */
 	"ladspa_dsp",           /* prog_name */
 };
 
@@ -317,7 +318,9 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 
 	env = getenv("LADSPA_DSP_LOGLEVEL");
 	if (env != NULL) {
-		if (strcmp(env, "VERBOSE") == 0)
+		if (env[0] == '\0')
+			dsp_globals.loglevel = DEFAULT_LOGLEVEL;
+		else if (strcmp(env, "VERBOSE") == 0)
 			dsp_globals.loglevel = LL_VERBOSE;
 		else if (strcmp(env, "NORMAL") == 0)
 			dsp_globals.loglevel = LL_NORMAL;
