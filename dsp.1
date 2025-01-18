@@ -102,7 +102,9 @@ The \fBsgen\fR input type is a basic (for now, at least) signal generator that c
 generate impulses and exponential sine sweeps. The syntax for the \fIpath\fR
 argument is as follows:
 .PP
+.RS
 [\fItype\fR[@\fIchannel_selector\fR][:\fIarg\fR[=\fIvalue\fR]...]][/\fItype\fR...][+\fIlen\fR[\fBs\fR|\fBm\fR|\fBS\fR]]
+.RE
 .PP
 \fItype\fR may be `sine' for sine sweeps or tones, or `delta' for a delta function
 (impulse). `sine' accepts the following arguments:
@@ -203,7 +205,7 @@ crossfeed.
 \fBmatrix4\fR [\fIoptions\fR] [\fIsurround_level\fR]
 2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
 plain (i.e. unencoded) stereo material.
-
+.sp 0.5
 The intended speaker configuration is fronts at ±30° and surrounds between
 ±60° and ±120°. The surround speakers must be calibrated correctly in
 level and frequency response for best results. The surrounds should be
@@ -219,10 +221,10 @@ default \fIsurround_level\fR is \-6dB. Applying the \fBdecorrelate\fR effect to 
 surround outputs (optionally with the \fI\-m\fR flag) seems to further improve
 the spatial impression (note: adjust `surround_delay' to compensate for
 the \fBdecorrelate\fR effect's group delay).
-
+.sp 0.5
 The front outputs replace the original input channels and the surround
 outputs are appended to the end of the channel list.
-
+.sp 0.5
 Options are given as a comma-separated list. Recognized options are:
 .RS
 .TP
@@ -343,7 +345,7 @@ bit depth regardless of the output sample format. \fIbits\fR may be any number.
 \fIquantize_bits\fR must be an integer between 2 and 32. If \fIquantize_bits\fR is
 not given, it is set to the same value as \fIbits\fR (rounded to the nearest
 integer).
-
+.sp 0.5
 .RS
 .IP [1] 4
 S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
@@ -359,10 +361,10 @@ Apply a LADSPA plugin. Supports any number of input/output ports (with
 the exception of zero output ports). If a plugin has one or zero input
 ports, it will be instantiated multiple times to handle multi-channel
 input.
-
+.sp 0.5
 Controls which are not explicitly set or are set to `-' will use default
 values (if available).
-
+.sp 0.5
 The `LADSPA_PATH' environment variable can be used to set the search path
 for plugins.
 .TP
@@ -418,7 +420,7 @@ input channels for effects that follow. For example,
 will apply an \fBeq\fR effect to channels 0 and 2. If an effect changes the total
 number of channels, the last channel selector given is parsed again. Additional
 channels are not added unless the selector includes an unbounded range.
-
+.PP
 Channel numbers refer to the channels in the active channel mask, which is a
 property of the containing block. Blocks may be created using braces
 (`{ ... }') or by sourcing a file (see ``Effects files''). The channel mask is
@@ -429,7 +431,7 @@ derived from the active channel selector at creation. For example,
 creates a block with the mask `1,3'. Within the block, `:0' selects the first
 channel in the mask (channel 1), and `:1' selects the second channel in the
 mask (channel 3). Channel selectors have block scope.
-
+.PP
 Channels are automatically added or removed from the active channel mask if an
 effect changes the total number of channels. Additional channels are always
 appended to the end of the channel list.
