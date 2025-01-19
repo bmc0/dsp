@@ -160,7 +160,7 @@ void dsp_log_release(void)
 	pthread_mutex_unlock(&log_lock);
 }
 
-void ev_queue_push(enum event_type type, int val)
+static void ev_queue_push(enum event_type type, int val)
 {
 	while (sem_wait(&ev_queue.slots) != 0);
 	pthread_mutex_lock(&ev_queue.lock);
@@ -171,7 +171,7 @@ void ev_queue_push(enum event_type type, int val)
 	sem_post(&ev_queue.items);
 }
 
-int ev_queue_pop(int blocking, struct event *ev)
+static int ev_queue_pop(int blocking, struct event *ev)
 {
 	if (blocking) while(sem_wait(&ev_queue.items) != 0);
 	else {
