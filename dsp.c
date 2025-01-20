@@ -835,17 +835,16 @@ int main(int argc, char *argv[])
 							LOG_S(LL_NORMAL, "info: rebuilding effects chain");
 							if (xfade_state.pos > 0) finish_xfade();
 							if (!is_paused && !drain_effects) {  /* attempt crossfade */
-								struct stream_info tmp_stream;
-								tmp_stream.fs = in_codecs.head->fs;
-								tmp_stream.channels = in_codecs.head->channels;
-								xfade_state.istream = tmp_stream;
+								stream.fs = in_codecs.head->fs;
+								stream.channels = in_codecs.head->channels;
+								xfade_state.istream = stream;
 								xfade_state.chain[0] = chain;
-								if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &tmp_stream, NULL))
+								if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL))
 									cleanup_and_exit(1);
-								xfade_state.ostream = tmp_stream;
+								xfade_state.ostream = stream;
 								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 								xfade_state.pos = xfade_state.frames;
-								if (xfade_state.pos == 0 || tmp_stream.fs != stream.fs || tmp_stream.channels != stream.channels) {
+								if (xfade_state.pos == 0 || stream.fs != out_codec->fs || stream.channels != out_codec->channels) {
 									finish_xfade();  /* no crossfade */
 									chain_needs_dither = effects_chain_needs_dither(&chain);
 								}
