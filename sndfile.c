@@ -30,12 +30,13 @@ struct sndfile_type_info {
 
 struct sndfile_enc_info {
 	const char *name;
-	int prec, can_dither, sf_enc;
+	int prec, can_dither, do_scale, sf_enc;
 };
 
 struct sndfile_state {
 	SNDFILE *f;
 	SF_INFO *info;
+	sample_t scale;
 };
 
 static const char codec_name[] = "sndfile";
@@ -71,39 +72,39 @@ static struct sndfile_type_info types[] = {
 };
 
 static struct sndfile_enc_info encodings[] = {
-	{ "s16",          16, 1, SF_FORMAT_PCM_16 },
-	{ "s8",            8, 1, SF_FORMAT_PCM_S8 },
-	{ "u8",            8, 1, SF_FORMAT_PCM_U8 },
-	{ "s24",          24, 1, SF_FORMAT_PCM_24 },
-	{ "s32",          32, 1, SF_FORMAT_PCM_32 },
-	{ "float",        24, 0, SF_FORMAT_FLOAT  },
-	{ "double",       53, 0, SF_FORMAT_DOUBLE },
-	{ "mu-law",       13, 0, SF_FORMAT_ULAW },
-	{ "a-law",        14, 0, SF_FORMAT_ALAW },
-	{ "ima_adpcm",    13, 0, SF_FORMAT_IMA_ADPCM },
-	{ "ms_adpcm",     13, 0, SF_FORMAT_MS_ADPCM },
-	{ "gsm6.10",      16, 0, SF_FORMAT_GSM610 },
-	{ "vox_adpcm",    13, 0, SF_FORMAT_VOX_ADPCM },
-	{ "nms_adpcm_16",  8, 0, SF_FORMAT_NMS_ADPCM_16 },
-	{ "nms_adpcm_24",  8, 0, SF_FORMAT_NMS_ADPCM_24 },
-	{ "nms_adpcm_32", 12, 0, SF_FORMAT_NMS_ADPCM_32 },
-	{ "g721_32",      12, 0, SF_FORMAT_G721_32 },
-	{ "g723_24",       8, 0, SF_FORMAT_G723_24 },
-	{ "g723_40",      14, 0, SF_FORMAT_G723_40 },
-	{ "dwvw_12",      12, 0, SF_FORMAT_DWVW_12 },
-	{ "dwvw_16",      16, 0, SF_FORMAT_DWVW_16 },
-	{ "dwvw_24",      24, 0, SF_FORMAT_DWVW_24 },
-	{ "dpcm_8",        8, 0, SF_FORMAT_DPCM_8 },
-	{ "dpcm_16",      16, 0, SF_FORMAT_DPCM_16 },
-	{ "vorbis",       24, 0, SF_FORMAT_VORBIS },
-	{ "opus",         24, 0, SF_FORMAT_OPUS },
-	{ "alac_16",      16, 1, SF_FORMAT_ALAC_16 },
-	{ "alac_20",      20, 1, SF_FORMAT_ALAC_20 },
-	{ "alac_24",      24, 1, SF_FORMAT_ALAC_24 },
-	{ "alac_32",      32, 1, SF_FORMAT_ALAC_32 },
-	{ "mpeg1.1",      24, 0, SF_FORMAT_MPEG_LAYER_I },
-	{ "mpeg1.2",      24, 0, SF_FORMAT_MPEG_LAYER_II },
-	{ "mpeg2.3",      24, 0, SF_FORMAT_MPEG_LAYER_III },
+	{ "s16",          16, 1, 1, SF_FORMAT_PCM_16 },
+	{ "s8",            8, 1, 1, SF_FORMAT_PCM_S8 },
+	{ "u8",            8, 1, 1, SF_FORMAT_PCM_U8 },
+	{ "s24",          24, 1, 1, SF_FORMAT_PCM_24 },
+	{ "s32",          32, 1, 1, SF_FORMAT_PCM_32 },
+	{ "float",        24, 0, 0, SF_FORMAT_FLOAT  },
+	{ "double",       53, 0, 0, SF_FORMAT_DOUBLE },
+	{ "mu-law",       13, 0, 0, SF_FORMAT_ULAW },
+	{ "a-law",        14, 0, 0, SF_FORMAT_ALAW },
+	{ "ima_adpcm",    13, 0, 0, SF_FORMAT_IMA_ADPCM },
+	{ "ms_adpcm",     13, 0, 0, SF_FORMAT_MS_ADPCM },
+	{ "gsm6.10",      16, 0, 0, SF_FORMAT_GSM610 },
+	{ "vox_adpcm",    13, 0, 0, SF_FORMAT_VOX_ADPCM },
+	{ "nms_adpcm_16",  8, 0, 0, SF_FORMAT_NMS_ADPCM_16 },
+	{ "nms_adpcm_24",  8, 0, 0, SF_FORMAT_NMS_ADPCM_24 },
+	{ "nms_adpcm_32", 12, 0, 0, SF_FORMAT_NMS_ADPCM_32 },
+	{ "g721_32",      12, 0, 0, SF_FORMAT_G721_32 },
+	{ "g723_24",       8, 0, 0, SF_FORMAT_G723_24 },
+	{ "g723_40",      14, 0, 0, SF_FORMAT_G723_40 },
+	{ "dwvw_12",      12, 0, 0, SF_FORMAT_DWVW_12 },
+	{ "dwvw_16",      16, 0, 0, SF_FORMAT_DWVW_16 },
+	{ "dwvw_24",      24, 0, 0, SF_FORMAT_DWVW_24 },
+	{ "dpcm_8",        8, 0, 0, SF_FORMAT_DPCM_8 },
+	{ "dpcm_16",      16, 0, 0, SF_FORMAT_DPCM_16 },
+	{ "vorbis",       24, 0, 0, SF_FORMAT_VORBIS },
+	{ "opus",         24, 0, 0, SF_FORMAT_OPUS },
+	{ "alac_16",      16, 1, 0, SF_FORMAT_ALAC_16 },
+	{ "alac_20",      20, 1, 0, SF_FORMAT_ALAC_20 },
+	{ "alac_24",      24, 1, 0, SF_FORMAT_ALAC_24 },
+	{ "alac_32",      32, 1, 0, SF_FORMAT_ALAC_32 },
+	{ "mpeg1.1",      24, 0, 0, SF_FORMAT_MPEG_LAYER_I },
+	{ "mpeg1.2",      24, 0, 0, SF_FORMAT_MPEG_LAYER_II },
+	{ "mpeg2.3",      24, 0, 0, SF_FORMAT_MPEG_LAYER_III },
 };
 
 ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
@@ -116,10 +117,20 @@ ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return (ssize_t) r;
 }
 
+static inline void buf_scale_int(sample_t *buf, const sample_t s, ssize_t samples)
+{
+	const sample_t c = s - 1.0;
+	for (sample_t *end = buf + samples; buf < end; ++buf) {
+		*buf *= s;
+		if (*buf > c) *buf = c;
+	}
+}
+
 ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
+	if (state->scale > 1.0) buf_scale_int(buf, state->scale, frames * c->channels);
 	const sf_count_t r = sf_writef_double(state->f, buf, frames);
 	if (r != frames && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
 		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
@@ -239,16 +250,18 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 		goto fail;
 	}
 
-#if BIT_PERFECT && 0  /* libsndfile's sample type conversion is broken... */
-	sf_command(f, SFC_SET_CLIPPING, NULL, SF_TRUE);
-#endif
-
+	enc_info = sndfile_get_enc_info(info->format);
 	state = calloc(1, sizeof(struct sndfile_state));
 	state->f = f;
 	state->info = info;
+#if BIT_PERFECT
+	if (p->mode == CODEC_MODE_WRITE && enc_info->do_scale) {
+		state->scale = (sample_t) (((uint32_t) 1) << (enc_info->prec - 1));
+		sf_command(f, SFC_SET_NORM_DOUBLE, NULL, SF_FALSE);
+	}
+#endif
 
 	c = calloc(1, sizeof(struct codec));
-	enc_info = sndfile_get_enc_info(info->format);
 	c->path = p->path;
 	c->type = sndfile_get_type_name(info->format);
 	c->enc = (enc_info) ? enc_info->name : "unknown";
