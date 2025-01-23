@@ -34,8 +34,8 @@
 
 #if BIT_PERFECT
 	/* these clip, but are bit perfect */
-	#define SAMPLE_TO_U8(x)     ((uint8_t) (((x) * 128.0 + 127.0 < 0.0) ? 0 : lrint((x) * 128.0 + 127.0)))
-	#define U8_TO_SAMPLE(x)     (((sample_t) (x) - 127.0) / 128.0)
+	#define SAMPLE_TO_U8(x)     ((uint8_t) (((x) * 128.0 + 128.0 > 255.0) ? 255.0 : lrint((x) * 128.0 + 128.0)))
+	#define U8_TO_SAMPLE(x)     (((sample_t) (x) - 128.0) / 128.0)
 	#define SAMPLE_TO_S8(x)     ((int8_t) (((x) * 128.0 > 127.0) ? 127 : lrint((x) * 128.0)))
 	#define S8_TO_SAMPLE(x)     ((sample_t) (x) / 128.0)
 	#define SAMPLE_TO_S16(x)    ((int16_t) (((x) * 32768.0 > 32767.0) ? 32767 : lrint((x) * 32768.0)))
