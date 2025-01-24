@@ -273,7 +273,7 @@ void dither_effect_set_params(struct effect *e, int bits, int enabled)
 				}
 			}
 			if (state[k].flags & DITHER_FLAG_QUANTIZE_BITS_AUTO)
-				dither_set_quantize_bits(&state[k], (enabled) ? bits : 32);  /* FIXME: perhaps allow no quantization? */
+				dither_set_quantize_bits(&state[k], (bits < 2) ? 32 : bits);  /* FIXME: perhaps allow no quantization? */
 		}
 	}
 }
