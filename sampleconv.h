@@ -24,43 +24,36 @@
 #include "dsp.h"
 
 /* ### NOTE ###
- * The read_buf_<fmt> and write_buf_<fmt> functions will work properly when
- * dest and src are the same buffer provided
- * sizeof(sample_t) >= sizeof(fmt). Since sample_t is currently a double,
- * this is true for all supported formats.
+ * The read_buf_<fmt> and write_buf_<fmt> functions will work
+ * properly when dest and src are the same buffer provided
+ * sizeof(sample_t) >= sizeof(fmt). Since sample_t is currently
+ * a double, this is true for all supported formats.
 */
 
 #define S24_SIGN_EXTEND(x) (((x) & 0x800000) ? (x) | ~0x7fffff : (x))
 
 #if BIT_PERFECT
-	/* these clip, but are bit perfect */
-	#define SAMPLE_TO_U8(x)     ((uint8_t) (((x) * 128.0 + 128.0 > 255.0) ? 255.0 : lrint((x) * 128.0 + 128.0)))
-	#define U8_TO_SAMPLE(x)     (((sample_t) (x) - 128.0) / 128.0)
-	#define SAMPLE_TO_S8(x)     ((int8_t) (((x) * 128.0 > 127.0) ? 127 : lrint((x) * 128.0)))
-	#define S8_TO_SAMPLE(x)     ((sample_t) (x) / 128.0)
-	#define SAMPLE_TO_S16(x)    ((int16_t) (((x) * 32768.0 > 32767.0) ? 32767 : lrint((x) * 32768.0)))
-	#define S16_TO_SAMPLE(x)    ((sample_t) (x) / 32768.0)
-	#define SAMPLE_TO_S24(x)    ((int32_t) (((x) * 8388608.0 > 8388607.0) ? 8388607 : lrint((x) * 8388608.0)))
-	#define S24_TO_SAMPLE(x)    ((sample_t) S24_SIGN_EXTEND(x) / 8388608.0)
-	#define SAMPLE_TO_S32(x)    ((int32_t) (((x) * 2147483648.0 > 2147483647.0) ? 2147483647 : lrint((x) * 2147483648.0)))
-	#define S32_TO_SAMPLE(x)    ((sample_t) (x) / 2147483648.0)
+	#define SAMPLE_TO_U8(x)     ((uint8_t) (((x) * 128.0 + 128.0 > 255.0) ? 255.0 : nearbyint((x) * 128.0 + 128.0)))
+	#define SAMPLE_TO_S8(x)     ((int8_t)  (((x) * 128.0 > 127.0) ? 127.0 : nearbyint((x) * 128.0)))
+	#define SAMPLE_TO_S16(x)    ((int16_t) (((x) * 32768.0 > 32767.0) ? 32767.0 : nearbyint((x) * 32768.0)))
+	#define SAMPLE_TO_S24(x)    ((int32_t) (((x) * 8388608.0 > 8388607.0) ? 8388607.0 : nearbyint((x) * 8388608.0)))
+	#define SAMPLE_TO_S32(x)    ((int32_t) (((x) * 2147483648.0 > 2147483647.0) ? 2147483647.0 : nearbyint((x) * 2147483648.0)))
 #else
-	/* these do not clip, but are also not bit perfect */
-	#define SAMPLE_TO_U8(x)     ((uint8_t) lrint((x) * 127.0 + 127.0))
-	#define U8_TO_SAMPLE(x)     (((sample_t) (x) - 127.0) / 128.0)
-	#define SAMPLE_TO_S8(x)     ((int8_t) lrint((x) * 127.0))
-	#define S8_TO_SAMPLE(x)     ((sample_t) (x) / 128.0)
-	#define SAMPLE_TO_S16(x)    ((int16_t) lrint((x) * 32767.0))
-	#define S16_TO_SAMPLE(x)    ((sample_t) (x) / 32768.0)
-	#define SAMPLE_TO_S24(x)    ((int32_t) lrint((x) * 8388607.0))
-	#define S24_TO_SAMPLE(x)    ((sample_t) S24_SIGN_EXTEND(x) / 8388608.0)
-	#define SAMPLE_TO_S32(x)    ((int32_t) lrint((x) * 2147483647.0))
-	#define S32_TO_SAMPLE(x)    ((sample_t) (x) / 2147483648.0)
+	#define SAMPLE_TO_U8(x)     ((uint8_t) nearbyint((x) * 127.0 + 128.0))
+	#define SAMPLE_TO_S8(x)     ((int8_t)  nearbyint((x) * 127.0))
+	#define SAMPLE_TO_S16(x)    ((int16_t) nearbyint((x) * 32767.0))
+	#define SAMPLE_TO_S24(x)    ((int32_t) nearbyint((x) * 8388607.0))
+	#define SAMPLE_TO_S32(x)    ((int32_t) nearbyint((x) * 2147483647.0))
 #endif
-
 #define SAMPLE_TO_FLOAT(x)  ((float) (x))
-#define FLOAT_TO_SAMPLE(x)  ((sample_t) (x))
 #define SAMPLE_TO_DOUBLE(x) ((double) (x))
+
+#define U8_TO_SAMPLE(x)     (((sample_t) (x) - 128.0) / 128.0)
+#define S8_TO_SAMPLE(x)     ((sample_t) (x) / 128.0)
+#define S16_TO_SAMPLE(x)    ((sample_t) (x) / 32768.0)
+#define S24_TO_SAMPLE(x)    ((sample_t) S24_SIGN_EXTEND(x) / 8388608.0)
+#define S32_TO_SAMPLE(x)    ((sample_t) (x) / 2147483648.0)
+#define FLOAT_TO_SAMPLE(x)  ((sample_t) (x))
 #define DOUBLE_TO_SAMPLE(x) ((sample_t) (x))
 
 void write_buf_u8(sample_t *, void *, ssize_t);
