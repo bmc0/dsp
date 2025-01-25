@@ -132,21 +132,8 @@ void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			sample_t *obuf_p = obuf;
-			for (ssize_t i = *frames; i > 0; --i) {
-				for (int k = 0; k < e->istream.channels; ++k) {
-					sample_t s = 0.0;
-					if (state->cs[k].buf) {
-						s = state->cs[k].buf[state->p];
-						state->cs[k].buf[state->p] = 0.0;
-					}
-					if (state->cs[k].has_frac)
-						s = ap1_run(&state->cs[k].ap1, s);
-					obuf_p[k] = s;
-				}
-				obuf_p += e->istream.channels;
-				state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
-			}
+			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
+			e->run(e, frames, obuf, NULL);
 		}
 		else *frames = -1;
 	}
