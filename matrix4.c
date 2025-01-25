@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -52,8 +52,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 	for (i = 0; i < *frames; ++i) {
 		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
-		const sample_t s0 = (ibuf) ? ibuf[i*e->istream.channels + state->c0] : 0.0;
-		const sample_t s1 = (ibuf) ? ibuf[i*e->istream.channels + state->c1] : 0.0;
+		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
+		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
 		const sample_t s0_d = state->bufs[state->c0][state->p];
 		const sample_t s1_d = state->bufs[state->c1][state->p];
 
@@ -98,7 +98,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 					obuf[oframes*e->ostream.channels + k] = out_r;
 				else
 					obuf[oframes*e->ostream.channels + k] = state->bufs[k][state->p];
-				state->bufs[k][state->p] = (ibuf) ? ibuf[i*e->istream.channels + k] : 0.0;
+				state->bufs[k][state->p] = ibuf[i*e->istream.channels + k];
 			}
 			obuf[oframes*e->ostream.channels + k + 0] = out_ls;
 			obuf[oframes*e->ostream.channels + k + 1] = out_rs;
@@ -109,7 +109,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				#ifdef SYMMETRIC_IO
 					obuf[oframes*e->ostream.channels + k] = 0.0;
 				#endif
-				state->bufs[k][state->p] = (ibuf) ? ibuf[i*e->istream.channels + k] : 0.0;
+				state->bufs[k][state->p] = ibuf[i*e->istream.channels + k];
 			}
 			#ifdef SYMMETRIC_IO
 				obuf[oframes*e->ostream.channels + k + 0] = 0.0;
@@ -161,9 +161,10 @@ void matrix4_effect_signal(struct effect *e)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
-void matrix4_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+sample_t * matrix4_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
+	sample_t *rbuf = buf1;
 	if (!state->has_output && state->p == 0)
 		*frames = -1;
 	else {
@@ -174,11 +175,13 @@ void matrix4_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			e->run(e, frames, NULL, obuf);
+			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
+			rbuf = matrix4_effect_run(e, frames, buf1, buf2);
 		}
 		else
 			*frames = -1;
 	}
+	return rbuf;
 }
 
 void matrix4_effect_destroy(struct effect *e)
@@ -218,7 +221,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->run = matrix4_effect_run;
 	e->delay = matrix4_effect_delay;
 	e->reset = matrix4_effect_reset;
-	e->drain = matrix4_effect_drain;
+	e->drain2 = matrix4_effect_drain2;
 	e->destroy = matrix4_effect_destroy;
 
 	state = calloc(1, sizeof(struct matrix4_state));
