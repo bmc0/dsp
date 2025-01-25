@@ -58,24 +58,21 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 	for (ssize_t i = 0; i < *frames; ++i) {
 		for (int k = 0; k < e->istream.channels; ++k) {
-			sample_t s = (ibuf) ? ibuf[i*e->istream.channels + k] : 0.0;
 			if (state->part0.buf[k]) {
+				const sample_t s = ibuf[i*e->istream.channels + k];
 				for (ssize_t n = state->part0.p, m = 0; m < DIRECT_LEN; ++m) {
 					state->part0.buf[k][n] += s * state->part0.filter[k][m];
 					n = (n+1) & (DIRECT_LEN-1);
 				}
-				obuf[i*e->ostream.channels + k] = state->part0.buf[k][state->part0.p];
+				ibuf[i*e->istream.channels + k] = state->part0.buf[k][state->part0.p];
 				state->part0.buf[k][state->part0.p] = 0.0;
 				for (ssize_t j = 0; j < state->nparts; ++j) {
 					struct fft_part *part = &state->part[j];
-					obuf[i*e->ostream.channels + k] += part->obuf[k][part->p];
+					ibuf[i*e->istream.channels + k] += part->obuf[k][part->p];
 					part->ibuf[k][part->p] = (part->delay > 0) ? state->ibuf[k][part->in_p] : s;
 				}
 				if (state->ibuf)
 					state->ibuf[k][state->p] = s;
-			}
-			else {
-				obuf[i*e->ostream.channels + k] = s;
 			}
 		}
 		state->part0.p = (state->part0.p+1) & (DIRECT_LEN-1);
@@ -91,7 +88,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 			for (ssize_t j = 0; j < state->nparts; ++j) {
 				struct fft_part *part = &state->part[j];
 				if (part->p == part->len) {
-					for (int k = 0; k < e->ostream.channels; ++k) {
+					for (int k = 0; k < e->istream.channels; ++k) {
 						if (part->ibuf[k]) {
 							fftw_execute(part->r2c_plan[k]);
 							for (ssize_t l = 0; l < part->fr_len; ++l)
@@ -113,7 +110,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	if (*frames > 0)
 		state->has_output = 1;
 
-	return obuf;
+	return ibuf;
 }
 
 void fir_p_effect_reset(struct effect *e)
@@ -176,7 +173,8 @@ void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			e->run(e, frames, NULL, obuf);
+			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
+			fir_p_effect_run(e, frames, obuf, NULL);
 		}
 		else
 			*frames = -1;
