@@ -49,17 +49,14 @@ sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 	for (i = 0; i < *frames; ++i) {
 		for (k = 0; k < e->istream.channels; ++k) {
-			sample_t s = (ibuf) ? ibuf[i*e->istream.channels + k] : 0.0;
 			if (state->buf[k]) {
+				const sample_t s = ibuf[i*e->istream.channels + k];
 				for (ssize_t n = state->p, m = 0; m < state->len; ++m) {
 					state->buf[k][n] += s * state->filter[k][m];
 					n = (n+1) & state->mask;
 				}
-				obuf[i*e->ostream.channels + k] = state->buf[k][state->p];
+				ibuf[i*e->istream.channels + k] = state->buf[k][state->p];
 				state->buf[k][state->p] = 0.0;
-			}
-			else {
-				obuf[i*e->ostream.channels + k] = s;
 			}
 		}
 		state->p = (state->p+1) & state->mask;
@@ -67,7 +64,7 @@ sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	if (*frames > 0)
 		state->has_output = 1;
 
-	return obuf;
+	return ibuf;
 }
 
 void fir_direct_effect_reset(struct effect *e)
@@ -108,7 +105,8 @@ void fir_direct_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			e->run(e, frames, NULL, obuf);
+			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
+			fir_direct_effect_run(e, frames, obuf, NULL);
 		}
 		else
 			*frames = -1;
@@ -139,15 +137,15 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 		while (state->p < state->len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i) {
 				#ifdef SYMMETRIC_IO
-					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->p] : 0;
+					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->p] : 0.0;
 				#else
 					if (state->has_output)
 						obuf[oframes * e->ostream.channels + i] = state->output[i][state->p];
 				#endif
 				if (state->input[i])
-					state->input[i][state->p] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
+					state->input[i][state->p] = ibuf[iframes * e->ostream.channels + i];
 				else
-					state->output[i][state->p] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
+					state->output[i][state->p] = ibuf[iframes * e->ostream.channels + i];
 			}
 			#ifdef SYMMETRIC_IO
 				++oframes;
@@ -219,9 +217,10 @@ void fir_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+sample_t * fir_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
+	sample_t *rbuf = buf1;
 	if (!state->has_output && state->p == 0)
 		*frames = -1;
 	else {
@@ -237,13 +236,15 @@ void fir_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
-			fir_effect_run(e, frames, NULL, obuf);
+			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
+			rbuf = fir_effect_run(e, frames, buf1, buf2);
 			state->drain_pos += *frames;
 			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
 		}
 		else
 			*frames = -1;
 	}
+	return rbuf;
 }
 
 void fir_effect_destroy(struct effect *e)
@@ -331,7 +332,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->delay = fir_effect_delay;
 		e->reset = fir_effect_reset;
 		e->plot = fir_effect_plot;
-		e->drain = fir_effect_drain;
+		e->drain2 = fir_effect_drain2;
 		e->destroy = fir_effect_destroy;
 
 		fftw_plan filter_plan;
