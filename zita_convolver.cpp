@@ -42,17 +42,17 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 		while (state->pos < state->len && iframes < *frames) {
 			for (i = k = 0; i < e->ostream.channels; ++i) {
 				#ifdef SYMMETRIC_IO
-					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0;
+					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0.0;
 				#else
 					if (state->has_output)
 						obuf[oframes * e->ostream.channels + i] = state->output[i][state->pos];
 				#endif
 				if (GET_BIT(e->channel_selector, i)) {
-					state->cproc->inpdata(k)[state->pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
+					state->cproc->inpdata(k)[state->pos] = ibuf[iframes * e->ostream.channels + i];
 					++k;
 				}
 				else
-					state->output[i][state->pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
+					state->output[i][state->pos] = ibuf[iframes * e->ostream.channels + i];
 			}
 			#ifdef SYMMETRIC_IO
 				++oframes;
@@ -93,9 +93,10 @@ void zita_convolver_effect_reset(struct effect *e)
 	state->has_output = 0;
 }
 
-void zita_convolver_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+sample_t * zita_convolver_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
+	sample_t *rbuf = buf1;
 	if (!state->has_output && state->pos == 0)
 		*frames = -1;
 	else {
@@ -111,13 +112,15 @@ void zita_convolver_effect_drain(struct effect *e, ssize_t *frames, sample_t *ob
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
-			zita_convolver_effect_run(e, frames, NULL, obuf);
+			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
+			rbuf = zita_convolver_effect_run(e, frames, buf1, buf2);
 			state->drain_pos += *frames;
 			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
 		}
 		else
 			*frames = -1;
 	}
+	return rbuf;
 }
 
 void zita_convolver_effect_destroy(struct effect *e)
@@ -233,7 +236,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	e->run = zita_convolver_effect_run;
 	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;
-	e->drain = zita_convolver_effect_drain;
+	e->drain2 = zita_convolver_effect_drain2;
 	e->destroy = zita_convolver_effect_destroy;
 
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
