@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -184,29 +184,8 @@ void matrix4_delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obu
 		if (state->drain_frames > 0) {
 			*frames = MINIMUM(*frames, state->drain_frames);
 			state->drain_frames -= *frames;
-			sample_t *obuf_p = obuf;
-			for (ssize_t i = *frames; i > 0; --i) {
-				int k;
-				sample_t *b = &state->buf[state->p*state->n_ch];
-				if (e->run == matrix4_delay_surr_effect_run) {
-					for (k = 0; k < e->istream.channels-2; ++k)
-						obuf_p[k] = 0.0;
-					obuf_p[k+0] = b[0];
-					obuf_p[k+1] = b[1];
-					b[0] = 0.0;
-					b[1] = 0.0;
-				}
-				else {
-					for (k = 0; k < state->n_ch; ++k) {
-						obuf_p[k] = b[k];
-						b[k] = 0.0;
-					}
-					obuf_p[k+0] = 0.0;
-					obuf_p[k+1] = 0.0;
-				}
-				obuf_p += e->istream.channels;
-				state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
-			}
+			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
+			e->run(e, frames, obuf, NULL);
 		}
 		else *frames = -1;
 	}
