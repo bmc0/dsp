@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -73,7 +73,7 @@ sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 	while (iframes < *frames) {
 		while (state->in_buf_pos < state->in_len && iframes < *frames) {
 			for (i = 0; i < e->ostream.channels; ++i)
-				state->input[i][state->in_buf_pos] = (ibuf) ? ibuf[iframes * e->ostream.channels + i] : 0;
+				state->input[i][state->in_buf_pos] = ibuf[iframes * e->ostream.channels + i];
 			++iframes;
 			++state->in_buf_pos;
 		}
@@ -151,9 +151,10 @@ void resample_effect_reset(struct effect *e)
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 }
 
-void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+sample_t * resample_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
+	sample_t *rbuf = buf1;
 	if (!state->has_output && state->in_buf_pos == 0)
 		*frames = -1;
 	else {
@@ -166,13 +167,15 @@ void resample_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 			state->is_draining = 1;
 		}
 		if (state->drain_pos < state->drain_frames) {
-			resample_effect_run(e, frames, NULL, obuf);
+			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
+			rbuf = resample_effect_run(e, frames, buf1, buf2);
 			state->drain_pos += *frames;
 			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
 		}
 		else
 			*frames = -1;
 	}
+	return rbuf;
 }
 
 void resample_effect_destroy(struct effect *e)
@@ -236,7 +239,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	e->run = resample_effect_run;
 	e->delay = resample_effect_delay;
 	e->reset = resample_effect_reset;
-	e->drain = resample_effect_drain;
+	e->drain2 = resample_effect_drain2;
 	e->destroy = resample_effect_destroy;
 
 	state = calloc(1, sizeof(struct resample_state));
