@@ -310,7 +310,7 @@ Example:
 
 	`shape`    | Description
 	---------- | ----------------------
-	`flat`     | Flat TPDF with no feedback.
+	`flat`     | Flat TPDF with no feedback (default).
 	`sloped`   | Flat TPDF with feedback. First-order highpass response.
 	`sloped2`  | Sloped TPDF with feedback. Stronger HF emphasis than `sloped`.
 	`lipshitz` | 5-tap E-weighted curve from [1]. Notches around 4k and 12k.
@@ -324,6 +324,9 @@ Example:
 	`quantize_bits` must be an integer between 2 and 32. If `quantize_bits` is
 	not given, it is set to the same value as `bits` (rounded to the nearest
 	integer).
+
+	**Note:** Currently, `auto` will not work correctly with `ladspa_dsp` or if
+	loaded via `watch`. A default value of 16 is used in those cases.
 
 	[1] S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
 	"Minimally Audible Noise Shaping," J. AES, vol. 39, no. 11,
