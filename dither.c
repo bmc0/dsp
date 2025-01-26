@@ -146,14 +146,14 @@ FIR_DEFINE_FN(9)
 #define DITHER_LOOP_NO_FB(noise_fn) \
 	do { \
 		const sample_t noise = noise_fn(state); \
-		*buf = state->q_mult[1] * rint(state->q_mult[0] * (*buf + noise)); \
+		*buf = state->q_mult[1] * nearbyint(state->q_mult[0] * (*buf + noise)); \
 	} while (0)
 
 #define DITHER_LOOP_FB(noise_fn, filter_fn, filter) \
 	do { \
 		const sample_t noise = noise_fn(state); \
 		const sample_t p0 = *buf - filter_fn(state, filter, state->z_1); \
-		const sample_t p1 = state->q_mult[1] * rint(state->q_mult[0] * (p0 + noise)); \
+		const sample_t p1 = state->q_mult[1] * nearbyint(state->q_mult[0] * (p0 + noise)); \
 		state->z_1 = p1 - p0; \
 		*buf = p1; \
 	} while (0)
