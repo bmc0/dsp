@@ -18,39 +18,108 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <math.h>
 #include <limits.h>
 #include <complex.h>
 #include <fftw3.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include "fir_p.h"
 #include "fir.h"
 #include "util.h"
 
 #define DIRECT_LEN           (1<<5)
+#define FFT_LEN_STEP_DEFAULT (1<<2)
+#define MAX_FFT_GROUPS       4
 #define MAX_PART_LEN_LIMIT   INT_MAX
 #define MAX_PART_LEN_DEFAULT (1<<14)
+#define USE_SINGLE_THREAD    0  /* for testing */
 
 struct direct_part {
-	ssize_t p;
 	sample_t **filter, **buf;
+	int p;
 };
 
-struct fft_part {
-	ssize_t len, fr_len, mask, p, in_p, delay;
-	fftw_complex **filter_fr;
-	fftw_plan *r2c_plan, *c2r_plan;
-	sample_t **ibuf, **obuf, **olap;
+struct fft_part_group {
+	fftw_complex *filter_fr, *fdl, *tmp_fr;
+	fftw_plan r2c_plan, c2r_plan;
+	sample_t *fft_ibuf, *fft_obuf, *fft_olap;
+	sample_t *l_ibuf, *l_obuf;
+	sample_t **ibuf, **obuf;
+	int n, len, fr_len, p, fdl_p, delay;
+	int fft_channels, has_thread;
+	pthread_t thread;
+	sem_t start, sync;
 };
 
 struct fir_p_state {
-	ssize_t len, mask, p, nparts, filter_frames, drain_frames;
-	fftw_complex *tmp_fr;
-	sample_t **ibuf;
 	struct direct_part part0;
-	struct fft_part *part;
-	int has_output, is_draining;
+	struct fft_part_group group[MAX_FFT_GROUPS];
+	ssize_t filter_frames, drain_frames;
+	int n, has_output, is_draining;
 };
+
+static inline void fft_part_group_compute(struct fft_part_group *group)
+{
+	const sample_t out_norm = 1.0 / (group->len * 2.0);
+	const int part_fr_len = group->fr_len * group->fft_channels;
+
+	fftw_complex *part_fdl = group->fdl + part_fr_len*group->fdl_p;
+	fftw_complex *part_filter_fr = group->filter_fr;
+	fftw_execute(group->r2c_plan);
+	memcpy(part_fdl, group->tmp_fr, part_fr_len * sizeof(fftw_complex));
+	for (int l = 0; l < part_fr_len; l += 2) {
+		group->tmp_fr[l+0] *= part_filter_fr[l+0];
+		group->tmp_fr[l+1] *= part_filter_fr[l+1];
+	}
+	for (int q = 1; q < group->n; ++q) {
+		part_filter_fr += part_fr_len;
+		if (part_fdl == group->fdl) part_fdl += part_fr_len*(group->n-1);
+		else part_fdl -= part_fr_len;
+		for (int l = 0; l < part_fr_len; l += 2) {
+			group->tmp_fr[l+0] += part_fdl[l+0] * part_filter_fr[l+0];
+			group->tmp_fr[l+1] += part_fdl[l+1] * part_filter_fr[l+1];
+		}
+	}
+	fftw_execute(group->c2r_plan);
+	for (int l = 0; l < group->len * 2 * group->fft_channels; l += 2) {
+		group->fft_obuf[l+0] *= out_norm;
+		group->fft_obuf[l+1] *= out_norm;
+	}
+	for (int k = 0; k < group->fft_channels; ++k) {
+		sample_t *fft_obuf = &group->fft_obuf[k*group->len*2];
+		sample_t *fft_obuf_olap = fft_obuf + group->len;
+		sample_t *fft_olap = &group->fft_olap[k*group->len];
+		for (int l = 0; l < group->len; l += 2) {
+			fft_obuf[l+0] += fft_olap[l+0];
+			fft_obuf[l+1] += fft_olap[l+1];
+			fft_olap[l+0] = fft_obuf_olap[l+0];
+			fft_olap[l+1] = fft_obuf_olap[l+1];
+		}
+	}
+	group->fdl_p = (group->fdl_p + 1 < group->n) ? group->fdl_p + 1 : 0;
+}
+
+static void * fft_part_group_worker(void *arg)
+{
+	struct fft_part_group *group = (struct fft_part_group *) arg;
+	for (;;) {
+		sem_post(&group->sync);
+		while (sem_wait(&group->start) != 0);
+		fft_part_group_compute(group);
+	}
+	return NULL;
+}
+
+static inline void fft_part_group_transfer_bufs(struct fft_part_group *group)
+{
+	for (int k = 0; k < group->fft_channels; ++k) {
+		memcpy(&group->l_obuf[k*group->len], &group->fft_obuf[k*group->len*2], group->len * sizeof(sample_t));
+		memcpy(&group->fft_ibuf[k*group->len*2], &group->l_ibuf[k*group->len], group->len * sizeof(sample_t));
+	}
+}
 
 sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -60,49 +129,37 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (state->part0.buf[k]) {
 				const sample_t s = ibuf[i*e->istream.channels + k];
-				for (ssize_t n = state->part0.p, m = 0; m < DIRECT_LEN; ++m) {
+				for (int n = state->part0.p, m = 0; m < DIRECT_LEN; ++m) {
 					state->part0.buf[k][n] += s * state->part0.filter[k][m];
 					n = (n+1) & (DIRECT_LEN-1);
 				}
 				ibuf[i*e->istream.channels + k] = state->part0.buf[k][state->part0.p];
 				state->part0.buf[k][state->part0.p] = 0.0;
-				for (ssize_t j = 0; j < state->nparts; ++j) {
-					struct fft_part *part = &state->part[j];
-					ibuf[i*e->istream.channels + k] += part->obuf[k][part->p];
-					part->ibuf[k][part->p] = (part->delay > 0) ? state->ibuf[k][part->in_p] : s;
+				for (int j = 0; j < state->n; ++j) {
+					struct fft_part_group *group = &state->group[j];
+					ibuf[i*e->istream.channels + k] += group->obuf[k][group->p + state->part0.p];
+					group->ibuf[k][group->p + state->part0.p] = s;
 				}
-				if (state->ibuf)
-					state->ibuf[k][state->p] = s;
 			}
 		}
 		state->part0.p = (state->part0.p+1) & (DIRECT_LEN-1);
-		for (ssize_t j = 0; j < state->nparts; ++j) {
-			struct fft_part *part = &state->part[j];
-			part->in_p = (part->in_p+1 >= state->len) ? 0 : part->in_p+1;
-			++part->p;
-		}
-		state->p = (state->p+1 >= state->len) ? 0 : state->p+1;
 
 		/* All partition lengths must be some multiple of DIRECT_LEN */
 		if (state->part0.p == 0) {
-			for (ssize_t j = 0; j < state->nparts; ++j) {
-				struct fft_part *part = &state->part[j];
-				if (part->p == part->len) {
-					for (int k = 0; k < e->istream.channels; ++k) {
-						if (part->ibuf[k]) {
-							fftw_execute(part->r2c_plan[k]);
-							for (ssize_t l = 0; l < part->fr_len; ++l)
-								state->tmp_fr[l] *= part->filter_fr[k][l];
-							fftw_execute(part->c2r_plan[k]);
-							for (ssize_t l = 0; l < part->len * 2; ++l)
-								part->obuf[k][l] /= part->len * 2;
-							for (ssize_t l = 0; l < part->len; ++l) {
-								part->obuf[k][l] += part->olap[k][l];
-								part->olap[k][l] = part->obuf[k][l + part->len];
-							}
-						}
+			for (int j = 0; j < state->n; ++j) {
+				struct fft_part_group *group = &state->group[j];
+				group->p += DIRECT_LEN;
+				if (group->p == group->len) {
+					group->p = 0;
+					if (group->has_thread) {
+						while (sem_wait(&group->sync) != 0);
+						fft_part_group_transfer_bufs(group);
+						sem_post(&group->start);
 					}
-					part->p = 0;
+					else {
+						if (group->delay > 0) fft_part_group_transfer_bufs(group);  /* should not happen */
+						fft_part_group_compute(group);
+					}
 				}
 			}
 		}
@@ -116,48 +173,52 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 void fir_p_effect_reset(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	if (state->ibuf) {
-		for (int k = 0; k < e->ostream.channels; ++k)
-			if (state->ibuf[k])
-				memset(state->ibuf[k], 0, state->len * sizeof(sample_t));
-	}
 	state->part0.p = 0;
-	for (ssize_t j = 0; j < state->nparts; ++j) {
-		struct fft_part *part = &state->part[j];
-		part->p = 0;
-		for (int k = 0; k < e->ostream.channels; ++k) {
-			if (state->part0.buf[k]) {
-				memset(part->obuf[k], 0, part->len * 2 * sizeof(sample_t));
-				memset(part->olap[k], 0, part->len * sizeof(sample_t));
-			}
+	for (int j = 0; j < state->n; ++j) {
+		struct fft_part_group *group = &state->group[j];
+		if (group->has_thread) {
+			while (sem_wait(&group->sync) != 0);
+			sem_post(&group->sync);
 		}
+		group->p = 0;
+		group->fdl_p = 0;
+		memset(group->fdl, 0, (size_t) group->fr_len * group->fft_channels * group->n * sizeof(fftw_complex));
+		memset(group->fft_olap, 0, group->len * group->fft_channels * sizeof(sample_t));
 	}
 }
 
 void fir_p_effect_plot(struct effect *e, int i)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0, m = 0; k < e->istream.channels; ++k) {
 		if (state->part0.buf[k]) {
 			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
-			for (ssize_t m = 0; m < DIRECT_LEN; ++m)
-				printf("+exp(-j*w*%zd)*%.15e", m, state->part0.filter[k][m]);
+			for (int m = 0; m < DIRECT_LEN; ++m)
+				printf("+exp(-j*w*%d)*%.15e", m, state->part0.filter[k][m]);
 			ssize_t z = DIRECT_LEN;
-			for (ssize_t j = 0; j < state->nparts; ++j) {
-				struct fft_part *part = &state->part[j];
-				for (ssize_t l = 0; l < part->fr_len; ++l)
-					state->tmp_fr[l] = part->filter_fr[k][l];
-				fftw_execute(part->c2r_plan[k]);
-				for (ssize_t l = 0; l < part->len * 2; ++l)
-					part->obuf[k][l] /= part->len * 2;
-				for (ssize_t l = 0; l < part->len; ++l, ++z)
-					printf("+exp(-j*w*%zd)*%.15e", z, part->obuf[k][l]);
+			for (int j = 0; j < state->n; ++j) {
+				struct fft_part_group *group = &state->group[j];
+				sample_t *part_fft_obuf = (sample_t *) group->fdl;  /* only buffer large enough */
+				fftw_complex *part_filter_fr = group->filter_fr;
+				for (int q = 0; q < group->n; ++q) {
+					if (m == 0) {
+						memcpy(group->tmp_fr, part_filter_fr, group->fr_len * group->fft_channels * sizeof(fftw_complex));
+						fftw_execute(group->c2r_plan);
+						memcpy(part_fft_obuf, group->fft_obuf, group->len * 2 * group->fft_channels * sizeof(sample_t));
+					}
+					for (int l = 0; l < group->len; ++l, ++z)
+						printf("+exp(-j*w*%zd)*%.15e", z, part_fft_obuf[m*group->len*2 + l] / (group->len * 2));
+					part_fft_obuf += group->len * 2 * group->fft_channels;
+					part_filter_fr += group->fr_len * group->fft_channels;
+				}
 			}
 			puts(":0/0");
+			++m;
 		}
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
 	}
+	fir_p_effect_reset(e);
 }
 
 void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
@@ -184,52 +245,115 @@ void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void fir_p_effect_destroy(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	for (ssize_t j = 0; j < state->nparts; ++j) {
-		struct fft_part *part = &state->part[j];
-		for (int k = 0; k < e->ostream.channels; ++k) {
-			if (part->ibuf[k]) {
-				fftw_free(part->ibuf[k]);
-				fftw_free(part->obuf[k]);
-				fftw_free(part->olap[k]);
-				break;
-			}
+	for (int j = 0; j < state->n; ++j) {
+		struct fft_part_group *group = &state->group[j];
+		if (group->has_thread) {
+			pthread_cancel(group->thread);
+			pthread_join(group->thread, NULL);
+			sem_destroy(&group->start);
+			sem_destroy(&group->sync);
 		}
-		for (int k = 0; k < e->ostream.channels; ++k) {
-			fftw_free(part->filter_fr[k]);
-			fftw_destroy_plan(part->r2c_plan[k]);
-			fftw_destroy_plan(part->c2r_plan[k]);
-		}
-		free(part->ibuf);
-		free(part->obuf);
-		free(part->olap);
-		free(part->filter_fr);
-		free(part->r2c_plan);
-		free(part->c2r_plan);
+		fftw_free(group->filter_fr);
+		fftw_free(group->fdl);
+		fftw_free(group->tmp_fr);
+		fftw_free(group->fft_ibuf);
+		fftw_free(group->fft_obuf);
+		fftw_free(group->fft_olap);
+		free(group->l_ibuf);
+		free(group->l_obuf);
+		free(group->ibuf);
+		free(group->obuf);
+		fftw_destroy_plan(group->r2c_plan);
+		fftw_destroy_plan(group->c2r_plan);
 	}
-	for (int k = 0; k < e->ostream.channels; ++k) {
+	for (int k = 0; k < e->istream.channels; ++k) {
 		if (state->part0.buf[k]) {
 			free(state->part0.filter[k]);
 			free(state->part0.buf[k]);
-			if (state->ibuf)
-				free(state->ibuf[k]);
 			break;
 		}
 	}
 	free(state->part0.filter);
 	free(state->part0.buf);
-	free(state->ibuf);
-	fftw_free(state->tmp_fr);
-	free(state->part);
 	free(state);
 }
 
-struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t max_part_len)
+static void find_partitions(struct fir_p_state *state, int max_part_len, int single_thread)
 {
-	ssize_t i, k, j, l;
-	ssize_t filter_pos = DIRECT_LEN, delay = 0, max_delay = 0;
+	const int delay_fact = (single_thread) ? 1 : 2;
+	int fft_len_step = FFT_LEN_STEP_DEFAULT;
+	next_len_step:
+	for (ssize_t j = DIRECT_LEN, k = DIRECT_LEN; k < state->filter_frames; ) {
+		++state->n;
+		if (state->n > MAX_FFT_GROUPS) {
+			memset(state->group, 0, MAX_FFT_GROUPS * sizeof(struct fft_part_group));
+			state->n = 0;
+			fft_len_step <<= 1;
+			goto next_len_step;
+		}
+		struct fft_part_group *group = &state->group[state->n - 1];
+		group->len = j;
+		group->fr_len = group->len + 2;
+		group->n = 1;
+		k += group->len;
+		while (k < state->filter_frames && k < j * fft_len_step * delay_fact) {
+			++group->n;
+			k += group->len;
+		}
+		j *= fft_len_step;
+		if (j > max_part_len || k + j * fft_len_step > state->filter_frames) {
+			while (k < state->filter_frames) {
+				++group->n;
+				k += group->len;
+			}
+			break;
+		}
+	}
+	/* try to optimize a bit */
+	for (int k = state->n - 1; k > 0; --k) {
+		struct fft_part_group *group = &state->group[k];
+		struct fft_part_group *prev_group = &state->group[k-1];
+		while (group->len * 2 <= max_part_len) {
+			const int new_n = prev_group->n + group->len * delay_fact / prev_group->len;
+			if (group->n <= new_n) break;
+			prev_group->n = new_n;
+			group->len *= 2;
+			group->fr_len = group->len + 2;
+			group->n -= delay_fact;
+			group->n = group->n / 2 + (group->n & 1);
+		}
+	}
+}
+
+static int print_and_verify_partitions(const struct effect_info *ei, struct fir_p_state *state, int single_thread)
+{
+	LOG_FMT(LL_VERBOSE, "%s: info: partition group 0: n=1 len=%d total=%d (direct)", ei->name, DIRECT_LEN, DIRECT_LEN);
+	ssize_t total_len = DIRECT_LEN, last_total_len = DIRECT_LEN;
+	for (int k = 0; k < state->n; ++k) {
+		struct fft_part_group *group = &state->group[k];
+		const int delay = last_total_len - group->len;
+		if (((single_thread || k == 0) && delay != 0) || (!single_thread && k > 0 && delay != group->len)) {
+			LOG_FMT(LL_ERROR, "%s: BUG: invalid partitioning: group=%d len=%d delay=%d", ei->name, k+1, group->len, delay);
+			return 1;
+		}
+		group->delay = delay;
+		total_len += group->len * group->n;
+		last_total_len = total_len;
+		LOG_FMT(LL_VERBOSE, "%s: info: partition group %d: n=%d len=%d total=%zd", ei->name, k+1, group->n, group->len, total_len);
+	}
+	if (total_len < state->filter_frames) {
+		LOG_FMT(LL_ERROR, "%s: BUG: invalid partitioning: total=%zd filter_frames=%zd", ei->name, total_len, state->filter_frames);
+		return 1;
+	}
+	if (total_len - state->group[state->n - 1].len >= state->filter_frames)
+		LOG_FMT(LL_ERROR, "%s: BUG: warning: extra partitions: total=%zd filter_frames=%zd", ei->name, total_len, state->filter_frames);
+	return 0;
+}
+
+struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int max_part_len)
+{
 	struct effect *e;
 	struct fir_p_state *state;
-	sample_t *tmp_buf = NULL;
 
 	if (filter_frames < DIRECT_LEN)
 		return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 1);
@@ -270,55 +394,22 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->data = state;
 
 	state->filter_frames = filter_frames;
-	state->part0.filter = calloc(e->ostream.channels, sizeof(sample_t *));
-	state->part0.buf = calloc(e->ostream.channels, sizeof(sample_t *));
-	LOG_FMT(LL_VERBOSE, "%s: info: partition 0: len=%d delay=0 total=%d (direct)", ei->name, DIRECT_LEN, DIRECT_LEN);
+	state->part0.filter = calloc(e->istream.channels, sizeof(sample_t *));
+	state->part0.buf = calloc(e->istream.channels, sizeof(sample_t *));
 
-	k = j = DIRECT_LEN;
-	for (i = 0; j < filter_frames; ++i) {
-		++state->nparts;
-		state->part = realloc(state->part, sizeof(struct fft_part) * state->nparts);
-		struct fft_part *part = &state->part[i];
-		memset(part, 0, sizeof(struct fft_part));
-		part->len = k;
-		part->ibuf = calloc(e->ostream.channels, sizeof(sample_t *));
-		part->obuf = calloc(e->ostream.channels, sizeof(sample_t *));
-		part->olap = calloc(e->ostream.channels, sizeof(sample_t *));
-		part->fr_len = part->len + 1;
-		part->filter_fr = calloc(e->ostream.channels, sizeof(fftw_complex *));
-		part->r2c_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-		part->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-		part->delay = delay;
-		max_delay = MAXIMUM(delay, max_delay);
-		j += part->len;
-		if (k < max_part_len && j + k < filter_frames)
-			k *= 2;
-		else
-			delay += state->part[i].len;
-		LOG_FMT(LL_VERBOSE, "%s: info: partition %zd: len=%zd delay=%zd total=%zd", ei->name, i+1, state->part[i].len, state->part[i].delay, j);
-	}
-	if (max_delay > 0) {
-		state->len = max_delay;
-		state->ibuf = calloc(e->ostream.channels, sizeof(sample_t *));
-		sample_t *lbuf = calloc(state->len * n_channels, sizeof(sample_t));
-		for (i = 0; i < e->ostream.channels; ++i) {
-			if (GET_BIT(channel_selector, i)) {
-				state->ibuf[i] = lbuf;
-				lbuf += state->len;
-			}
-		}
-	}
+	find_partitions(state, max_part_len, USE_SINGLE_THREAD);
+	if (print_and_verify_partitions(ei, state, USE_SINGLE_THREAD)) goto fail;
 
 	sample_t *lbuf_filter = calloc(DIRECT_LEN * filter_channels, sizeof(sample_t));
 	sample_t *lbuf = calloc(DIRECT_LEN * n_channels, sizeof(sample_t));
 	if (filter_channels == 1)
 		memcpy(lbuf_filter, filter_data, DIRECT_LEN * sizeof(sample_t));
-	for (i = k = 0; i < e->ostream.channels; ++i) {
+	for (int i = 0, k = 0; i < e->istream.channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
 			state->part0.filter[i] = lbuf_filter;
 			state->part0.buf[i] = lbuf;
 			if (filter_channels > 1) {
-				for (j = 0; j < DIRECT_LEN; ++j)
+				for (int j = 0; j < DIRECT_LEN; ++j)
 					state->part0.filter[i][j] = filter_data[j*filter_channels + k];
 				++k;
 				lbuf_filter += DIRECT_LEN;
@@ -327,55 +418,106 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 		}
 	}
 
-	if (state->nparts > 0) {
-		struct fft_part *part = &state->part[state->nparts - 1];
-		tmp_buf = fftw_malloc(part->len * 2 * sizeof(sample_t));
-		state->tmp_fr = fftw_malloc(part->fr_len * sizeof(fftw_complex));
-	}
-	for (k = 0; k < state->nparts; ++k) {
-		struct fft_part *part = &state->part[k];
-		memset(tmp_buf, 0, part->len * 2 * sizeof(sample_t));
-		fftw_plan tmp_plan = fftw_plan_dft_r2c_1d(part->len * 2, tmp_buf, state->tmp_fr, FFTW_ESTIMATE);
-		if (filter_channels == 1) {
-			memcpy(tmp_buf, &filter_data[filter_pos], MINIMUM(filter_frames-filter_pos, part->len) * sizeof(sample_t));
-			fftw_execute(tmp_plan);
-		}
-		sample_t *lbuf_in = fftw_malloc(part->len * 2 * n_channels * sizeof(sample_t));
-		memset(lbuf_in, 0, part->len * 2 * n_channels * sizeof(sample_t));
-		sample_t *lbuf_out = fftw_malloc(part->len * 2 * n_channels * sizeof(sample_t));
-		memset(lbuf_out, 0, part->len * 2 * n_channels * sizeof(sample_t));
-		sample_t *lbuf_olap = fftw_malloc(part->len * n_channels * sizeof(sample_t));
-		memset(lbuf_olap, 0, part->len * n_channels * sizeof(sample_t));
-		for (i = l = 0; i < e->ostream.channels; ++i) {
-			if (GET_BIT(channel_selector, i)) {
-				part->ibuf[i] = lbuf_in;
-				part->obuf[i] = lbuf_out;
-				part->olap[i] = lbuf_olap;
-				part->filter_fr[i] = fftw_malloc(part->fr_len * sizeof(fftw_complex));
-				part->r2c_plan[i] = fftw_plan_dft_r2c_1d(part->len * 2, part->ibuf[i], state->tmp_fr, FFTW_ESTIMATE);
-				part->c2r_plan[i] = fftw_plan_dft_c2r_1d(part->len * 2, state->tmp_fr, part->obuf[i], FFTW_ESTIMATE);
-				if (filter_channels > 1) {
-					for (j = 0; j < part->len && j + filter_pos < filter_frames; ++j)
-						tmp_buf[j] = filter_data[(j + filter_pos) * filter_channels + l];
-					fftw_execute(tmp_plan);
-					memcpy(part->filter_fr[i], state->tmp_fr, part->fr_len * sizeof(fftw_complex));
-					++l;
-				}
-				else {
-					memcpy(part->filter_fr[i], state->tmp_fr, part->fr_len * sizeof(fftw_complex));
-				}
-				lbuf_in += part->len * 2;
-				lbuf_out += part->len * 2;
-				lbuf_olap += part->len;
+	dsp_fftw_acquire();
+	const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
+	dsp_fftw_release();
+	ssize_t filter_pos = DIRECT_LEN;
+	for (int k = 0; k < state->n; ++k) {
+		struct fft_part_group *group = &state->group[k];
+
+		group->fft_channels = n_channels;
+		group->filter_fr = fftw_malloc((size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
+		group->fdl = fftw_malloc((size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
+		group->tmp_fr = fftw_malloc(group->fr_len * n_channels * sizeof(fftw_complex));
+		group->fft_ibuf = fftw_malloc(group->len * 2 * n_channels * sizeof(sample_t));
+		group->fft_obuf = fftw_malloc(group->len * 2 * n_channels * sizeof(sample_t));
+		group->fft_olap = fftw_malloc(group->len * n_channels * sizeof(sample_t));
+		group->ibuf = calloc(e->istream.channels, sizeof(sample_t *));
+		group->obuf = calloc(e->istream.channels, sizeof(sample_t *));
+
+		const int fft_n[] = { group->len * 2 };
+		dsp_fftw_acquire();
+		fftw_plan tmp_plan = fftw_plan_many_dft_r2c(1, fft_n, filter_channels,
+			group->fft_ibuf, NULL, 1, group->len * 2,
+			group->tmp_fr, NULL, 1, group->fr_len,
+			FFTW_ESTIMATE);
+		group->r2c_plan = fftw_plan_many_dft_r2c(1, fft_n, n_channels,
+			group->fft_ibuf, NULL, 1, group->len * 2,
+			group->tmp_fr, NULL, 1, group->fr_len,
+			planner_flags);
+		group->c2r_plan = fftw_plan_many_dft_c2r(1, fft_n, n_channels,
+			group->tmp_fr, NULL, 1, group->fr_len,
+			group->fft_obuf, NULL, 1, group->len * 2,
+			planner_flags);
+		dsp_fftw_release();
+
+		memset(group->fdl, 0, (size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
+		memset(group->fft_ibuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
+		memset(group->fft_obuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
+		memset(group->fft_olap, 0, group->len * n_channels * sizeof(sample_t));
+
+		fftw_complex *filter_fr_p = group->filter_fr;
+		for (int q = 0; q < group->n; ++q) {
+			if (filter_channels == 1) {
+				memcpy(group->fft_ibuf, &filter_data[filter_pos], MINIMUM(filter_frames-filter_pos, group->len) * sizeof(sample_t));
+				fftw_execute(tmp_plan);
+				for (int i = 0; i < n_channels; ++i)
+					memcpy(&filter_fr_p[i*group->fr_len], group->tmp_fr, group->fr_len * sizeof(fftw_complex));
 			}
+			else {
+				for (int i = 0; i < n_channels; ++i)
+					for (int l = 0; l < group->len && l + filter_pos < filter_frames; ++l)
+						group->fft_ibuf[i*group->len*2 + l] = filter_data[(filter_pos+l)*filter_channels + i];
+				fftw_execute(tmp_plan);
+				memcpy(filter_fr_p, group->tmp_fr, group->fr_len * n_channels * sizeof(fftw_complex));
+			}
+			filter_pos += group->len;
+			filter_fr_p += group->fr_len * n_channels;
+			memset(group->fft_ibuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
 		}
 		fftw_destroy_plan(tmp_plan);
-		filter_pos += part->len;
-		part->in_p = (part->delay == 0) ? 0 : state->len - part->delay;
+
+		if (group->delay > 0) {
+			sample_t *l_ibuf_p = group->l_ibuf = calloc(group->len * n_channels, sizeof(sample_t));
+			sample_t *l_obuf_p = group->l_obuf = calloc(group->len * n_channels, sizeof(sample_t));
+			for (int i = 0; i < e->istream.channels; ++i) {
+				if (GET_BIT(channel_selector, i)) {
+					group->ibuf[i] = l_ibuf_p;
+					group->obuf[i] = l_obuf_p;
+					l_ibuf_p += group->len;
+					l_obuf_p += group->len;
+				}
+			}
+			sem_init(&group->start, 0, 0);
+			sem_init(&group->sync, 0, 0);
+			if ((errno = pthread_create(&group->thread, NULL, fft_part_group_worker, group)) != 0) {
+				LOG_FMT(LL_ERROR, "%s(): error: pthread_create() failed: %s", __func__, strerror(errno));
+				sem_destroy(&group->start);
+				sem_destroy(&group->sync);
+				goto fail;
+			}
+			group->has_thread = 1;
+		}
+		else {
+			sample_t *fft_ibuf_p = group->fft_ibuf;
+			sample_t *fft_obuf_p = group->fft_obuf;
+			for (int i = 0; i < e->istream.channels; ++i) {
+				if (GET_BIT(channel_selector, i)) {
+					group->ibuf[i] = fft_ibuf_p;
+					group->obuf[i] = fft_obuf_p;
+					fft_ibuf_p += group->len * 2;
+					fft_obuf_p += group->len * 2;
+				}
+			}
+		}
 	}
-	fftw_free(tmp_buf);
 
 	return e;
+
+	fail:
+	fir_p_effect_destroy(e);
+	free(e);
+	return NULL;
 }
 
 struct effect * fir_p_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
