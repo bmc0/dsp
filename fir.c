@@ -158,17 +158,25 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 		}
 
 		if (state->p == state->len) {
+			const sample_t out_norm = 1.0 / (state->len * 2.0);
 			for (i = 0; i < e->ostream.channels; ++i) {
 				if (state->input[i]) {
+					fftw_complex *filter_fr = state->filter_fr[i];
+					sample_t *output = state->output[i], *overlap = state->overlap[i];
 					fftw_execute(state->r2c_plan[i]);
-					for (k = 0; k < state->fr_len; ++k)
-						state->tmp_fr[k] *= state->filter_fr[i][k];
+					for (k = 0; k < state->fr_len; k += 2) {
+						state->tmp_fr[k+0] *= filter_fr[k+0];
+						state->tmp_fr[k+1] *= filter_fr[k+1];
+					}
 					fftw_execute(state->c2r_plan[i]);
-					for (k = 0; k < state->len * 2; ++k)
-						state->output[i][k] /= state->len * 2;
+					for (k = 0; k < state->len * 2; k += 2) {
+						output[k+0] *= out_norm;
+						output[k+1] *= out_norm;
+					}
+					sample_t *output_overlap = &output[state->len];
 					for (k = 0; k < state->len; ++k) {
-						state->output[i][k] += state->overlap[i][k];
-						state->overlap[i][k] = state->output[i][k + state->len];
+						output[k] += overlap[k];
+						overlap[k] = output_overlap[k];
 					}
 				}
 			}
@@ -343,7 +351,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		state->filter_frames = filter_frames;
 		state->len = next_fast_fftw_len(filter_frames);
 		LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd fft_len=%zd", ei->name, filter_frames, state->len);
-		state->fr_len = state->len + 1;
+		state->fr_len = state->len + 2;
 		state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 		state->input = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->output = calloc(e->ostream.channels, sizeof(sample_t *));
