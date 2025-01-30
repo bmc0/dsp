@@ -93,7 +93,7 @@ static struct dither_type_info * get_dither_type_info(const char *name, int fs)
 		return &dither_types[0];
 	for (int i = 0; i < LENGTH(dither_types); ++i)
 		if (strcmp(name, dither_types[i].name) == 0
-				&& (fs == 0 || dither_types[i].fs == 0 || fabs(dither_types[i].fs - fs) < dither_types[i].fs * 0.05))
+				&& (fs == 0 || dither_types[i].fs == 0 || abs(dither_types[i].fs - fs) < dither_types[i].fs * 0.05))
 			return &dither_types[i];
 	return NULL;
 }
