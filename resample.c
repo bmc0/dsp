@@ -34,7 +34,8 @@ struct resample_state {
 	struct {
 		int n, d;
 	} ratio;
-	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len, in_buf_pos, out_buf_pos, drain_pos, drain_frames, out_delay;
+	ssize_t m, sinc_len, sinc_fr_len, tmp_fr_len, in_len, out_len;
+	ssize_t in_buf_pos, out_buf_pos, drain_pos, drain_frames, out_delay;
 	fftw_complex *sinc_fr;
 	fftw_complex *tmp_fr, *tmp_fr_2;
 	sample_t **input, **output, **overlap;
@@ -285,31 +286,34 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 		state->out_delay = lround(state->m / 2 * ((double) state->ratio.n / state->ratio.d));
 
 	/* allocate arrays, construct fftw plans */
-	sinc = fftw_malloc(state->sinc_len * 2 * sizeof(sample_t));
-	memset(sinc, 0, state->sinc_len * 2 * sizeof(sample_t));
-	state->sinc_fr = fftw_malloc(state->sinc_fr_len * sizeof(fftw_complex));
-	memset(state->sinc_fr, 0, state->sinc_fr_len * sizeof(fftw_complex));
-	sinc_plan = fftw_plan_dft_r2c_1d(state->sinc_len * 2, sinc, state->sinc_fr, FFTW_ESTIMATE);
-
-	state->tmp_fr = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
-	memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
-	state->tmp_fr_2 = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
-	memset(state->tmp_fr_2, 0, state->tmp_fr_len * sizeof(fftw_complex));
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->output = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->overlap = calloc(e->ostream.channels, sizeof(sample_t *));
 	state->r2c_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
 	state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
+	state->tmp_fr = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
+	state->tmp_fr_2 = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
+	sinc = fftw_malloc(state->sinc_len * 2 * sizeof(sample_t));
+	state->sinc_fr = fftw_malloc(state->sinc_fr_len * sizeof(fftw_complex));
+
+	dsp_fftw_acquire();
+	const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
+	sinc_plan = fftw_plan_dft_r2c_1d(state->sinc_len * 2, sinc, state->sinc_fr, FFTW_ESTIMATE);
 	for (int i = 0; i < e->ostream.channels; ++i) {
 		state->input[i] = fftw_malloc(state->in_len * 2 * sizeof(sample_t));
-		memset(state->input[i], 0, state->in_len * 2 * sizeof(sample_t));
 		state->output[i] = fftw_malloc(state->out_len * 2 * sizeof(sample_t));
-		memset(state->output[i], 0, state->out_len * 2 * sizeof(sample_t));
 		state->overlap[i] = fftw_malloc(state->out_len * sizeof(sample_t));
+		state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->in_len * 2, state->input[i], state->tmp_fr, planner_flags);
+		state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->out_len * 2, state->tmp_fr_2, state->output[i], planner_flags);
+		memset(state->input[i], 0, state->in_len * 2 * sizeof(sample_t));
+		memset(state->output[i], 0, state->out_len * 2 * sizeof(sample_t));
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
-		state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->in_len * 2, state->input[i], state->tmp_fr, FFTW_ESTIMATE);
-		state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->out_len * 2, state->tmp_fr_2, state->output[i], FFTW_ESTIMATE);
 	}
+	dsp_fftw_release();
+	memset(sinc, 0, state->sinc_len * 2 * sizeof(sample_t));
+	memset(state->sinc_fr, 0, state->sinc_fr_len * sizeof(fftw_complex));
+	memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
+	memset(state->tmp_fr_2, 0, state->tmp_fr_len * sizeof(fftw_complex));
 
 	/* generate windowed sinc function */
 	for (int i = 0; i < m_os + 1; ++i)
