@@ -23,6 +23,9 @@
 #include <math.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <complex.h>
+#include <fftw3.h>
+#include <pthread.h>
 #include "util.h"
 
 int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
@@ -370,5 +373,47 @@ ssize_t next_fast_fftw_len(ssize_t min_len)
 		p2 *= 2;
 	}
 	return best;
+}
+
+static pthread_mutex_t fftw_lock = PTHREAD_MUTEX_INITIALIZER;
+static const char *wisdom_path = NULL;
+static int wisdom_loaded = 0;
+
+void dsp_fftw_acquire(void)
+{
+	pthread_mutex_lock(&fftw_lock);
+}
+
+void dsp_fftw_release(void)
+{
+	pthread_mutex_unlock(&fftw_lock);
+}
+
+int dsp_fftw_load_wisdom(void)
+{
+	if (!wisdom_loaded) {
+		wisdom_loaded = 1;
+		#ifdef LADSPA_FRONTEND
+			wisdom_path = getenv("LADSPA_DSP_FFTW_WISDOM_PATH");
+		#else
+			wisdom_path = getenv("DSP_FFTW_WISDOM_PATH");
+		#endif
+		if (wisdom_path) {
+			if (fftw_import_wisdom_from_filename(wisdom_path))
+				LOG_FMT(LL_VERBOSE, "info: loaded FFTW wisdom: %s", wisdom_path);
+			else LOG_FMT(LL_VERBOSE, "info: failed to load FFTW wisdom: %s", wisdom_path);
+		}
+	}
+	return (wisdom_path != NULL);
+}
+
+void dsp_fftw_save_wisdom(void)
+{
+	if (wisdom_path) {
+		if (fftw_export_wisdom_to_filename(wisdom_path))
+			LOG_FMT(LL_VERBOSE, "info: saved FFTW wisdom: %s", wisdom_path);
+		else LOG_FMT(LL_VERBOSE, "info: failed to save FFTW wisdom: %s", wisdom_path);
+	}
+	wisdom_loaded = 0;
 }
 #endif

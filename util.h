@@ -69,6 +69,10 @@ char * construct_full_path(const char *, const char *);
 char * isolate(char *, char);
 #ifdef HAVE_FFTW3
 ssize_t next_fast_fftw_len(ssize_t);
+void dsp_fftw_acquire(void);
+void dsp_fftw_release(void);
+int dsp_fftw_load_wisdom(void);   /* Not MT-safe. Call before planning; returns true if a path was specified. */
+void dsp_fftw_save_wisdom(void);  /* Called at exit--do not use anywhere else. */
 #endif
 
 #ifdef INT64_MAX

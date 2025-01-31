@@ -246,6 +246,9 @@ static void cleanup_and_exit(int s)
 	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
 	destroy_effects_chain(&xfade_state.chain[1]);
+	#ifdef HAVE_FFTW3
+		dsp_fftw_save_wisdom();
+	#endif
 	free(buf1);
 	free(buf2);
 	free(progress_line);

@@ -299,9 +299,12 @@ static void cleanup_dsp(LADSPA_Handle inst)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
 	LOG_S(LL_VERBOSE, "info: cleaning up...");
+	destroy_effects_chain(&d->chain);
+	#ifdef HAVE_FFTW3
+		dsp_fftw_save_wisdom();
+	#endif
 	free(d->buf1);
 	free(d->buf2);
-	destroy_effects_chain(&d->chain);
 	free(d->ports);
 	free(d);
 }
