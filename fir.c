@@ -35,20 +35,19 @@ struct fir_direct_state {
 };
 
 struct fir_state {
-	ssize_t len, fr_len, p, filter_frames, drain_pos, drain_frames;
-	fftw_complex **filter_fr, *tmp_fr;
-	sample_t **input, **output, **overlap;
-	fftw_plan *r2c_plan, *c2r_plan;
+	ssize_t len, fr_len, p, filter_frames;
+	ssize_t drain_pos, drain_frames;
+	fftw_complex **filter_fr, *tmp_fr, *filter_fr_1ch;
+	sample_t **ibuf, **obuf, **olap;
+	fftw_plan r2c_plan, c2r_plan;
 	int has_output, is_draining;
 };
 
 sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
-	ssize_t i, k;
-
-	for (i = 0; i < *frames; ++i) {
-		for (k = 0; k < e->istream.channels; ++k) {
+	for (ssize_t i = 0; i < *frames; ++i) {
+		for (int k = 0; k < e->istream.channels; ++k) {
 			if (state->buf[k]) {
 				const sample_t s = ibuf[i*e->istream.channels + k];
 				for (ssize_t n = state->p, m = 0; m < state->len; ++m) {
@@ -69,12 +68,11 @@ sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 void fir_direct_effect_reset(struct effect *e)
 {
-	int i;
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	state->p = 0;
-	for (i = 0; i < e->ostream.channels; ++i)
-		if (state->buf[i])
-			memset(state->buf[i], 0, state->len * sizeof(sample_t));
+	for (int k = 0; k < e->ostream.channels; ++k)
+		if (state->buf[k])
+			memset(state->buf[k], 0, state->len * sizeof(sample_t));
 }
 
 void fir_direct_effect_plot(struct effect *e, int i)
@@ -116,10 +114,10 @@ void fir_direct_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void fir_direct_effect_destroy(struct effect *e)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
-	for (int i = 0; i < e->ostream.channels; ++i) {
-		if (state->buf[i]) {
-			free(state->filter[i]);
-			free(state->buf[i]);
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->buf[k]) {
+			free(state->filter[k]);
+			free(state->buf[k]);
 			break;
 		}
 	}
@@ -131,21 +129,18 @@ void fir_direct_effect_destroy(struct effect *e)
 sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
-	ssize_t i, k, iframes = 0, oframes = 0;
+	ssize_t iframes = 0, oframes = 0;
 
 	while (iframes < *frames) {
 		while (state->p < state->len && iframes < *frames) {
-			for (i = 0; i < e->ostream.channels; ++i) {
+			for (int k = 0; k < e->ostream.channels; ++k) {
+				/* Note: If channel k is not selected, state->ibuf[k] and state->obuf[k] are aliases. */
+				if (state->has_output)
+					obuf[oframes*e->ostream.channels + k] = state->obuf[k][state->p];
 				#ifdef SYMMETRIC_IO
-					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->p] : 0.0;
-				#else
-					if (state->has_output)
-						obuf[oframes * e->ostream.channels + i] = state->output[i][state->p];
+					else obuf[oframes*e->ostream.channels + k] = 0.0;
 				#endif
-				if (state->input[i])
-					state->input[i][state->p] = ibuf[iframes * e->ostream.channels + i];
-				else
-					state->output[i][state->p] = ibuf[iframes * e->ostream.channels + i];
+				state->ibuf[k][state->p] = ibuf[iframes*e->ostream.channels + k];
 			}
 			#ifdef SYMMETRIC_IO
 				++oframes;
@@ -159,24 +154,24 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 
 		if (state->p == state->len) {
 			const sample_t out_norm = 1.0 / (state->len * 2.0);
-			for (i = 0; i < e->ostream.channels; ++i) {
-				if (state->input[i]) {
-					fftw_complex *filter_fr = state->filter_fr[i];
-					sample_t *output = state->output[i], *overlap = state->overlap[i];
-					fftw_execute(state->r2c_plan[i]);
-					for (k = 0; k < state->fr_len; k += 2) {
-						state->tmp_fr[k+0] *= filter_fr[k+0];
-						state->tmp_fr[k+1] *= filter_fr[k+1];
+			for (int k = 0; k < e->ostream.channels; ++k) {
+				if (state->olap[k]) {
+					fftw_complex *filter_fr_p = state->filter_fr[k];
+					sample_t *obuf_p = state->obuf[k], *olap_p = state->olap[k];
+					fftw_execute_dft_r2c(state->r2c_plan, state->ibuf[k], state->tmp_fr);
+					for (ssize_t j = 0; j < state->fr_len; j += 2) {
+						state->tmp_fr[j+0] *= filter_fr_p[j+0];
+						state->tmp_fr[j+1] *= filter_fr_p[j+1];
 					}
-					fftw_execute(state->c2r_plan[i]);
-					for (k = 0; k < state->len * 2; k += 2) {
-						output[k+0] *= out_norm;
-						output[k+1] *= out_norm;
+					fftw_execute_dft_c2r(state->c2r_plan, state->tmp_fr, obuf_p);
+					for (ssize_t j = 0; j < state->len * 2; j += 2) {
+						obuf_p[j+0] *= out_norm;
+						obuf_p[j+1] *= out_norm;
 					}
-					sample_t *output_overlap = &output[state->len];
-					for (k = 0; k < state->len; ++k) {
-						output[k] += overlap[k];
-						overlap[k] = output_overlap[k];
+					sample_t *obuf_olap_p = &obuf_p[state->len];
+					for (ssize_t j = 0; j < state->len; ++j) {
+						obuf_p[j] += olap_p[j];
+						olap_p[j] = obuf_olap_p[j];
 					}
 				}
 			}
@@ -196,28 +191,26 @@ ssize_t fir_effect_delay(struct effect *e)
 
 void fir_effect_reset(struct effect *e)
 {
-	int i;
 	struct fir_state *state = (struct fir_state *) e->data;
 	state->p = 0;
 	state->has_output = 0;
-	for (i = 0; i < e->ostream.channels; ++i)
-		if (state->overlap[i])
-			memset(state->overlap[i], 0, state->len * sizeof(sample_t));
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		memset(state->obuf[k], 0, state->len * sizeof(sample_t));
+		if (state->olap[k]) memset(state->olap[k], 0, state->len * sizeof(sample_t));
+	}
 }
 
 void fir_effect_plot(struct effect *e, int i)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		if (state->input[k]) {
+		if (state->olap[k]) {
 			for (ssize_t j = 0; j < state->fr_len; ++j)
 				state->tmp_fr[j] = state->filter_fr[k][j];
-			fftw_execute(state->c2r_plan[k]);
-			for (ssize_t j = 0; j < state->len * 2; ++j)
-				state->output[k][j] /= state->len * 2;
+			fftw_execute_dft_c2r(state->c2r_plan, state->tmp_fr, state->obuf[k]);
 			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
 			for (ssize_t j = 0; j < state->len; ++j)
-				printf("+exp(-j*w*%zd)*%.15e", j, state->output[k][j]);
+				printf("+exp(-j*w*%zd)*%.15e", j, state->obuf[k][j] / (state->len * 2));
 			puts(":0/0");
 		}
 		else
@@ -257,30 +250,28 @@ sample_t * fir_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, 
 
 void fir_effect_destroy(struct effect *e)
 {
-	int i;
 	struct fir_state *state = (struct fir_state *) e->data;
-	for (i = 0; i < e->ostream.channels; ++i) {
-		fftw_free(state->input[i]);
-		fftw_free(state->output[i]);
-		fftw_free(state->overlap[i]);
-		fftw_free(state->filter_fr[i]);
-		fftw_destroy_plan(state->r2c_plan[i]);
-		fftw_destroy_plan(state->c2r_plan[i]);
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->ibuf[k] != state->obuf[k])
+			fftw_free(state->ibuf[k]);
+		fftw_free(state->obuf[k]);
+		fftw_free(state->olap[k]);
+		if (state->filter_fr_1ch == NULL)
+			fftw_free(state->filter_fr[k]);
 	}
-	free(state->input);
-	free(state->output);
-	free(state->overlap);
+	free(state->ibuf);
+	free(state->obuf);
+	free(state->olap);
 	free(state->filter_fr);
+	fftw_free(state->filter_fr_1ch);
 	fftw_free(state->tmp_fr);
-	free(state->r2c_plan);
-	free(state->c2r_plan);
+	fftw_destroy_plan(state->r2c_plan);
+	fftw_destroy_plan(state->c2r_plan);
 	free(state);
 }
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
 {
-	int i, k;
-	ssize_t j;
 	struct effect *e;
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
@@ -321,12 +312,12 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		sample_t *lbuf = calloc(state->len * n_channels, sizeof(sample_t));
 		if (filter_channels == 1)
 			memcpy(lbuf_filter, filter_data, filter_frames * sizeof(sample_t));
-		for (i = k = 0; i < e->ostream.channels; ++i) {
+		for (int i = 0, k = 0; i < e->ostream.channels; ++i) {
 			if (GET_BIT(channel_selector, i)) {
 				state->filter[i] = lbuf_filter;
 				state->buf[i] = lbuf;
 				if (filter_channels > 1) {
-					for (j = 0; j < filter_frames; ++j)
+					for (ssize_t j = 0; j < filter_frames; ++j)
 						state->filter[i][j] = filter_data[j*filter_channels + k];
 					++k;
 					lbuf_filter += state->len;
@@ -343,8 +334,6 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->drain2 = fir_effect_drain2;
 		e->destroy = fir_effect_destroy;
 
-		fftw_plan filter_plan;
-		sample_t *filter;
 		struct fir_state *state = calloc(1, sizeof(struct fir_state));
 		e->data = state;
 
@@ -353,43 +342,53 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd fft_len=%zd", ei->name, filter_frames, state->len);
 		state->fr_len = state->len + 2;
 		state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
-		state->input = calloc(e->ostream.channels, sizeof(sample_t *));
-		state->output = calloc(e->ostream.channels, sizeof(sample_t *));
-		state->overlap = calloc(e->ostream.channels, sizeof(sample_t *));
+		state->ibuf = calloc(e->ostream.channels, sizeof(sample_t *));
+		state->obuf = calloc(e->ostream.channels, sizeof(sample_t *));
+		state->olap = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->filter_fr = calloc(e->ostream.channels, sizeof(fftw_complex *));
-		state->r2c_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-		state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
-		filter = fftw_malloc(state->len * 2 * sizeof(sample_t));
-		memset(filter, 0, state->len * 2 * sizeof(sample_t));
-		filter_plan = fftw_plan_dft_r2c_1d(state->len * 2, filter, state->tmp_fr, FFTW_ESTIMATE);
-		if (filter_channels == 1) {
-			memcpy(filter, filter_data, filter_frames * sizeof(sample_t));
-			fftw_execute(filter_plan);
+
+		if (filter_channels == 1)
+			state->filter_fr_1ch = fftw_malloc(state->fr_len * sizeof(fftw_complex));
+		for (int k = 0; k < e->ostream.channels; ++k) {
+			state->obuf[k] = fftw_malloc(state->len * 2 * sizeof(sample_t));
+			if (GET_BIT(channel_selector, k)) {
+				state->ibuf[k] = fftw_malloc(state->len * 2 * sizeof(sample_t));
+				state->olap[k] = fftw_malloc(state->len * sizeof(sample_t));
+				state->filter_fr[k] = (filter_channels == 1) ?
+					state->filter_fr_1ch : fftw_malloc(state->fr_len * sizeof(fftw_complex));
+			}
+			else state->ibuf[k] = state->obuf[k];
 		}
-		for (i = k = 0; i < e->ostream.channels; ++i) {
-			state->output[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));
-			memset(state->output[i], 0, state->len * 2 * sizeof(sample_t));
-			if (GET_BIT(channel_selector, i)) {
-				state->input[i] = fftw_malloc(state->len * 2 * sizeof(sample_t));
-				memset(state->input[i], 0, state->len * 2 * sizeof(sample_t));
-				state->overlap[i] = fftw_malloc(state->len * sizeof(sample_t));
-				memset(state->overlap[i], 0, state->len * sizeof(sample_t));
-				state->filter_fr[i] = fftw_malloc(state->fr_len * sizeof(fftw_complex));
-				state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->len * 2, state->input[i], state->tmp_fr, FFTW_ESTIMATE);
-				state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, state->output[i], FFTW_ESTIMATE);
-				if (filter_channels == 1)
-					memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
-				else {
-					for (j = 0; j < filter_frames; ++j)
-						filter[j] = filter_data[j * filter_channels + k];
-					fftw_execute(filter_plan);
-					memcpy(state->filter_fr[i], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
-					++k;
+
+		dsp_fftw_acquire();
+		const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
+		state->r2c_plan = fftw_plan_dft_r2c_1d(state->len * 2, state->obuf[0], state->tmp_fr, planner_flags);
+		state->c2r_plan = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, state->obuf[0], planner_flags);
+		for (int k = 0; k < e->ostream.channels; ++k) {
+			memset(state->obuf[k], 0, state->len * 2 * sizeof(sample_t));
+			if (GET_BIT(channel_selector, k)) {
+				memset(state->ibuf[k], 0, state->len * 2 * sizeof(sample_t));
+				memset(state->olap[k], 0, state->len * sizeof(sample_t));
+			}
+		}
+		dsp_fftw_release();
+		if (filter_channels == 1) {
+			memcpy(state->obuf[0], filter_data, filter_frames * sizeof(sample_t));
+			fftw_execute(state->r2c_plan);
+			memcpy(state->filter_fr_1ch, state->tmp_fr, state->fr_len * sizeof(fftw_complex));
+		}
+		else {
+			for (int k = 0, l = 0; k < e->ostream.channels; ++k) {
+				if (GET_BIT(channel_selector, k)) {
+					for (ssize_t j = 0; j < filter_frames; ++j)
+						state->obuf[0][j] = filter_data[j*filter_channels + l];
+					fftw_execute(state->r2c_plan);
+					memcpy(state->filter_fr[k], state->tmp_fr, state->fr_len * sizeof(fftw_complex));
+					++l;
 				}
 			}
 		}
-		fftw_destroy_plan(filter_plan);
-		fftw_free(filter);
+		memset(state->obuf[0], 0, state->len * 2 * sizeof(sample_t));
 	}
 
 	return e;
