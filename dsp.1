@@ -292,11 +292,11 @@ of coefficients for one filter channel. Missing values are filled with
 zeros.
 .TP
 \fBfir_p\fR [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
-Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
-slower than the \fBzita_convolver\fR effect, but useful if you need higher
-precision and/or zero latency. \fImax_part_len\fR must be a power of 2. Each
-\fIlist\fR is a comma-separated list of coefficients for one filter channel.
-Missing values are filled with zeros.
+Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
+a bit slower than the \fBzita_convolver\fR effect except for very long filters
+on some hardware. \fImax_part_len\fR must be a power of 2 and has a default
+value of 16384. Each \fIlist\fR is a comma-separated list of coefficients for
+one filter channel. Missing values are filled with zeros.
 .TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.

@@ -281,11 +281,11 @@ Example:
 	of coefficients for one filter channel. Missing values are filled with
 	zeros.
 * `fir_p [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
-	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Runs
-	slower than the `zita_convolver` effect, but useful if you need higher
-	precision and/or zero latency. `max_part_len` must be a power of 2. Each
-	`list` is a comma-separated list of coefficients for one filter channel.
-	Missing values are filled with zeros.
+	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
+	a bit slower than the `zita_convolver` effect except for very long filters
+	on some hardware. `max_part_len` must be a power of 2 and has a default
+	value of 16384. Each `list` is a comma-separated list of coefficients for
+	one filter channel. Missing values are filled with zeros.
 * `zita_convolver [min_part_len [max_part_len]] [~/]filter_path`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
