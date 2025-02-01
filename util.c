@@ -23,9 +23,11 @@
 #include <math.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <complex.h>
-#include <fftw3.h>
-#include <pthread.h>
+#ifdef HAVE_FFTW3
+	#include <complex.h>
+	#include <fftw3.h>
+	#include <pthread.h>
+#endif
 #include "util.h"
 
 int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
