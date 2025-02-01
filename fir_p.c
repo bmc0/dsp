@@ -174,6 +174,8 @@ void fir_p_effect_reset(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	state->part0.p = 0;
+	for (int k = 0; k < e->istream.channels; ++k)
+		if (state->part0.buf[k]) memset(state->part0.buf[k], 0, DIRECT_LEN * sizeof(sample_t));
 	for (int j = 0; j < state->n; ++j) {
 		struct fft_part_group *group = &state->group[j];
 		if (group->has_thread) {
@@ -183,6 +185,8 @@ void fir_p_effect_reset(struct effect *e)
 		group->p = 0;
 		group->fdl_p = 0;
 		memset(group->fdl, 0, (size_t) group->fr_len * group->fft_channels * group->n * sizeof(fftw_complex));
+		if (group->delay > 0) memset(group->l_obuf, 0, group->len * group->fft_channels * sizeof(sample_t));
+		memset(group->fft_obuf, 0, group->len * 2 * group->fft_channels * sizeof(sample_t));
 		memset(group->fft_olap, 0, group->len * group->fft_channels * sizeof(sample_t));
 	}
 }
@@ -259,8 +263,8 @@ void fir_p_effect_destroy(struct effect *e)
 		fftw_free(group->fft_ibuf);
 		fftw_free(group->fft_obuf);
 		fftw_free(group->fft_olap);
-		free(group->l_ibuf);
-		free(group->l_obuf);
+		fftw_free(group->l_ibuf);
+		fftw_free(group->l_obuf);
 		free(group->ibuf);
 		free(group->obuf);
 		fftw_destroy_plan(group->r2c_plan);
@@ -478,8 +482,10 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 		fftw_destroy_plan(tmp_plan);
 
 		if (group->delay > 0) {
-			sample_t *l_ibuf_p = group->l_ibuf = calloc(group->len * n_channels, sizeof(sample_t));
-			sample_t *l_obuf_p = group->l_obuf = calloc(group->len * n_channels, sizeof(sample_t));
+			sample_t *l_ibuf_p = group->l_ibuf = fftw_malloc(group->len * n_channels * sizeof(sample_t));
+			sample_t *l_obuf_p = group->l_obuf = fftw_malloc(group->len * n_channels * sizeof(sample_t));
+			memset(group->l_obuf, 0, group->len * n_channels * sizeof(sample_t));
+			memset(group->l_ibuf, 0, group->len * n_channels * sizeof(sample_t));
 			for (int i = 0; i < e->istream.channels; ++i) {
 				if (GET_BIT(channel_selector, i)) {
 					group->ibuf[i] = l_ibuf_p;
