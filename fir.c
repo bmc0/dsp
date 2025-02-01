@@ -30,7 +30,7 @@
 
 struct fir_direct_state {
 	ssize_t len, mask, p, filter_frames, drain_frames;
-	sample_t **filter, **buf;
+	sample_t *lbuf, **filter, **buf;
 	int has_output, is_draining;
 };
 
@@ -71,8 +71,7 @@ void fir_direct_effect_reset(struct effect *e)
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	state->p = 0;
 	for (int k = 0; k < e->ostream.channels; ++k)
-		if (state->buf[k])
-			memset(state->buf[k], 0, state->len * sizeof(sample_t));
+		if (state->buf[k]) memset(state->buf[k], 0, state->len * sizeof(sample_t));
 }
 
 void fir_direct_effect_plot(struct effect *e, int i)
@@ -114,13 +113,7 @@ void fir_direct_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
 void fir_direct_effect_destroy(struct effect *e)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k) {
-		if (state->buf[k]) {
-			free(state->filter[k]);
-			free(state->buf[k]);
-			break;
-		}
-	}
+	free(state->lbuf);
 	free(state->filter);
 	free(state->buf);
 	free(state);
@@ -306,23 +299,23 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 			state->len <<= 1;
 		state->mask = state->len - 1;
 		LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd direct_len=%zd", ei->name, filter_frames, state->len);
+		sample_t *l_filter_p = state->lbuf = calloc(state->len * (filter_channels + n_channels), sizeof(sample_t));
+		sample_t *l_buf_p = l_filter_p + (state->len * filter_channels);
 		state->filter = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->buf = calloc(e->ostream.channels, sizeof(sample_t *));
-		sample_t *lbuf_filter = calloc(state->len * filter_channels, sizeof(sample_t));
-		sample_t *lbuf = calloc(state->len * n_channels, sizeof(sample_t));
 		if (filter_channels == 1)
-			memcpy(lbuf_filter, filter_data, filter_frames * sizeof(sample_t));
+			memcpy(l_filter_p, filter_data, filter_frames * sizeof(sample_t));
 		for (int i = 0, k = 0; i < e->ostream.channels; ++i) {
 			if (GET_BIT(channel_selector, i)) {
-				state->filter[i] = lbuf_filter;
-				state->buf[i] = lbuf;
+				state->filter[i] = l_filter_p;
+				state->buf[i] = l_buf_p;
 				if (filter_channels > 1) {
 					for (ssize_t j = 0; j < filter_frames; ++j)
 						state->filter[i][j] = filter_data[j*filter_channels + k];
 					++k;
-					lbuf_filter += state->len;
+					l_filter_p += state->len;
 				}
-				lbuf += state->len;
+				l_buf_p += state->len;
 			}
 		}
 	}
