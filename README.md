@@ -449,6 +449,13 @@ backslash (`\`) may be used to escape whitespace, `#`, or `\`. Example:
 An exclamation mark (`!`) allows initialization failure of the effect that
 follows.
 
+#### FFTW wisdom
+
+Effects utilizing FFTW3 can optionally load and save wisdom. For `dsp`, set
+`$DSP_FFTW_WISDOM_PATH`. `ladspa_dsp` uses `$LADSPA_DSP_FFTW_WISDOM_PATH`
+instead. If a path is set, FFTW plans are created with the FFTW_MEASURE flag.
+Accumulated wisdom is written on exit.
+
 ### Examples
 
 Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
