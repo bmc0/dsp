@@ -38,7 +38,7 @@
 #define USE_SINGLE_THREAD    0  /* for testing */
 
 struct direct_part {
-	sample_t **filter, **buf;
+	sample_t *lbuf, **filter, **buf;
 	int p;
 };
 
@@ -270,13 +270,7 @@ void fir_p_effect_destroy(struct effect *e)
 		fftw_destroy_plan(group->r2c_plan);
 		fftw_destroy_plan(group->c2r_plan);
 	}
-	for (int k = 0; k < e->istream.channels; ++k) {
-		if (state->part0.buf[k]) {
-			free(state->part0.filter[k]);
-			free(state->part0.buf[k]);
-			break;
-		}
-	}
+	free(state->part0.lbuf);
 	free(state->part0.filter);
 	free(state->part0.buf);
 	free(state);
@@ -398,27 +392,26 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->data = state;
 
 	state->filter_frames = filter_frames;
-	state->part0.filter = calloc(e->istream.channels, sizeof(sample_t *));
-	state->part0.buf = calloc(e->istream.channels, sizeof(sample_t *));
-
 	find_partitions(state, max_part_len, USE_SINGLE_THREAD);
 	if (print_and_verify_partitions(ei, state, USE_SINGLE_THREAD)) goto fail;
 
-	sample_t *lbuf_filter = calloc(DIRECT_LEN * filter_channels, sizeof(sample_t));
-	sample_t *lbuf = calloc(DIRECT_LEN * n_channels, sizeof(sample_t));
+	sample_t *l_filter_p = state->part0.lbuf = calloc(DIRECT_LEN * (filter_channels + n_channels), sizeof(sample_t));
+	sample_t *l_buf_p = l_filter_p + (DIRECT_LEN * filter_channels);
+	state->part0.filter = calloc(e->istream.channels, sizeof(sample_t *));
+	state->part0.buf = calloc(e->istream.channels, sizeof(sample_t *));
 	if (filter_channels == 1)
-		memcpy(lbuf_filter, filter_data, DIRECT_LEN * sizeof(sample_t));
+		memcpy(l_filter_p, filter_data, DIRECT_LEN * sizeof(sample_t));
 	for (int i = 0, k = 0; i < e->istream.channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
-			state->part0.filter[i] = lbuf_filter;
-			state->part0.buf[i] = lbuf;
+			state->part0.filter[i] = l_filter_p;
+			state->part0.buf[i] = l_buf_p;
 			if (filter_channels > 1) {
 				for (int j = 0; j < DIRECT_LEN; ++j)
 					state->part0.filter[i][j] = filter_data[j*filter_channels + k];
 				++k;
-				lbuf_filter += DIRECT_LEN;
+				l_filter_p += DIRECT_LEN;
 			}
-			lbuf += DIRECT_LEN;
+			l_buf_p += DIRECT_LEN;
 		}
 	}
 
