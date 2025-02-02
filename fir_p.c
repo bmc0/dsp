@@ -174,6 +174,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 void fir_p_effect_reset(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
+	state->has_output = 0;
 	state->part0.p = 0;
 	for (int k = 0; k < e->istream.channels; ++k)
 		if (state->part0.buf[k]) memset(state->part0.buf[k], 0, DIRECT_LEN * sizeof(sample_t));
@@ -221,7 +222,6 @@ void fir_p_effect_plot(struct effect *e, int i)
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
 	}
-	fir_p_effect_reset(e);
 }
 
 void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
