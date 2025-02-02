@@ -357,6 +357,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
 		state->r2c_plan = fftw_plan_dft_r2c_1d(state->len * 2, state->obuf[0], state->tmp_fr, planner_flags);
 		state->c2r_plan = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, state->obuf[0], planner_flags);
+		dsp_fftw_release();
 		for (int k = 0; k < e->ostream.channels; ++k) {
 			memset(state->obuf[k], 0, state->len * 2 * sizeof(sample_t));
 			if (GET_BIT(channel_selector, k)) {
@@ -364,7 +365,6 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 				memset(state->olap[k], 0, state->len * sizeof(sample_t));
 			}
 		}
-		dsp_fftw_release();
 		if (filter_channels == 1) {
 			memcpy(state->obuf[0], filter_data, filter_frames * sizeof(sample_t));
 			fftw_execute(state->r2c_plan);
