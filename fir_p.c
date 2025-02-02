@@ -43,10 +43,9 @@ struct direct_part {
 };
 
 struct fft_part_group {
-	fftw_complex *filter_fr, *fdl, *tmp_fr;
+	fftw_complex **filter_fr, **fdl, *tmp_fr, *filter_fr_1ch;
 	fftw_plan r2c_plan, c2r_plan;
-	sample_t *fft_ibuf, *fft_obuf, *fft_olap;
-	sample_t *l_ibuf, *l_obuf;
+	sample_t **fft_ibuf, **fft_obuf, **fft_olap;
 	sample_t **ibuf, **obuf;
 	int n, len, fr_len, p, fdl_p, delay;
 	int fft_channels, has_thread;
@@ -64,39 +63,37 @@ struct fir_p_state {
 static inline void fft_part_group_compute(struct fft_part_group *group)
 {
 	const sample_t out_norm = 1.0 / (group->len * 2.0);
-	const int part_fr_len = group->fr_len * group->fft_channels;
-
-	fftw_complex *part_fdl = group->fdl + part_fr_len*group->fdl_p;
-	fftw_complex *part_filter_fr = group->filter_fr;
-	fftw_execute(group->r2c_plan);
-	memcpy(part_fdl, group->tmp_fr, part_fr_len * sizeof(fftw_complex));
-	for (int l = 0; l < part_fr_len; l += 2) {
-		group->tmp_fr[l+0] *= part_filter_fr[l+0];
-		group->tmp_fr[l+1] *= part_filter_fr[l+1];
-	}
-	for (int q = 1; q < group->n; ++q) {
-		part_filter_fr += part_fr_len;
-		if (part_fdl == group->fdl) part_fdl += part_fr_len*(group->n-1);
-		else part_fdl -= part_fr_len;
-		for (int l = 0; l < part_fr_len; l += 2) {
-			group->tmp_fr[l+0] += part_fdl[l+0] * part_filter_fr[l+0];
-			group->tmp_fr[l+1] += part_fdl[l+1] * part_filter_fr[l+1];
-		}
-	}
-	fftw_execute(group->c2r_plan);
-	for (int l = 0; l < group->len * 2 * group->fft_channels; l += 2) {
-		group->fft_obuf[l+0] *= out_norm;
-		group->fft_obuf[l+1] *= out_norm;
-	}
 	for (int k = 0; k < group->fft_channels; ++k) {
-		sample_t *fft_obuf = &group->fft_obuf[k*group->len*2];
-		sample_t *fft_obuf_olap = fft_obuf + group->len;
-		sample_t *fft_olap = &group->fft_olap[k*group->len];
+		fftw_complex *fdl_p = group->fdl[k] + group->fr_len*group->fdl_p;
+		fftw_complex *filter_fr_p = group->filter_fr[k];
+		sample_t *fft_obuf_p = group->fft_obuf[k], *fft_olap_p = group->fft_olap[k];
+
+		fftw_execute_dft_r2c(group->r2c_plan, group->fft_ibuf[k], group->tmp_fr);
+		memcpy(fdl_p, group->tmp_fr, group->fr_len * sizeof(fftw_complex));
+		for (int l = 0; l < group->fr_len; l += 2) {
+			group->tmp_fr[l+0] *= filter_fr_p[l+0];
+			group->tmp_fr[l+1] *= filter_fr_p[l+1];
+		}
+		for (int q = 1; q < group->n; ++q) {
+			filter_fr_p += group->fr_len;
+			if (fdl_p == group->fdl[k]) fdl_p += group->fr_len*(group->n-1);
+			else fdl_p -= group->fr_len;
+			for (int l = 0; l < group->fr_len; l += 2) {
+				group->tmp_fr[l+0] += fdl_p[l+0] * filter_fr_p[l+0];
+				group->tmp_fr[l+1] += fdl_p[l+1] * filter_fr_p[l+1];
+			}
+		}
+		fftw_execute_dft_c2r(group->c2r_plan, group->tmp_fr, fft_obuf_p);
+		for (int l = 0; l < group->len * 2; l += 2) {
+			fft_obuf_p[l+0] *= out_norm;
+			fft_obuf_p[l+1] *= out_norm;
+		}
+		sample_t *fft_obuf_olap_p = fft_obuf_p + group->len;
 		for (int l = 0; l < group->len; l += 2) {
-			fft_obuf[l+0] += fft_olap[l+0];
-			fft_obuf[l+1] += fft_olap[l+1];
-			fft_olap[l+0] = fft_obuf_olap[l+0];
-			fft_olap[l+1] = fft_obuf_olap[l+1];
+			fft_obuf_p[l+0] += fft_olap_p[l+0];
+			fft_obuf_p[l+1] += fft_olap_p[l+1];
+			fft_olap_p[l+0] = fft_obuf_olap_p[l+0];
+			fft_olap_p[l+1] = fft_obuf_olap_p[l+1];
 		}
 	}
 	group->fdl_p = (group->fdl_p + 1 < group->n) ? group->fdl_p + 1 : 0;
@@ -113,11 +110,14 @@ static void * fft_part_group_worker(void *arg)
 	return NULL;
 }
 
-static inline void fft_part_group_transfer_bufs(struct fft_part_group *group)
+static inline void fft_part_group_transfer_bufs(struct effect *e, struct fft_part_group *group)
 {
-	for (int k = 0; k < group->fft_channels; ++k) {
-		memcpy(&group->l_obuf[k*group->len], &group->fft_obuf[k*group->len*2], group->len * sizeof(sample_t));
-		memcpy(&group->fft_ibuf[k*group->len*2], &group->l_ibuf[k*group->len], group->len * sizeof(sample_t));
+	for (int k = 0, n = 0; k < e->istream.channels; ++k) {
+		if (group->obuf[k]) {
+			memcpy(group->obuf[k], group->fft_obuf[n], group->len * sizeof(sample_t));
+			memcpy(group->fft_ibuf[n], group->ibuf[k], group->len * sizeof(sample_t));
+			++n;
+		}
 	}
 }
 
@@ -153,11 +153,12 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 					group->p = 0;
 					if (group->has_thread) {
 						while (sem_wait(&group->sync) != 0);
-						fft_part_group_transfer_bufs(group);
+						fft_part_group_transfer_bufs(e, group);
 						sem_post(&group->start);
 					}
 					else {
-						if (group->delay > 0) fft_part_group_transfer_bufs(group);  /* should not happen */
+						if (group->delay > 0) /* should not happen */
+							fft_part_group_transfer_bufs(e, group);
 						fft_part_group_compute(group);
 					}
 				}
@@ -184,17 +185,22 @@ void fir_p_effect_reset(struct effect *e)
 		}
 		group->p = 0;
 		group->fdl_p = 0;
-		memset(group->fdl, 0, (size_t) group->fr_len * group->fft_channels * group->n * sizeof(fftw_complex));
-		if (group->delay > 0) memset(group->l_obuf, 0, group->len * group->fft_channels * sizeof(sample_t));
-		memset(group->fft_obuf, 0, group->len * 2 * group->fft_channels * sizeof(sample_t));
-		memset(group->fft_olap, 0, group->len * group->fft_channels * sizeof(sample_t));
+		for (int k = 0; k < group->fft_channels; ++k) {
+			memset(group->fdl[k], 0, group->fr_len * group->n * sizeof(fftw_complex));
+			memset(group->fft_obuf[k], 0, group->len * 2 * sizeof(sample_t));
+			memset(group->fft_olap[k], 0, group->len * sizeof(sample_t));
+		}
+		if (group->delay > 0) {
+			for (int k = 0; k < e->istream.channels; ++k)
+				if (group->obuf[k]) memset(group->obuf[k], 0, group->len * sizeof(sample_t));
+		}
 	}
 }
 
 void fir_p_effect_plot(struct effect *e, int i)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	for (int k = 0, m = 0; k < e->istream.channels; ++k) {
+	for (int k = 0, n = 0; k < e->istream.channels; ++k) {
 		if (state->part0.buf[k]) {
 			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
 			for (int m = 0; m < DIRECT_LEN; ++m)
@@ -202,22 +208,15 @@ void fir_p_effect_plot(struct effect *e, int i)
 			ssize_t z = DIRECT_LEN;
 			for (int j = 0; j < state->n; ++j) {
 				struct fft_part_group *group = &state->group[j];
-				sample_t *part_fft_obuf = (sample_t *) group->fdl;  /* only buffer large enough */
-				fftw_complex *part_filter_fr = group->filter_fr;
 				for (int q = 0; q < group->n; ++q) {
-					if (m == 0) {
-						memcpy(group->tmp_fr, part_filter_fr, group->fr_len * group->fft_channels * sizeof(fftw_complex));
-						fftw_execute(group->c2r_plan);
-						memcpy(part_fft_obuf, group->fft_obuf, group->len * 2 * group->fft_channels * sizeof(sample_t));
-					}
+					memcpy(group->tmp_fr, &group->filter_fr[n][q*group->fr_len], group->fr_len * sizeof(fftw_complex));
+					fftw_execute(group->c2r_plan);  /* output is fft_obuf[0] */
 					for (int l = 0; l < group->len; ++l, ++z)
-						printf("+exp(-j*w*%zd)*%.15e", z, part_fft_obuf[m*group->len*2 + l] / (group->len * 2));
-					part_fft_obuf += group->len * 2 * group->fft_channels;
-					part_filter_fr += group->fr_len * group->fft_channels;
+						printf("+exp(-j*w*%zd)*%.15e", z, group->fft_obuf[0][l] / (group->len * 2));
 				}
 			}
 			puts(":0/0");
-			++m;
+			++n;
 		}
 		else
 			printf("H%d_%d(w)=1.0\n", k, i);
@@ -257,14 +256,27 @@ void fir_p_effect_destroy(struct effect *e)
 			sem_destroy(&group->start);
 			sem_destroy(&group->sync);
 		}
-		fftw_free(group->filter_fr);
-		fftw_free(group->fdl);
+		for (int i = 0; i < group->fft_channels; ++i) {
+			if (group->filter_fr_1ch == NULL)
+				fftw_free(group->filter_fr[i]);
+			fftw_free(group->fdl[i]);
+			fftw_free(group->fft_ibuf[i]);
+			fftw_free(group->fft_obuf[i]);
+			fftw_free(group->fft_olap[i]);
+		}
 		fftw_free(group->tmp_fr);
-		fftw_free(group->fft_ibuf);
-		fftw_free(group->fft_obuf);
-		fftw_free(group->fft_olap);
-		fftw_free(group->l_ibuf);
-		fftw_free(group->l_obuf);
+		fftw_free(group->filter_fr_1ch);
+		free(group->filter_fr);
+		free(group->fdl);
+		free(group->fft_ibuf);
+		free(group->fft_obuf);
+		free(group->fft_olap);
+		if (group->delay > 0) {
+			for (int i = 0; i < e->istream.channels; ++i) {
+				fftw_free(group->ibuf[i]);
+				fftw_free(group->obuf[i]);
+			}
+		}
 		free(group->ibuf);
 		free(group->obuf);
 		fftw_destroy_plan(group->r2c_plan);
@@ -323,7 +335,7 @@ static void find_partitions(struct fir_p_state *state, int max_part_len, int sin
 	}
 }
 
-static int print_and_verify_partitions(const struct effect_info *ei, struct fir_p_state *state, int single_thread)
+static int verify_and_print_partitions(const struct effect_info *ei, struct fir_p_state *state, int single_thread)
 {
 	LOG_FMT(LL_VERBOSE, "%s: info: partition group 0: n=1 len=%d total=%d (direct)", ei->name, DIRECT_LEN, DIRECT_LEN);
 	ssize_t total_len = DIRECT_LEN, last_total_len = DIRECT_LEN;
@@ -393,7 +405,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 
 	state->filter_frames = filter_frames;
 	find_partitions(state, max_part_len, USE_SINGLE_THREAD);
-	if (print_and_verify_partitions(ei, state, USE_SINGLE_THREAD)) goto fail;
+	if (verify_and_print_partitions(ei, state, USE_SINGLE_THREAD)) goto fail;
 
 	sample_t *l_filter_p = state->part0.lbuf = calloc(DIRECT_LEN * (filter_channels + n_channels), sizeof(sample_t));
 	sample_t *l_buf_p = l_filter_p + (DIRECT_LEN * filter_channels);
@@ -421,70 +433,61 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	ssize_t filter_pos = DIRECT_LEN;
 	for (int k = 0; k < state->n; ++k) {
 		struct fft_part_group *group = &state->group[k];
-
 		group->fft_channels = n_channels;
-		group->filter_fr = fftw_malloc((size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
-		group->fdl = fftw_malloc((size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
-		group->tmp_fr = fftw_malloc(group->fr_len * n_channels * sizeof(fftw_complex));
-		group->fft_ibuf = fftw_malloc(group->len * 2 * n_channels * sizeof(sample_t));
-		group->fft_obuf = fftw_malloc(group->len * 2 * n_channels * sizeof(sample_t));
-		group->fft_olap = fftw_malloc(group->len * n_channels * sizeof(sample_t));
+		group->filter_fr = calloc(n_channels, sizeof(fftw_complex *));
+		group->fdl = calloc(n_channels, sizeof(fftw_complex *));
+		group->fft_ibuf = calloc(n_channels, sizeof(sample_t *));
+		group->fft_obuf = calloc(n_channels, sizeof(sample_t *));
+		group->fft_olap = calloc(n_channels, sizeof(sample_t *));
 		group->ibuf = calloc(e->istream.channels, sizeof(sample_t *));
 		group->obuf = calloc(e->istream.channels, sizeof(sample_t *));
+		group->tmp_fr = fftw_malloc(group->fr_len * sizeof(fftw_complex));
+		if (filter_channels == 1)
+			group->filter_fr_1ch = fftw_malloc(group->fr_len * group->n * sizeof(fftw_complex));
+		for (int i = 0; i < n_channels; ++i) {
+			group->filter_fr[i] = (filter_channels == 1) ?
+				group->filter_fr_1ch : fftw_malloc(group->fr_len * group->n * sizeof(fftw_complex));
+			group->fdl[i] = fftw_malloc(group->fr_len * group->n * sizeof(fftw_complex));
+			group->fft_ibuf[i] = fftw_malloc(group->len * 2 * sizeof(sample_t));
+			group->fft_obuf[i] = fftw_malloc(group->len * 2 * sizeof(sample_t));
+			group->fft_olap[i] = fftw_malloc(group->len * sizeof(sample_t));
+		}
 
-		const int fft_n[] = { group->len * 2 };
 		dsp_fftw_acquire();
-		fftw_plan tmp_plan = fftw_plan_many_dft_r2c(1, fft_n, filter_channels,
-			group->fft_ibuf, NULL, 1, group->len * 2,
-			group->tmp_fr, NULL, 1, group->fr_len,
-			FFTW_ESTIMATE);
-		group->r2c_plan = fftw_plan_many_dft_r2c(1, fft_n, n_channels,
-			group->fft_ibuf, NULL, 1, group->len * 2,
-			group->tmp_fr, NULL, 1, group->fr_len,
-			planner_flags);
-		group->c2r_plan = fftw_plan_many_dft_c2r(1, fft_n, n_channels,
-			group->tmp_fr, NULL, 1, group->fr_len,
-			group->fft_obuf, NULL, 1, group->len * 2,
-			planner_flags);
+		group->r2c_plan = fftw_plan_dft_r2c_1d(group->len * 2, group->fft_ibuf[0], group->tmp_fr, planner_flags);
+		group->c2r_plan = fftw_plan_dft_c2r_1d(group->len * 2, group->tmp_fr, group->fft_obuf[0], planner_flags);
 		dsp_fftw_release();
+		for (int i = 0; i < n_channels; ++i) {
+			memset(group->fdl[i], 0, group->fr_len * group->n * sizeof(fftw_complex));
+			memset(group->fft_ibuf[i], 0, group->len * 2 * sizeof(sample_t));
+			memset(group->fft_obuf[i], 0, group->len * 2 * sizeof(sample_t));
+			memset(group->fft_olap[i], 0, group->len * sizeof(sample_t));
+		}
 
-		memset(group->fdl, 0, (size_t) group->fr_len * n_channels * group->n * sizeof(fftw_complex));
-		memset(group->fft_ibuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
-		memset(group->fft_obuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
-		memset(group->fft_olap, 0, group->len * n_channels * sizeof(sample_t));
-
-		fftw_complex *filter_fr_p = group->filter_fr;
 		for (int q = 0; q < group->n; ++q) {
 			if (filter_channels == 1) {
-				memcpy(group->fft_ibuf, &filter_data[filter_pos], MINIMUM(filter_frames-filter_pos, group->len) * sizeof(sample_t));
-				fftw_execute(tmp_plan);
-				for (int i = 0; i < n_channels; ++i)
-					memcpy(&filter_fr_p[i*group->fr_len], group->tmp_fr, group->fr_len * sizeof(fftw_complex));
+				memcpy(group->fft_ibuf[0], &filter_data[filter_pos], MINIMUM(filter_frames-filter_pos, group->len) * sizeof(sample_t));
+				fftw_execute(group->r2c_plan);
+				memcpy(&group->filter_fr_1ch[q*group->fr_len], group->tmp_fr, group->fr_len * sizeof(fftw_complex));
 			}
 			else {
-				for (int i = 0; i < n_channels; ++i)
+				for (int i = 0; i < n_channels; ++i) {
 					for (int l = 0; l < group->len && l + filter_pos < filter_frames; ++l)
-						group->fft_ibuf[i*group->len*2 + l] = filter_data[(filter_pos+l)*filter_channels + i];
-				fftw_execute(tmp_plan);
-				memcpy(filter_fr_p, group->tmp_fr, group->fr_len * n_channels * sizeof(fftw_complex));
+						group->fft_ibuf[0][l] = filter_data[(filter_pos+l)*filter_channels + i];
+					fftw_execute(group->r2c_plan);
+					memcpy(&group->filter_fr[i][q*group->fr_len], group->tmp_fr, group->fr_len * sizeof(fftw_complex));
+				}
 			}
 			filter_pos += group->len;
-			filter_fr_p += group->fr_len * n_channels;
-			memset(group->fft_ibuf, 0, group->len * 2 * n_channels * sizeof(sample_t));
+			memset(group->fft_ibuf[0], 0, group->len * 2 * sizeof(sample_t));
 		}
-		fftw_destroy_plan(tmp_plan);
-
 		if (group->delay > 0) {
-			sample_t *l_ibuf_p = group->l_ibuf = fftw_malloc(group->len * n_channels * sizeof(sample_t));
-			sample_t *l_obuf_p = group->l_obuf = fftw_malloc(group->len * n_channels * sizeof(sample_t));
-			memset(group->l_obuf, 0, group->len * n_channels * sizeof(sample_t));
-			memset(group->l_ibuf, 0, group->len * n_channels * sizeof(sample_t));
 			for (int i = 0; i < e->istream.channels; ++i) {
 				if (GET_BIT(channel_selector, i)) {
-					group->ibuf[i] = l_ibuf_p;
-					group->obuf[i] = l_obuf_p;
-					l_ibuf_p += group->len;
-					l_obuf_p += group->len;
+					group->ibuf[i] = fftw_malloc(group->len * sizeof(sample_t));
+					group->obuf[i] = fftw_malloc(group->len * sizeof(sample_t));
+					memset(group->ibuf[i], 0, group->len * sizeof(sample_t));
+					memset(group->obuf[i], 0, group->len * sizeof(sample_t));
 				}
 			}
 			sem_init(&group->start, 0, 0);
@@ -498,14 +501,11 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 			group->has_thread = 1;
 		}
 		else {
-			sample_t *fft_ibuf_p = group->fft_ibuf;
-			sample_t *fft_obuf_p = group->fft_obuf;
-			for (int i = 0; i < e->istream.channels; ++i) {
+			for (int i = 0, n = 0; i < e->istream.channels; ++i) {
 				if (GET_BIT(channel_selector, i)) {
-					group->ibuf[i] = fft_ibuf_p;
-					group->obuf[i] = fft_obuf_p;
-					fft_ibuf_p += group->len * 2;
-					fft_obuf_p += group->len * 2;
+					group->ibuf[i] = group->fft_ibuf[n];
+					group->obuf[i] = group->fft_obuf[n];
+					++n;
 				}
 			}
 		}
