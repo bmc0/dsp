@@ -69,4 +69,45 @@ static inline sample_t ap2_run(struct ap2_state *state, sample_t s)
 	return r;
 }
 
+/*
+ * Thiran fractional delay filters based on:
+ * Koshita, et al., "A Simple Ladder Realization of Maximally Flat Allpass
+ * Fractional Delay Filters," IEEE Transactions on Circuits and Systems II:
+ * Express Briefs, vol. 61, no. 3, pp. 203-207, March 2014
+ * DOI:10.1109/TCSII.2013.2296131
+*/
+
+struct thiran_ap_state {
+	int n;
+	struct {
+		sample_t c0, c1, c2;
+		sample_t m0, m1;
+	} fb[];
+};
+
+static inline void thiran_ap_reset(struct thiran_ap_state *state)
+{
+	for (int k = 0; k < state->n; ++k)
+		state->fb[k].m0 = 0.0;
+}
+
+static inline sample_t thiran_ap_run(struct thiran_ap_state *state, sample_t s)
+{
+	sample_t u = s;
+	for (int k = 0; k < state->n; ++k) {
+		u = u*state->fb[k].c0 + state->fb[k].m0;
+		u *= state->fb[k].c1;
+		state->fb[k].m1 = u;
+	}
+	sample_t y = 0.0;
+	for (int k = state->n-1; k >= 0; --k) {
+		y += 2.0*state->fb[k].m1;
+		state->fb[k].m0 += y*state->fb[k].c2;
+	}
+	return s+y;
+}
+
+struct thiran_ap_state * thiran_ap_new(int, double);
+void thiran_ap_plot(struct thiran_ap_state *);
+
 #endif

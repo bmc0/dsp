@@ -8,13 +8,14 @@ DSP_OBJ := dsp.o \
 	codec_buf.o \
 	sampleconv.o \
 	util.o \
+	allpass.o \
+	cap5.o \
 	biquad.o \
 	gain.o \
 	crossfeed.o \
 	matrix4.o \
 	matrix4_mb.o \
 	matrix4_common.o \
-	cap5.o \
 	remix.o \
 	st2ms.o \
 	delay.o \
@@ -30,13 +31,14 @@ DSP_CPP_OBJ :=
 LADSPA_DSP_OBJ := ladspa_dsp.o \
 	effect.o \
 	util.o \
+	allpass.o \
+	cap5.o \
 	biquad.o \
 	gain.o \
 	crossfeed.o \
 	matrix4.o \
 	matrix4_mb.o \
 	matrix4_common.o \
-	cap5.o \
 	remix.o \
 	st2ms.o \
 	delay.o \
