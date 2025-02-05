@@ -350,6 +350,62 @@ char * isolate(char *s, char c)
 	return s;
 }
 
+/*
+ * Slightly modified version of AT&T public domain getopt():
+ *   - Returns ':' for a missing option argument.
+ *   - Supports optional arguments (two colons).
+ *   - Allows optional arguments to be in the next argv element.
+ *   - Thread safe.
+*/
+#define IS_OPT(S) ((S)[0] == '-' && (S)[1] != '\0')
+int dsp_getopt(struct dsp_getopt_state *g, int argc, const char *const *argv, const char *opts)
+{
+	int c;
+	const char *cp;
+
+	if (g->sp == 1) {
+		if (g->ind >= argc || !IS_OPT(argv[g->ind]))
+			return -1;
+		else if (strcmp(argv[g->ind], "--") == 0) {
+			++g->ind;
+			return -1;
+		}
+	}
+	g->opt = c = argv[g->ind][g->sp];
+	if (c == ':' || (cp = strchr(opts, c)) == NULL) {
+		if (argv[g->ind][++g->sp] == '\0') {
+			++g->ind;
+			g->sp = 1;
+		}
+		g->opt = c;
+		return '?';
+	}
+	if (cp[1] == ':') {
+		if (argv[g->ind][g->sp + 1] != '\0')
+			g->arg = &argv[g->ind++][g->sp + 1];
+		else if (++g->ind >= argc) {
+			g->sp = 1;
+			if (cp[2] == ':') g->arg = NULL;
+			else return ':';
+		}
+		else if (cp[2] == ':') {
+			if (!IS_OPT(argv[g->ind]) && strcmp(argv[g->ind], "--") != 0)
+				g->arg = argv[g->ind++];
+			else g->arg = NULL;
+		}
+		else g->arg = argv[g->ind++];
+		g->sp = 1;
+	}
+	else {
+		if (argv[g->ind][++g->sp] == '\0') {
+			++g->ind;
+			g->sp = 1;
+		}
+		g->arg = NULL;
+	}
+	return c;
+}
+
 #ifdef HAVE_FFTW3
 ssize_t next_fast_fftw_len(ssize_t min_len)
 {

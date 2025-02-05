@@ -55,6 +55,12 @@
 #define IS_WHITESPACE(x) ((x) == ' ' || (x) == '\t' || (x) == '\n' || (x) == '\r')
 #define PM_RAND_MAX 0x7fffffff
 
+struct dsp_getopt_state {
+	const char *arg;
+	int ind, opt, sp;
+};
+#define DSP_GETOPT_STATE_INITIALIZER ((struct dsp_getopt_state) { .ind = 1, .sp = 1 })
+
 int check_endptr(const char *, const char *, const char *, const char *);
 double parse_freq(const char *, char **);
 ssize_t parse_len(const char *, int, char **);
@@ -67,6 +73,7 @@ int gen_argv_from_string(const char *, int *, char ***);
 char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *);
 char * isolate(char *, char);
+int dsp_getopt(struct dsp_getopt_state *, int, const char *const *, const char *);
 #ifdef HAVE_FFTW3
 ssize_t next_fast_fftw_len(ssize_t);
 void dsp_fftw_acquire(void);
