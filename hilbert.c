@@ -28,18 +28,22 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 {
 	char *endptr;
 	struct effect *e;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	int use_fir_p = 0, opt;
 
-	int arg_i = 1, use_fir_p = 0;
-	if (argc == 3 && strcmp(argv[arg_i], "-p") == 0) {
-		use_fir_p = 1;
-		++arg_i;
+	while ((opt = dsp_getopt(&g, argc-1, argv, "p")) != -1) {
+		switch (opt) {
+		case 'p': use_fir_p = 1; break;
+		default: goto print_usage;
+		}
 	}
-	else if (argc != 2) {
+	if (g.ind != argc-1) {
+		print_usage:
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	const ssize_t taps = strtol(argv[arg_i], &endptr, 10);
-	CHECK_ENDPTR(argv[arg_i], endptr, "taps", return NULL);
+	const ssize_t taps = strtol(argv[g.ind], &endptr, 10);
+	CHECK_ENDPTR(argv[g.ind], endptr, "taps", return NULL);
 	if (taps < 3) {
 		LOG_FMT(LL_ERROR, "%s: error: taps must be > 3", argv[0]);
 		return NULL;
