@@ -294,8 +294,8 @@ filters up to 16 taps. For longer filters, the latency is equal to the
 of coefficients for one filter channel. Missing values are filled with
 zeros.
 .sp 0.5
-The \fIinput_options\fR are useful when loading raw (headerless) input files
-and are as follows:
+The \fIinput_options\fR are useful mostly when loading raw (headerless) input
+files and are as follows:
 .RS
 .TP
 \fB\-t\fR \fItype\fR
@@ -313,6 +313,10 @@ Sample rate.
 \fB\-c\fR \fIchannels\fR
 Number of channels.
 .RE
+.TP
+\ 
+By default, the sample rate of the filter must match that of the effect.
+Mismatches may be ignored by setting the sample rate to ``any''.
 .TP
 \fBfir_p\fR [\fIinput_options\fR] [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually

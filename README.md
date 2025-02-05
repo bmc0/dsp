@@ -284,8 +284,8 @@ Example:
 	of coefficients for one filter channel. Missing values are filled with
 	zeros.
 
-	The `input_options` are useful when loading raw (headerless) input files
-	and are as follows:
+	The `input_options` are useful mostly when loading raw (headerless) input
+	files and are as follows:
 
 	Flag              | Description
 	----------------- | -----------------------------
@@ -294,6 +294,9 @@ Example:
 	`-B/L/N`          | Big/little/native endian.
 	`-r frequency[k]` | Sample rate.
 	`-c channels`     | Number of channels.
+
+	By default, the sample rate of the filter must match that of the effect.
+	Mismatches may be ignored by setting the sample rate to "any".
 
 * `fir_p [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
 	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually

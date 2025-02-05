@@ -27,7 +27,7 @@
 #define FIR_INPUT_CODEC_OPTS "t:e:BLNr:c:"
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int);
-sample_t * fir_read_filter(const struct effect_info *, const char *, const struct codec_params *, int *, ssize_t *);
+sample_t * fir_read_filter(const struct effect_info *, const struct stream_info *, const char *, const struct codec_params *, int *, ssize_t *);
 int fir_parse_opts(const struct effect_info *, const struct stream_info *, struct codec_params *, struct dsp_getopt_state *, int, const char *const *, const char *,
 	int (*extra_opt_fn)(const struct effect_info *, const struct stream_info *, const struct codec_params *, int, const char *));
 struct effect * fir_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);

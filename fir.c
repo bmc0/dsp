@@ -387,7 +387,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	return e;
 }
 
-sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
+sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
 	static const char coefs_str_prefix[] = "coefs:";
 	static const char file_str_prefix[] = "file:";
@@ -445,6 +445,7 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 		struct codec_params c_params = *p;
 		c_params.path = fp;
 		c_params.mode = CODEC_MODE_READ;
+		if (p->fs == 0) c_params.fs = istream->fs;
 		struct codec *c = init_codec(&c_params);
 		if (c == NULL) {
 			LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, fp);
@@ -456,10 +457,13 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 		free(fp);
 		*channels = c->channels;
 		*frames = c->frames;
-		if (c->fs != p->fs) {
-			LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, p->fs, c->fs);
-			destroy_codec(c);
-			return NULL;
+		if (c->fs != istream->fs) {
+			if (p->fs > 0) {
+				LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, istream->fs, c->fs);
+				destroy_codec(c);
+				return NULL;
+			}
+			else LOG_FMT(LL_VERBOSE, "%s: info: ignoring sample rate mismatch: fs=%d filter_fs=%d", ei->name, istream->fs, c->fs);
 		}
 		data = calloc(c->frames * c->channels, sizeof(sample_t));
 		if (c->read(c, data, c->frames) != c->frames) {
@@ -492,16 +496,20 @@ int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istre
 		case 'L': p->endian = CODEC_ENDIAN_LITTLE; break;
 		case 'N': p->endian = CODEC_ENDIAN_LITTLE; break;
 		case 'r':
-			p->fs = lround(parse_freq(g->arg, &endptr));
-			if (check_endptr(ei->name, g->arg, endptr, "sample rate"))
-				return 1;
-			if (p->fs <= 0) {
-				LOG_FMT(LL_ERROR, "%s: error: sample rate must be > 0", ei->name);
-				return 1;
-			}
-			if (p->fs != istream->fs) {
-				LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: stream_fs=%d requested_fs=%d", ei->name, istream->fs, p->fs);
-				return 1;
+			if (strcmp(g->arg, "any") == 0)
+				p->fs = 0;
+			else {
+				p->fs = lround(parse_freq(g->arg, &endptr));
+				if (check_endptr(ei->name, g->arg, endptr, "sample rate"))
+					return 1;
+				if (p->fs <= 0) {
+					LOG_FMT(LL_ERROR, "%s: error: sample rate must be > 0", ei->name);
+					return 1;
+				}
+				if (p->fs != istream->fs) {
+					LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: stream_fs=%d requested_fs=%d", ei->name, istream->fs, p->fs);
+					return 1;
+				}
 			}
 			break;
 		case 'c':
@@ -543,7 +551,7 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 		return NULL;
 	}
 	c_params.path = argv[g.ind];
-	filter_data = fir_read_filter(ei, dir, &c_params, &filter_channels, &filter_frames);
+	filter_data = fir_read_filter(ei, istream, dir, &c_params, &filter_channels, &filter_frames);
 	if (filter_data == NULL)
 		return NULL;
 	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
