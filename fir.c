@@ -473,16 +473,18 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 	return data;
 }
 
-int fir_parse_codec_opts(const struct effect_info *ei, const struct stream_info *istream, struct codec_params *p, struct dsp_getopt_state *g, int argc, const char *const *argv)
+int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istream, struct codec_params *p, struct dsp_getopt_state *g, int argc, const char *const *argv, const char *optstr,
+	int (*extra_opts_fn)(const struct effect_info *, const struct stream_info *, const struct codec_params *, int, const char *))
 {
-	int opt;
+	int opt, err;
 	char *endptr;
 
 	*p = (struct codec_params) CODEC_PARAMS_AUTO(NULL, CODEC_MODE_READ);
 	p->fs = istream->fs;
 	p->channels = istream->channels;
+	if (optstr == NULL) optstr = FIR_INPUT_CODEC_OPTS;
 
-	while ((opt = dsp_getopt(g, argc, argv, "t:e:BLNr:c:")) != -1) {
+	while ((opt = dsp_getopt(g, argc, argv, optstr)) != -1) {
 		switch (opt) {
 		case 't': p->type   = g->arg; break;
 		case 'e': p->enc    = g->arg; break;
@@ -511,12 +513,16 @@ int fir_parse_codec_opts(const struct effect_info *ei, const struct stream_info 
 				return 1;
 			}
 			break;
-		default:
-			if (opt == ':')
-				LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", ei->name, g->opt);
-			else
-				LOG_FMT(LL_ERROR, "%s: error: illegal option '%c'", ei->name, g->opt);
+		case ':':
+			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", ei->name, g->opt);
 			return 1;
+		default:
+			if (opt == '?' || extra_opts_fn == NULL) {
+				LOG_FMT(LL_ERROR, "%s: error: illegal option '%c'", ei->name, g->opt);
+				return 1;
+			}
+			else if ((err = extra_opts_fn(ei, istream, p, opt, g->arg)) != 0)
+				return err;
 		}
 	}
 	return 0;
@@ -531,7 +537,7 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 	struct codec_params c_params;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 
-	int err = fir_parse_codec_opts(ei, istream, &c_params, &g, argc, argv);
+	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL);
 	if (err || g.ind != argc-1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
