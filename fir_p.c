@@ -365,7 +365,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	struct effect *e;
 	struct fir_p_state *state;
 
-	if (filter_frames < DIRECT_LEN)
+	if (filter_frames <= DIRECT_LEN)
 		return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 1);
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
