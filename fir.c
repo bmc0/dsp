@@ -269,7 +269,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
+		LOG_FMT(LL_ERROR, "%s: error: channels mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;
 	}
 	if (filter_frames < 1) {
@@ -387,11 +387,15 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	return e;
 }
 
-sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const char *path, int fs, int *channels, ssize_t *frames)
+sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
 	static const char coefs_str_prefix[] = "coefs:";
 	static const char file_str_prefix[] = "file:";
+
+	if (!ei || !p || !p->path || !channels || !frames)
+		return NULL;
 	sample_t *data = NULL;
+	const char *path = p->path;
 
 	if (strncmp(path, coefs_str_prefix, LENGTH(coefs_str_prefix)-1) == 0) {
 		char *endptr;
@@ -438,18 +442,22 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
 			path += LENGTH(file_str_prefix)-1;
 		char *fp = construct_full_path(dir, path);
-		struct codec_params c_params = CODEC_PARAMS_AUTO(fp, CODEC_MODE_READ);
+		struct codec_params c_params = *p;
+		c_params.path = fp;
+		c_params.mode = CODEC_MODE_READ;
 		struct codec *c = init_codec(&c_params);
 		if (c == NULL) {
 			LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", ei->name, fp);
 			free(fp);
 			return NULL;
 		}
+		LOG_FMT(LL_VERBOSE, "%s: input file: %s: type=%s enc=%s precision=%d channels=%d fs=%d",
+			ei->name, c->path, c->type, c->enc, c->prec, c->channels, c->fs);
 		free(fp);
 		*channels = c->channels;
 		*frames = c->frames;
-		if (c->fs != fs) {
-			LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, fs, c->fs);
+		if (c->fs != p->fs) {
+			LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", ei->name, p->fs, c->fs);
 			destroy_codec(c);
 			return NULL;
 		}
@@ -465,18 +473,71 @@ sample_t * fir_read_filter(const struct effect_info *ei, const char *dir, const 
 	return data;
 }
 
+int fir_parse_codec_opts(const struct effect_info *ei, const struct stream_info *istream, struct codec_params *p, struct dsp_getopt_state *g, int argc, const char *const *argv)
+{
+	int opt;
+	char *endptr;
+
+	*p = (struct codec_params) CODEC_PARAMS_AUTO(NULL, CODEC_MODE_READ);
+	p->fs = istream->fs;
+	p->channels = istream->channels;
+
+	while ((opt = dsp_getopt(g, argc, argv, "t:e:BLNr:c:")) != -1) {
+		switch (opt) {
+		case 't': p->type   = g->arg; break;
+		case 'e': p->enc    = g->arg; break;
+		case 'B': p->endian = CODEC_ENDIAN_BIG;    break;
+		case 'L': p->endian = CODEC_ENDIAN_LITTLE; break;
+		case 'N': p->endian = CODEC_ENDIAN_LITTLE; break;
+		case 'r':
+			p->fs = lround(parse_freq(g->arg, &endptr));
+			if (check_endptr(ei->name, g->arg, endptr, "sample rate"))
+				return 1;
+			if (p->fs <= 0) {
+				LOG_FMT(LL_ERROR, "%s: error: sample rate must be > 0", ei->name);
+				return 1;
+			}
+			if (p->fs != istream->fs) {
+				LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: stream_fs=%d requested_fs=%d", ei->name, istream->fs, p->fs);
+				return 1;
+			}
+			break;
+		case 'c':
+			p->channels = strtol(g->arg, &endptr, 10);
+			if (check_endptr(ei->name, g->arg, endptr, "number of channels"))
+				return 1;
+			if (p->channels <= 0) {
+				LOG_FMT(LL_ERROR, "%s: error: number of channels must be > 0", ei->name);
+				return 1;
+			}
+			break;
+		default:
+			if (opt == ':')
+				LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", ei->name, g->opt);
+			else
+				LOG_FMT(LL_ERROR, "%s: error: illegal option '%c'", ei->name, g->opt);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 struct effect * fir_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels;
 	ssize_t filter_frames;
 	struct effect *e;
 	sample_t *filter_data;
+	struct codec_params c_params;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 
-	if (argc != 2) {
+	int err = fir_parse_codec_opts(ei, istream, &c_params, &g, argc, argv);
+	if (err || g.ind != argc-1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	filter_data = fir_read_filter(ei, dir, argv[1], istream->fs, &filter_channels, &filter_frames);
+	c_params.path = argv[g.ind];
+	filter_data = fir_read_filter(ei, dir, &c_params, &filter_channels, &filter_frames);
 	if (filter_data == NULL)
 		return NULL;
 	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);

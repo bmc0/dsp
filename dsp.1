@@ -287,19 +287,41 @@ default value is 5.
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
 Sinc resampler. Ignores the channel selector.
 .TP
-\fBfir\fR [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
+\fBfir\fR [\fIinput_options\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
 filters up to 16 taps. For longer filters, the latency is equal to the
 \fIfft_len\fR reported in verbose mode. Each \fIlist\fR is a comma-separated list
 of coefficients for one filter channel. Missing values are filled with
 zeros.
+.sp 0.5
+The \fIinput_options\fR are useful when loading raw (headerless) input files
+and are as follows:
+.RS
 .TP
-\fBfir_p\fR [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
+\fB\-t\fR \fItype\fR
+Type.
+.TP
+\fB\-e\fR \fIencoding\fR
+Encoding.
+.TP
+\fB\-B\fR/\fBL\fR/\fBN\fR
+Big/little/native endian.
+.TP
+\fB\-r\fR \fIfrequency\fR[\fBk\fR]
+Sample rate.
+.TP
+\fB\-c\fR \fIchannels\fR
+Number of channels.
+.RE
+.TP
+\fBfir_p\fR [\fIinput_options\fR] [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
 a bit slower than the \fBzita_convolver\fR effect except for very long filters
 on some hardware. \fImax_part_len\fR must be a power of 2 and has a default
 value of 16384. Each \fIlist\fR is a comma-separated list of coefficients for
 one filter channel. Missing values are filled with zeros.
+.sp 0.5
+See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
 \fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
 Partitioned 32-bit FFT convolution using the zita-convolver library.

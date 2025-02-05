@@ -370,7 +370,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
+		LOG_FMT(LL_ERROR, "%s: error: channels mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;
 	}
 	if (filter_frames < 1) {
@@ -386,7 +386,6 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 		LOG_FMT(LL_ERROR, "%s: error: max_part_len must be within [%d,%d] or 0 for default", ei->name, DIRECT_LEN, MAX_PART_LEN_LIMIT);
 		return NULL;
 	}
-
 	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd", ei->name, filter_frames);
 
 	e = calloc(1, sizeof(struct effect));
@@ -525,17 +524,22 @@ struct effect * fir_p_effect_init(const struct effect_info *ei, const struct str
 	ssize_t filter_frames, max_part_len = 0;
 	struct effect *e;
 	sample_t *filter_data;
+	struct codec_params c_params;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	char *endptr;
 
-	if (argc > 3 || argc < 2) {
+	int err = fir_parse_codec_opts(ei, istream, &c_params, &g, argc, argv);
+	if (err || g.ind < argc-2 || g.ind > argc-1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	if (argc > 2) {
-		max_part_len = strtol(argv[1], &endptr, 10);
-		CHECK_ENDPTR(argv[1], endptr, "max_part_len", return NULL);
+	if (g.ind == argc-2) {
+		max_part_len = strtol(argv[g.ind], &endptr, 10);
+		CHECK_ENDPTR(argv[g.ind], endptr, "max_part_len", return NULL);
+		++g.ind;
 	}
-	filter_data = fir_read_filter(ei, dir, argv[argc - 1], istream->fs, &filter_channels, &filter_frames);
+	c_params.path = argv[g.ind];
+	filter_data = fir_read_filter(ei, dir, &c_params, &filter_channels, &filter_frames);
 	if (filter_data == NULL)
 		return NULL;
 	e = fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, max_part_len);

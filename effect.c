@@ -81,8 +81,8 @@ static const struct effect_info effects[] = {
 #ifndef SYMMETRIC_IO
 	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init,  0 },
 #endif
-	{ "fir",                "fir [file:][~/]filter_path|coefs:list[/list...]",                  fir_effect_init,   0 },
-	{ "fir_p",              "fir_p [max_part_len] [file:][~/]filter_path|coefs:list[/list...]", fir_p_effect_init, 0 },
+	{ "fir",                "fir [input_options] [file:][~/]filter_path|coefs:list[/list...]",                  fir_effect_init,   0 },
+	{ "fir_p",              "fir_p [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]", fir_p_effect_init, 0 },
 #endif
 #ifdef HAVE_ZITA_CONVOLVER
 	{ "zita_convolver",     "zita_convolver [min_part_len [max_part_len]] [~/]filter_path", zita_convolver_effect_init, 0 },
