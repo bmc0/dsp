@@ -246,19 +246,23 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	struct watch_node *node;
 	struct effect *e;
 	struct stat sb;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	int enforce_eof_marker = 0, opt;
 
-	int arg_i = 1, enforce_eof_marker = 0;
-	if (argc == 3 && strcmp(argv[arg_i], "-e") == 0) {
-		enforce_eof_marker = 1;
-		++arg_i;
+	while ((opt = dsp_getopt(&g, argc-1, argv, "e")) != -1) {
+		switch (opt) {
+		case 'e': enforce_eof_marker = 1; break;
+		default: goto print_usage;
+		}
 	}
-	else if (argc != 2) {
+	if (g.ind != argc-1) {
+		print_usage:
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
 
 	struct stream_info stream = *istream;
-	char *path = construct_full_path(dir, argv[arg_i]);
+	char *path = construct_full_path(dir, argv[g.ind]);
 	if (build_effects_chain_from_file(path, &chain, &stream, channel_selector, NULL, enforce_eof_marker))
 		goto open_fail;
 	if (stat(path, &sb) < 0) {
