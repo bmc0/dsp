@@ -333,7 +333,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		state->filter_frames = filter_frames;
 		state->len = next_fast_fftw_len(filter_frames);
 		LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd fft_len=%zd", ei->name, filter_frames, state->len);
-		state->fr_len = state->len + 2;
+		state->fr_len = state->len + ((state->len&1)?1:2);
 		state->tmp_fr = fftw_malloc(state->fr_len * sizeof(fftw_complex));
 		state->ibuf = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->obuf = calloc(e->ostream.channels, sizeof(sample_t *));
