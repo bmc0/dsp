@@ -117,8 +117,12 @@ void delay_effect_plot(struct effect *e, int i)
 	for (int k = 0; k < e->istream.channels; ++k) {
 		struct delay_channel_state *cs = &state->cs[k];
 		printf("H%d_%d(w)=1.0", k, i);
-		if (state->samples < 0.0)
-			printf("*exp(-j*w*%g)", state->samples);
+		if (state->samples < 0.0) {
+			if (state->fd_ap_n > 0)
+				printf("*exp(-j*w*%.15e)", state->samples);
+			else
+				printf("*exp(-j*w*%zd)", (ssize_t) state->samples);
+		}
 		if (state->is_offset)
 			printf("*exp(-j*w*%zd)", -state->len);
 		if (cs->buf)
