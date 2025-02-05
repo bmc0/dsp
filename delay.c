@@ -178,27 +178,29 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	char *endptr;
 	struct effect *e;
 	struct delay_state *state = NULL;
-	int fd_ap_n = 5, is_offset = 0;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	int do_frac = 0, fd_ap_n = 5, is_offset = 0, opt;
 
-	int arg_i = 1, do_frac = 0;
-	if (argc == 3 || argc == 4) {
-		if (strcmp(argv[arg_i], "-f") == 0) {
+	while ((opt = dsp_getopt(&g, argc-1, argv, "f::")) != -1) {
+		switch (opt) {
+		case 'f':
 			do_frac = 1;
-			++arg_i;
-		}
-		if (argc == 4) {
-			fd_ap_n = strtol(argv[arg_i], &endptr, 10);
-			CHECK_ENDPTR(argv[arg_i], endptr, "order", return NULL);
-			CHECK_RANGE(fd_ap_n > 0 && fd_ap_n <= 50, "order", return NULL);
-			++arg_i;
+			if (g.arg) {
+				fd_ap_n = strtol(g.arg, &endptr, 10);
+				CHECK_ENDPTR(g.arg, endptr, "order", return NULL);
+				CHECK_RANGE(fd_ap_n > 0 && fd_ap_n <= 50, "order", return NULL);
+			}
+			break;
+		default: goto print_usage;
 		}
 	}
-	else if (argc != 2) {
+	if (g.ind != argc-1) {
+		print_usage:
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
 	}
-	double samples = parse_len_frac(argv[arg_i], istream->fs, &endptr);
-	CHECK_ENDPTR(argv[arg_i], endptr, "delay", return NULL);
+	double samples = parse_len_frac(argv[g.ind], istream->fs, &endptr);
+	CHECK_ENDPTR(argv[g.ind], endptr, "delay", return NULL);
 	ssize_t samples_int;
 	double samples_frac;
 	if (do_frac && fabs(samples - rint(samples)) >= DBL_EPSILON) {  /* ignore extremely small fractional delay */
