@@ -151,21 +151,24 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	struct decorrelate_state *state;
 	struct effect *e;
 	char *endptr;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	int mono = 0, n_stages = 5, opt;
 
-	int arg_i = 1, mono = 0, n_stages = 5;
-	if (arg_i < argc && strcmp(argv[arg_i], "-m") == 0) {
-		mono = 1;
-		++arg_i;
+	while ((opt = dsp_getopt(&g, argc, argv, "m")) != -1) {
+		switch (opt) {
+		case 'm': mono = 1; break;
+		default: goto print_usage;
+		}
 	}
-	if (arg_i < argc) {
-		n_stages = strtol(argv[arg_i], &endptr, 10);
-		CHECK_ENDPTR(argv[arg_i], endptr, "stages", return NULL);
-		CHECK_RANGE(n_stages > 0, "stages", return NULL);
-		++arg_i;
-	}
-	if (arg_i != argc) {
+	if (g.ind < argc-1) {
+		print_usage:
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
+	}
+	else if (g.ind == argc-1) {
+		n_stages = strtol(argv[g.ind], &endptr, 10);
+		CHECK_ENDPTR(argv[g.ind], endptr, "stages", return NULL);
+		CHECK_RANGE(n_stages > 0, "stages", return NULL);
 	}
 
 	e = calloc(1, sizeof(struct effect));
