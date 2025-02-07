@@ -327,10 +327,14 @@ one filter channel. Missing values are filled with zeros.
 .sp 0.5
 See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
-\fBzita_convolver\fR [\fImin_part_len\fR [\fImax_part_len\fR]] [~/]\fIfilter_path\fR
+\fBzita_convolver\fR [\fIinput_options\fR] [\fImin_part_len\fR [\fImax_part_len\fR]] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Partitioned 32-bit FFT convolution using the zita-convolver library.
 Latency is equal to \fImin_part_len\fR (64 samples by default).
-\fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192.
+\fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192. Each \fIlist\fR
+is a comma-separated list of coefficients for one filter channel. Missing
+values are filled with zeros.
+.sp 0.5
+See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
 \fBhilbert\fR [\fI\-p\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be

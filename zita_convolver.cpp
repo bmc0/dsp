@@ -25,6 +25,7 @@ extern "C" {
 	#include "util.h"
 	#include "codec.h"
 	#include "sampleconv.h"
+	#include "fir.h"
 }
 
 struct zita_convolver_state {
@@ -149,82 +150,47 @@ static void write_buf_floatp(sample_t *in, float **out, int channels, ssize_t s)
 	}
 }
 
-struct effect * zita_convolver_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
+struct effect * zita_convolver_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int min_part_len, int max_part_len)
 {
-	int i, k;
-	unsigned int min_part_len = 0, max_part_len = 0;
 	struct effect *e;
 	struct zita_convolver_state *state;
-	struct codec *c_filter;
-	Convproc *cproc;
-	sample_t *buf_interleaved;
-	float **buf_planar;
-	char *endptr, *fp;
-
-	if (argc > 4 || argc < 2) {
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
-		return NULL;
-	}
-	if (argc > 2) {
-		min_part_len = strtol(argv[1], &endptr, 10);
-		CHECK_ENDPTR(argv[1], endptr, "min_part_len", return NULL);
-	}
-	if (argc > 3) {
-		max_part_len = strtol(argv[2], &endptr, 10);
-		CHECK_ENDPTR(argv[2], endptr, "max_part_len", return NULL);
-	}
-	min_part_len = (min_part_len == 0) ? Convproc::MINPART : min_part_len;
-	max_part_len = (max_part_len == 0) ? Convproc::MAXPART : max_part_len;
-	if (min_part_len < Convproc::MINPART || min_part_len > Convproc::MAXPART || max_part_len < Convproc::MINPART || max_part_len > Convproc::MAXPART) {
-		LOG_FMT(LL_ERROR, "%s: error: partition lengths must be within [%d,%d] or 0 for default", argv[0], Convproc::MINPART, Convproc::MAXPART);
-		return NULL;
-	}
-	if (max_part_len < min_part_len) {
-		LOG_FMT(LL_ERROR, "%s: warning: max_part_len < min_part_len", argv[0]);
-		max_part_len = min_part_len;
-	}
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (n_channels > MINIMUM(Convproc::MAXINP, Convproc::MAXOUT)) {
-		LOG_FMT(LL_ERROR, "%s: error: number of channels must not exceed %d", argv[0], MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
+		LOG_FMT(LL_ERROR, "%s: error: number of channels must not exceed %d", ei->name, MINIMUM(Convproc::MAXINP, Convproc::MAXOUT));
 		return NULL;
 	}
-	fp = construct_full_path(dir, argv[argc - 1]);
-	struct codec_params c_params = CODEC_PARAMS_AUTO(fp, CODEC_MODE_READ);
-	c_filter = init_codec(&c_params);
-	if (c_filter == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to open filter file: %s", argv[0], fp);
-		free(fp);
+	if (filter_channels != 1 && filter_channels != n_channels) {
+		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
 		return NULL;
 	}
-	free(fp);
-	if (c_filter->channels != 1 && c_filter->channels != n_channels) {
-		LOG_FMT(LL_ERROR, "%s: error: channel mismatch: channels=%d filter_channels=%d", argv[0], n_channels, c_filter->channels);
-		destroy_codec(c_filter);
+	if (filter_frames < 1) {
+		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", ei->name);
 		return NULL;
 	}
-	if (c_filter->fs != istream->fs) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: fs=%d filter_fs=%d", argv[0], istream->fs, c_filter->fs);
-		destroy_codec(c_filter);
+
+	min_part_len = (min_part_len == 0) ? Convproc::MINPART : min_part_len;
+	max_part_len = (max_part_len == 0) ? Convproc::MAXPART : max_part_len;
+	if (min_part_len < Convproc::MINPART || min_part_len > Convproc::MAXPART || max_part_len < Convproc::MINPART || max_part_len > Convproc::MAXPART) {
+		LOG_FMT(LL_ERROR, "%s: error: partition lengths must be within [%d,%d] or 0 for default", ei->name, Convproc::MINPART, Convproc::MAXPART);
 		return NULL;
 	}
-	if (c_filter->frames < 1) {
-		LOG_FMT(LL_ERROR, "%s: error: filter length must be >= 1", argv[0]);
-		destroy_codec(c_filter);
-		return NULL;
+	if (max_part_len < min_part_len) {
+		LOG_FMT(LL_ERROR, "%s: warning: max_part_len < min_part_len", ei->name);
+		max_part_len = min_part_len;
 	}
-	cproc = new Convproc;
+
+	Convproc *cproc = new Convproc;
 #if ZITA_CONVOLVER_MAJOR_VERSION >= 4
-	if (cproc->configure(n_channels, n_channels, c_filter->frames, min_part_len, min_part_len, max_part_len, 0.0f)) {
+	if (cproc->configure(n_channels, n_channels, filter_frames, min_part_len, min_part_len, max_part_len, 0.0f)) {
 #else
-	if (cproc->configure(n_channels, n_channels, c_filter->frames, min_part_len, min_part_len, max_part_len)) {
+	if (cproc->configure(n_channels, n_channels, filter_frames, min_part_len, min_part_len, max_part_len)) {
 #endif
-		LOG_FMT(LL_ERROR, "%s: error: failed to configure convolution engine", argv[0]);
-		destroy_codec(c_filter);
+		LOG_FMT(LL_ERROR, "%s: error: failed to configure convolution engine", ei->name);
 		delete cproc;
 		return NULL;
 	}
-	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd min_part_len=%d max_part_len=%d", argv[0], c_filter->frames, min_part_len, max_part_len);
+	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd min_part_len=%d max_part_len=%d", ei->name, filter_frames, min_part_len, max_part_len);
 
 	e = (struct effect *) calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -240,33 +206,63 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	e->destroy = zita_convolver_effect_destroy;
 
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
-	state->filter_frames = c_filter->frames;
+	state->filter_frames = filter_frames;
 	state->len = min_part_len;
 	state->cproc = cproc;
 	state->output = (sample_t **) calloc(istream->channels, sizeof(sample_t *));
-	for (i = 0; i < istream->channels; ++i)
+	for (int i = 0; i < istream->channels; ++i)
 		state->output[i] = (sample_t *) calloc(state->len, sizeof(sample_t));
 	e->data = (void *) state;
 
-	buf_interleaved = (sample_t *) calloc(c_filter->frames * c_filter->channels, sizeof(sample_t));
-	if (c_filter->read(c_filter, buf_interleaved, c_filter->frames) != c_filter->frames)
-		LOG_FMT(LL_ERROR, "%s: warning: short read", argv[0]);
-	buf_planar = (float **) calloc(c_filter->channels, sizeof(float *));
-	for (i = 0; i < c_filter->channels; ++i)
-		buf_planar[i] = (float *) calloc(c_filter->frames, sizeof(float));
-	write_buf_floatp(buf_interleaved, buf_planar, c_filter->channels, c_filter->frames);
-	free(buf_interleaved);
-	for (i = k = 0; i < istream->channels; ++i) {
+	float **buf_planar = (float **) calloc(filter_channels, sizeof(float *));
+	for (int i = 0; i < filter_channels; ++i)
+		buf_planar[i] = (float *) calloc(filter_frames, sizeof(float));
+	write_buf_floatp(filter_data, buf_planar, filter_channels, filter_frames);
+	for (int i = 0, k = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
-			cproc->impdata_create(k, k, 1, buf_planar[(c_filter->channels == 1) ? 0 : k], 0, c_filter->frames);
+			if (filter_channels == 1 && k > 0) cproc->impdata_link(0, 0, k, k);
+			else cproc->impdata_create(k, k, 1, buf_planar[k], 0, filter_frames);
 			++k;
 		}
 	}
-	for (i = 0; i < c_filter->channels; ++i)
+	for (int i = 0; i < filter_channels; ++i)
 		free(buf_planar[i]);
 	free(buf_planar);
-	destroy_codec(c_filter);
-	cproc->start_process(0, 0);
 
+	cproc->start_process(0, 0);
+	return e;
+}
+
+struct effect * zita_convolver_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
+{
+	int filter_channels, min_part_len = 0, max_part_len = 0;
+	ssize_t filter_frames;
+	struct effect *e;
+	sample_t *filter_data;
+	struct codec_params c_params;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	char *endptr;
+
+	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL);
+	if (err || g.ind < argc-3 || g.ind > argc-1) {
+		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		return NULL;
+	}
+	if (g.ind <= argc-2) {
+		min_part_len = strtol(argv[g.ind], &endptr, 10);
+		CHECK_ENDPTR(argv[g.ind], endptr, "min_part_len", return NULL);
+		++g.ind;
+	}
+	if (g.ind <= argc-2) {
+		max_part_len = strtol(argv[g.ind], &endptr, 10);
+		CHECK_ENDPTR(argv[g.ind], endptr, "max_part_len", return NULL);
+		++g.ind;
+	}
+	c_params.path = argv[g.ind];
+	filter_data = fir_read_filter(ei, istream, dir, &c_params, &filter_channels, &filter_frames);
+	if (filter_data == NULL)
+		return NULL;
+	e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, min_part_len, max_part_len);
+	free(filter_data);
 	return e;
 }

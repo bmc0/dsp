@@ -307,10 +307,14 @@ Example:
 	one filter channel. Missing values are filled with zeros.
 
 	See the `fir` effect description an explanation of the `input_options`.
-* `zita_convolver [min_part_len [max_part_len]] [~/]filter_path`  
+* `zita_convolver [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
-	`{min,max}_part_len` must be powers of 2 between 64 and 8192.
+	`{min,max}_part_len` must be powers of 2 between 64 and 8192. Each `list`
+	is a comma-separated list of coefficients for one filter channel. Missing
+	values are filled with zeros.
+
+	See the `fir` effect description an explanation of the `input_options`.
 * `hilbert [-p] taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
 	odd. Bandwidth is controlled by the number of taps. If `-p` is given, the

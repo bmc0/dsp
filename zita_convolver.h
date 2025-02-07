@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2016-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2016-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,7 @@ extern "C" {
 #include "dsp.h"
 #include "effect.h"
 
+struct effect * zita_convolver_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int, int);
 struct effect * zita_convolver_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #ifdef __cplusplus
