@@ -336,10 +336,11 @@ values are filled with zeros.
 .sp 0.5
 See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
-\fBhilbert\fR [\fI\-p\fR] \fItaps\fR
+\fBhilbert\fR [\fI\-pz\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be
 odd. Bandwidth is controlled by the number of taps. If \fI\-p\fR is given, the
 \fBfir_p\fR convolution engine is used instead of the default \fBfir\fR engine.
+Similarly, if \fI\-z\fR is given, \fBzita_convolver\fR is used (if available).
 .TP
 \fBdecorrelate\fR [\fI\-m\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder

@@ -22,6 +22,7 @@
 #include "hilbert.h"
 #include "fir.h"
 #include "fir_p.h"
+#include "zita_convolver.h"
 #include "util.h"
 
 struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -29,11 +30,12 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	char *endptr;
 	struct effect *e;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
-	int use_fir_p = 0, opt;
+	int conv = 0, opt;
 
-	while ((opt = dsp_getopt(&g, argc-1, argv, "p")) != -1) {
+	while ((opt = dsp_getopt(&g, argc-1, argv, "pz")) != -1) {
 		switch (opt) {
-		case 'p': use_fir_p = 1; break;
+		case 'p': conv = 1; break;
+		case 'z': conv = 2; break;
 		default: goto print_usage;
 		}
 	}
@@ -44,7 +46,7 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	}
 	const ssize_t taps = strtol(argv[g.ind], &endptr, 10);
 	CHECK_ENDPTR(argv[g.ind], endptr, "taps", return NULL);
-	if (taps < 3) {
+	if (taps <= 3) {
 		LOG_FMT(LL_ERROR, "%s: error: taps must be > 3", argv[0]);
 		return NULL;
 	}
@@ -61,9 +63,17 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 			h[i] = 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
 		}
 	}
-	e = (use_fir_p) ?
-		fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0) :
-		fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+	if (conv == 1)
+		e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+	else if (conv == 2) {
+		#ifdef HAVE_ZITA_CONVOLVER
+			e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0, 0);
+		#else
+			LOG_FMT(LL_ERROR, "%s: warning: zita_convolver not available; using fir_p instead", argv[0]);
+			e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+		#endif
+	}
+	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
 	return e;
 }

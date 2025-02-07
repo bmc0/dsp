@@ -315,10 +315,11 @@ Example:
 	values are filled with zeros.
 
 	See the `fir` effect description an explanation of the `input_options`.
-* `hilbert [-p] taps`  
+* `hilbert [-pz] taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
 	odd. Bandwidth is controlled by the number of taps. If `-p` is given, the
 	`fir_p` convolution engine is used instead of the default `fir` engine.
+	Similarly, if `-z` is given, `zita_convolver` is used (if available).
 * `decorrelate [-m] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
