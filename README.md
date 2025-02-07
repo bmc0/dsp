@@ -80,10 +80,10 @@ Type    | Modes | Encodings
 null    | rw    | sample_t
 sgen    | r     | sample_t
 sndfile | r     | autodetected
-wav     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 g721_32
+wav     | rw    | s16 u8 s24 s32 float double mu-law a-law ima_adpcm ms_adpcm gsm6.10 nms_adpcm_16 nms_adpcm_24 nms_adpcm_32 g721_32 mpeg2.3
 aiff    | rw    | s16 s8 u8 s24 s32 float double mu-law a-law ima_adpcm gsm6.10 dwvw_12 dwvw_16 dwvw_24
 au      | rw    | s16 s8 s24 s32 float double mu-law a-law g721_32 g723_24 g723_40
-raw     | rw    | s16 s8 u8 s24 s32 float double mu-law a-law gsm6.10 vox_adpcm dwvw_12 dwvw_16 dwvw_24
+raw     | rw    | s16 s8 u8 s24 s32 float double mu-law a-law gsm6.10 vox_adpcm nms_adpcm_16 nms_adpcm_24 nms_adpcm_32 dwvw_12 dwvw_16 dwvw_24
 paf     | rw    | s16 s8 s24
 svx     | rw    | s16 s8
 nist    | rw    | s16 s8 s24 s32 mu-law a-law
@@ -98,18 +98,19 @@ htk     | rw    | s16
 sds     | rw    | s16 s8 s24
 avr     | rw    | s16 s8 u8
 wavex   | rw    | s16 u8 s24 s32 float double mu-law a-law
-sd2     | rw    | s16 s8 s24
+sd2     | rw    | s16 s8 s24 s32
 flac    | rw    | s16 s8 s24
-caf     | rw    | s16 s8 s24 s32 float double mu-law a-law
+caf     | rw    | s16 s8 s24 s32 float double mu-law a-law alac_16 alac_20 alac_24 alac_32
 wve     | rw    | a-law
-ogg     | rw    | vorbis
+ogg     | rw    | vorbis opus
 mpc2k   | rw    | s16
 rf64    | rw    | s16 u8 s24 s32 float double mu-law a-law
+sf/mpeg | rw    | mpeg1.1 mpeg1.2 mpeg2.3
 ffmpeg  | r     | autodetected
 alsa    | rw    | s16 u8 s8 s24 s24_3 s32 float double
 ao      | w     | s16 u8 s32
 mp3     | r     | mad_f
-pcm     | rw    | s16 u8 s8 s24 s32 float double
+pcm     | rw    | s16 u8 s8 s24 s24_3 s32 float double
 pulse   | rw    | s16 u8 s24 s24_3 s32 float
 
 #### Input combining modes
