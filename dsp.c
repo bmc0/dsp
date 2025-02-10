@@ -657,7 +657,8 @@ static void handle_tstp(int is_paused)
 	do { \
 		const int do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_needs_dither); \
 		add_dither = effects_chain_set_dither_params(&chain, out_codec->prec, do_dither); \
-		LOG_FMT(LL_VERBOSE, "info: dither %s", (do_dither) ? "on" : "off"); \
+		LOG_FMT(LL_VERBOSE, "info: auto dither %s%s", (do_dither) ? "on" : "off", \
+			(do_dither && !add_dither) ? " (effect)" : ""); \
 	} while (0)
 
 int main(int argc, char *argv[])
