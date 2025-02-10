@@ -380,8 +380,8 @@ bit depth regardless of the output sample format. \fIbits\fR may be any number.
 not given, it is set to the same value as \fIbits\fR (rounded to the nearest
 integer).
 .sp 0.5
-Note: Currently, \fIauto\fR will not work correctly with \fBladspa_dsp\fR or if
-loaded via \fBwatch\fR. A default value of 16 is used in those cases.
+Note: Currently, setting \fIbits\fR to \fIauto\fR disables dither if the effect
+is loaded via \fBwatch\fR or used in \fBladspa_dsp\fR.
 .sp 0.5
 .RS
 .IP [1] 4

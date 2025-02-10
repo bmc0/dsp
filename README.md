@@ -351,8 +351,8 @@ Example:
 	not given, it is set to the same value as `bits` (rounded to the nearest
 	integer).
 
-	**Note:** Currently, `auto` will not work correctly with `ladspa_dsp` or if
-	loaded via `watch`. A default value of 16 is used in those cases.
+	**Note:** Currently, setting `bits` to `auto` disables dither if the effect
+	is loaded via `watch` or used in `ladspa_dsp`.
 
 	[1] S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
 	"Minimally Audible Noise Shaping," J. AES, vol. 39, no. 11,

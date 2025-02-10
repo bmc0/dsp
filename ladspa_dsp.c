@@ -252,6 +252,7 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 		LOG_S(LL_ERROR, "error: sample rate mismatch");
 		goto fail;
 	}
+	effects_chain_set_dither_params(&d->chain, 0, 0);  /* disable auto dither */
 	return d;
 
 	fail:

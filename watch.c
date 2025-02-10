@@ -99,6 +99,7 @@ static void watch_reload(struct watch_node *node)
 			}
 			else {
 				destroy_effects_chain(&node->new_chain);
+				effects_chain_set_dither_params(&new_chain, 0, 0);  /* disable auto dither */
 				node->new_chain = new_chain;
 				node->update_chain = 1;
 				pthread_mutex_unlock(&node->lock);
