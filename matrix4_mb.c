@@ -77,7 +77,8 @@ struct matrix4_band {
 	struct axes ax, ax_ev;
 	double fl_boost, fr_boost;
 	#if DOWNSAMPLE_FACTOR > 1
-		double lsl_m[2], lsr_m[2], rsl_m[2], rsr_m[2];
+		struct cs_interp_state lsl_m, lsr_m;
+		struct cs_interp_state rsl_m, rsr_m;
 	#endif
 };
 
@@ -91,7 +92,7 @@ struct matrix4_mb_state {
 	sample_t norm_mult, surr_mult;
 	struct event_config evc;
 	#if DOWNSAMPLE_FACTOR > 1
-		double fl_boost[2], fr_boost[2];
+		struct cs_interp_state fl_boost, fr_boost;
 	#else
 		double fl_boost, fr_boost;
 	#endif
@@ -307,17 +308,13 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				f_boost_norm += weight;
 
 			#if DOWNSAMPLE_FACTOR > 1
-				band->lsl_m[0] = band->lsl_m[1];
-				band->lsr_m[0] = band->lsr_m[1];
-				band->rsl_m[0] = band->rsl_m[1];
-				band->rsr_m[0] = band->rsr_m[1];
-				band->lsl_m[1] = m.lsl;
-				band->lsr_m[1] = m.lsr;
-				band->rsl_m[1] = m.rsl;
-				band->rsr_m[1] = m.rsr;
+				cs_interp_insert(&band->lsl_m, m.lsl);
+				cs_interp_insert(&band->lsr_m, m.lsr);
+				cs_interp_insert(&band->rsl_m, m.rsl);
+				cs_interp_insert(&band->rsr_m, m.rsr);
 			}
-			out_ls += s0_d_fb*oversample(band->lsl_m, state->s) + s1_d_fb*oversample(band->lsr_m, state->s);
-			out_rs += s0_d_fb*oversample(band->rsl_m, state->s) + s1_d_fb*oversample(band->rsr_m, state->s);
+			out_ls += s0_d_fb*cs_interp(&band->lsl_m, state->s) + s1_d_fb*cs_interp(&band->lsr_m, state->s);
+			out_rs += s0_d_fb*cs_interp(&band->rsl_m, state->s) + s1_d_fb*cs_interp(&band->rsr_m, state->s);
 			#else
 			out_ls += s0_d_fb*m.lsl + s1_d_fb*m.lsr;
 			out_rs += s0_d_fb*m.rsl + s1_d_fb*m.rsr;
@@ -336,13 +333,11 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				fr_boost = 0.0;
 			}
 		#if DOWNSAMPLE_FACTOR > 1
-			state->fl_boost[0] = state->fl_boost[1];
-			state->fr_boost[0] = state->fr_boost[1];
-			state->fl_boost[1] = fl_boost;
-			state->fr_boost[1] = fr_boost;
+			cs_interp_insert(&state->fl_boost, fl_boost);
+			cs_interp_insert(&state->fr_boost, fr_boost);
 		}
-		const double ll_m = norm_mult + oversample(state->fl_boost, state->s);
-		const double rr_m = norm_mult + oversample(state->fr_boost, state->s);
+		const double ll_m = norm_mult + cs_interp(&state->fl_boost, state->s);
+		const double rr_m = norm_mult + cs_interp(&state->fr_boost, state->s);
 		#else
 		state->fl_boost = fl_boost;
 		state->fr_boost = fr_boost;
@@ -398,7 +393,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			dsp_log_printf("\n%s%s: weighted RMS dir_boost: l:%05.3f r:%05.3f\033[K\r",
 				e->name, (state->disable) ? " [off]" : "",
 				#if DOWNSAMPLE_FACTOR > 1
-					state->fl_boost[1], state->fr_boost[1]);
+					CS_INTERP_PEEK(&state->fl_boost), CS_INTERP_PEEK(&state->fr_boost));
 				#else
 					state->fl_boost, state->fr_boost);
 				#endif
@@ -526,7 +521,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		drift_init(state->band[k].drift, istream);
 	}
 
+#if DOWNSAMPLE_FACTOR > 1
+	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs) + CS_INTERP_DELAY_FRAMES;
+#else
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
+#endif
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));

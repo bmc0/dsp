@@ -21,6 +21,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <string.h>
 #include "effect.h"
 #include "ewma.h"
 #include "util.h"
@@ -43,9 +44,11 @@
 #define ORD_SENS_LEVEL       10.0
 #define DIFF_SENS_ERR        10.0
 #define DIFF_SENS_LEVEL       3.0
-#define FADE_TIME           500.0
+
+/* fade parameters when toggling effect via signal() */
+#define FADE_TIME 500.0
 /* 1 = linear; 2 = quarter sine; 3 = half sine; 4 = double-exponential sigmoid */
-#define FADE_TYPE               3
+#define FADE_TYPE 3
 
 #ifndef DOWNSAMPLE_FACTOR
 	#define DOWNSAMPLE_FACTOR 1
@@ -55,6 +58,15 @@
 #endif
 #ifndef EVENT_END_THRESH
 	#define EVENT_END_THRESH 0.2
+#endif
+
+/* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = polyphase FIR (blackman window) */
+#ifndef CS_INTERP_TYPE
+#if DOWNSAMPLE_FACTOR == 4 || DOWNSAMPLE_FACTOR == 2
+	#define CS_INTERP_TYPE 4
+#else
+	#define CS_INTERP_TYPE 2
+#endif
 #endif
 
 struct envs {
@@ -139,10 +151,180 @@ static inline double drift_scale(const struct axes *ax0, const struct axes *ax1,
 }
 
 #if DOWNSAMPLE_FACTOR > 1
-static inline double oversample(const double y[2], double x)
+#if CS_INTERP_TYPE == 1
+/* linear */
+#define CS_INTERP_PEEK(s) ((s)->y[1])
+#define CS_INTERP_DELAY_FRAMES (1*DOWNSAMPLE_FACTOR)
+struct cs_interp_state {
+	double c0, y[2];
+};
+
+static inline void cs_interp_insert(struct cs_interp_state *s, double x)
 {
-	return y[0] + (x/DOWNSAMPLE_FACTOR)*(y[1]-y[0]);
+	double *y = s->y;
+	y[0] = y[1];
+	y[1] = x;
+	s->c0 = y[1]-y[0];
 }
+
+static inline double cs_interp(const struct cs_interp_state *s, int x)
+{
+	const double t = x * (1.0/DOWNSAMPLE_FACTOR);
+	return s->y[0] + t*s->c0;
+}
+#elif CS_INTERP_TYPE == 2
+/* parabolic 2x -- Niemitalo, Olli, "Polynomial Interpolators for
+ * High-Quality Resampling of Oversampled Audio," October 2001. */
+#define CS_INTERP_PEEK(s) ((s)->y[2])
+#define CS_INTERP_DELAY_FRAMES (3*DOWNSAMPLE_FACTOR)
+struct cs_interp_state {
+	double c[3];
+	double y[4];
+};
+
+static void cs_interp_insert(struct cs_interp_state *s, double x)
+{
+	double *y = s->y, *c = s->c;
+	memmove(y, y+1, sizeof(double)*3);
+	y[3] = x;
+	const double a = y[2]-y[0];
+	c[0] = 1.0/2.0*y[1] + 1.0/4.0*(y[0]+y[2]);
+	c[1] = 1.0/2.0*a;
+	c[2] = 1.0/4.0*(y[3]-y[1]-a);
+}
+
+static inline double cs_interp(const struct cs_interp_state *s, int x)
+{
+	const double *c = s->c, t = x * (1.0/DOWNSAMPLE_FACTOR);
+	return (c[2]*t+c[1])*t+c[0];
+}
+#elif CS_INTERP_TYPE == 3
+/* cubic B-spline */
+#define CS_INTERP_PEEK(s) ((s)->y[2])
+#define CS_INTERP_DELAY_FRAMES (3*DOWNSAMPLE_FACTOR)
+struct cs_interp_state {
+	double c[4];
+	double y[4];
+};
+
+static void cs_interp_insert(struct cs_interp_state *s, double x)
+{
+	double *y = s->y, *c = s->c;
+	memmove(y, y+1, sizeof(double)*3);
+	y[3] = x;
+	const double a = y[0]+y[2];
+	c[0] = 1.0/6.0*a + 2.0/3.0*y[1];
+	c[1] = 1.0/2.0*(y[2]-y[0]);
+	c[2] = 1.0/2.0*a - y[1];
+	c[3] = 1.0/2.0*(y[1]-y[2]) + 1.0/6.0*(y[3]-y[0]);
+}
+
+static inline double cs_interp(const struct cs_interp_state *s, int x)
+{
+	const double *c = s->c, t = x * (1.0/DOWNSAMPLE_FACTOR);
+	return ((c[3]*t+c[2])*t+c[1])*t+c[0];
+}
+#elif CS_INTERP_TYPE == 4
+/* polyphase FIR (blackman window) */
+#define CS_INTERP_PEEK(s) ((s)->y[DOWNSAMPLE_FACTOR-1])
+#if DOWNSAMPLE_FACTOR == 2
+#define CS_INTERP_DELAY_FRAMES (4*DOWNSAMPLE_FACTOR-1)
+struct cs_interp_state {
+	double y[2], m[12];
+	int p;
+};
+
+static void cs_interp_insert(struct cs_interp_state *state, double x)
+{
+	const double r[6] = {
+		1.070924528086533e-02*x, 5.158730158730156e-02*x,
+		1.349206349206349e-01*x, 2.499999999999999e-01*x,
+		3.543701197984997e-01*x, 3.968253968253968e-01*x,
+	};
+	int p = state->p;
+	double *m = state->m, *y = state->y;
+	y[0]=m[p++]+r[0]; y[1]=m[p++]+r[1];
+	memset(&m[state->p], 0, sizeof(double)*2);
+	if (p==12) p=0;
+	state->p = p;
+	m[p++]+=r[2]; m[p++]+=r[3]; if (p==12) p=0;
+	m[p++]+=r[4]; m[p++]+=r[5]; if (p==12) p=0;
+	m[p++]+=r[4]; m[p++]+=r[3]; if (p==12) p=0;
+	m[p++]+=r[2]; m[p++]+=r[1]; if (p==12) p=0;
+	m[p++]+=r[0];
+}
+#elif DOWNSAMPLE_FACTOR == 4
+#define CS_INTERP_DELAY_FRAMES (3*DOWNSAMPLE_FACTOR-1)
+struct cs_interp_state {
+	double y[4], m[16];
+	int p;
+};
+
+static void cs_interp_insert(struct cs_interp_state *state, double x)
+{
+	const double r[8] = {
+		8.707604904333586e-03*x, 3.955155321828940e-02*x,
+		1.024343698348400e-01*x, 2.023809523809523e-01*x,
+		3.302221271950125e-01*x, 4.604484467817105e-01*x,
+		5.586358980658138e-01*x, 5.952380952380951e-01*x,
+	};
+	int p = state->p;
+	double *m = state->m, *y = state->y;
+	y[0]=m[p++]+r[0]; y[1]=m[p++]+r[1]; y[2]=m[p++]+r[2]; y[3]=m[p++]+r[3];
+	memset(&m[state->p], 0, sizeof(double)*4);
+	p &= 0xf;
+	state->p = p;
+	m[p++]+=r[4]; m[p++]+=r[5]; m[p++]+=r[6]; m[p++]+=r[7];
+	p &= 0xf;
+	m[p++]+=r[6]; m[p++]+=r[5]; m[p++]+=r[4]; m[p++]+=r[3];
+	p &= 0xf;
+	m[p++]+=r[2]; m[p++]+=r[1]; m[p++]+=r[0];
+}
+#elif DOWNSAMPLE_FACTOR == 8
+#define CS_INTERP_DELAY_FRAMES (3*DOWNSAMPLE_FACTOR-1)
+struct cs_interp_state {
+	double y[8], m[32];
+	int p;
+};
+
+static void cs_interp_insert(struct cs_interp_state *state, double x)
+{
+	const double r[16] = {
+		2.093882380528402e-03*x, 8.707604904333586e-03*x,
+		2.076182645115152e-02*x, 3.955155321828940e-02*x,
+		6.642869577439980e-02*x, 1.024343698348400e-01*x,
+		1.479431407089482e-01*x, 2.023809523809523e-01*x,
+		2.640683323852150e-01*x, 3.302221271950125e-01*x,
+		3.971252630479725e-01*x, 4.604484467817105e-01*x,
+		5.156842147264761e-01*x, 5.586358980658138e-01*x,
+		5.858946445253084e-01*x, 5.952380952380952e-01*x,
+	};
+	int p = state->p;
+	double *m = state->m, *y = state->y;
+	y[0]=m[p++]+r[0]; y[1]=m[p++]+r[1]; y[2]=m[p++]+r[2]; y[3]=m[p++]+r[3];
+	y[4]=m[p++]+r[4]; y[5]=m[p++]+r[5]; y[6]=m[p++]+r[6]; y[7]=m[p++]+r[7];
+	memset(&m[state->p], 0, sizeof(double)*8);
+	p &= 0x1f;
+	state->p = p;
+	m[p++]+=r[8];  m[p++]+=r[9];  m[p++]+=r[10]; m[p++]+=r[11];
+	m[p++]+=r[12]; m[p++]+=r[13]; m[p++]+=r[14]; m[p++]+=r[15];
+	p &= 0x1f;
+	m[p++]+=r[14]; m[p++]+=r[13]; m[p++]+=r[12]; m[p++]+=r[11];
+	m[p++]+=r[10]; m[p++]+=r[9];  m[p++]+=r[8];  m[p++]+=r[7];
+	p &= 0x1f;
+	m[p++]+=r[6]; m[p++]+=r[5]; m[p++]+=r[4]; m[p++]+=r[3];
+	m[p++]+=r[2]; m[p++]+=r[1]; m[p++]+=r[0];
+}
+#else
+	#error "unsupported DOWNSAMPLE_FACTOR"
+#endif
+static inline double cs_interp(const struct cs_interp_state *state, int x)
+{
+	return state->y[x];
+}
+#else
+	#error "illegal CS_INTERP_TYPE"
+#endif
 #endif
 
 static void smooth_state_init(struct smooth_state *sm, const struct stream_info *istream)
