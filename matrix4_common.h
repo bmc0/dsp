@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -69,6 +69,8 @@
 #endif
 #endif
 
+#define DEBUG_PRINT_MIN_RISE_TIME 0
+
 struct envs {
 	double l, r, sum, diff;
 };
@@ -102,6 +104,9 @@ struct event_state {
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count;
 	ssize_t buf_len, buf_p;
+	#if DEBUG_PRINT_MIN_RISE_TIME
+		double max_ord_scale, max_diff_scale, fs;
+	#endif
 };
 
 struct event_config {
@@ -347,6 +352,10 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->pwr_env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
+	#if DEBUG_PRINT_MIN_RISE_TIME
+		ev->max_diff_scale = ev->max_ord_scale = 1.0;
+		ev->fs = DOWNSAMPLED_FS(istream->fs);
+	#endif
 }
 
 static void event_state_cleanup(struct event_state *ev)
@@ -355,6 +364,13 @@ static void event_state_cleanup(struct event_state *ev)
 	free(ev->env_buf);
 	free(ev->pwr_env_buf);
 	free(ev->adapt_buf);
+	#if DEBUG_PRINT_MIN_RISE_TIME
+		#define EWMA_CONST_TO_RT(x, fs) (-1.0/log(1.0-(x))/(fs)*1000.0*2.1972)
+		#define EWMA_RT_TO_CONST(x, fs) (1.0-exp(-1.0/((fs)*((x)/1000.0/2.1972))))
+		LOG_FMT(LL_VERBOSE, "%s(): minimum rise time: ord=%gms; diff=%gms", __func__,
+			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(ACCOM_TIME*2.0, ev->fs)*ev->max_ord_scale, ev->fs),
+			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(RISE_TIME_FAST*2.0, ev->fs)*ev->max_diff_scale, ev->fs));
+	#endif
 }
 
 static void drift_init(struct ewma_state drift[4], const struct stream_info *istream)
@@ -492,6 +508,9 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	const struct axes drift_last = { .lr = ewma_get_last(&drift[0]), .cs = ewma_get_last(&drift[1]) };
 	if (ev->hold) {
 		const double ds = drift_scale(&drift_last, &ev->dir, (ev->flags[0] & EVENT_FLAG_USE_ORD) ? &env_d : &adapt_d, DIFF_SENS_ERR, DIFF_SENS_LEVEL);
+		#if DEBUG_PRINT_MIN_RISE_TIME
+			ev->max_diff_scale = MAXIMUM(ev->max_diff_scale, ds);
+		#endif
 		ax_ev->lr = ax->lr = ewma_set(&drift[0], ewma_run_scale(&drift[2], ev->dir.lr, ds));
 		ax_ev->cs = ax->cs = ewma_set(&drift[1], ewma_run_scale(&drift[3], ev->dir.cs, ds));
 		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm <= EVENT_END_THRESH)
@@ -506,6 +525,9 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	}
 	else {
 		const double ds = drift_scale(&drift_last, &ord_d, &env_d, ORD_SENS_ERR, ORD_SENS_LEVEL);
+		#if DEBUG_PRINT_MIN_RISE_TIME
+			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds);
+		#endif
 		ax->lr = ewma_set(&drift[2], ewma_run_scale(&drift[0], ord.lr, ds));
 		ax->cs = ewma_set(&drift[3], ewma_run_scale(&drift[1], ord.cs, ds));
 		ax_ev->lr = ax_ev->cs = 0.0;

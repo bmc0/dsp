@@ -464,8 +464,6 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	free(state->fb_buf[0]);
 	free(state->fb_buf[1]);
 	free(state->bufs);
-	for (int i = 0; i < N_BANDS; ++i)
-		event_state_cleanup(&state->band[i].ev);
 	#ifndef LADSPA_FRONTEND
 		if (state->show_status) {
 			dsp_log_acquire();
@@ -474,6 +472,8 @@ void matrix4_mb_effect_destroy(struct effect *e)
 			dsp_log_release();
 		}
 	#endif
+	for (int i = 0; i < N_BANDS; ++i)
+		event_state_cleanup(&state->band[i].ev);
 	free(state);
 }
 #endif
