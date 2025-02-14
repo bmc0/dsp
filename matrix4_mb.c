@@ -95,6 +95,7 @@ struct matrix4_mb_state {
 	#else
 		double fl_boost, fr_boost;
 	#endif
+	struct smf_state dir_boost_smooth[2];
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 };
 
@@ -331,6 +332,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				fl_boost = 0.0;
 				fr_boost = 0.0;
 			}
+			fl_boost = smf_asym_run(&state->dir_boost_smooth[0], fl_boost);
+			fr_boost = smf_asym_run(&state->dir_boost_smooth[1], fr_boost);
 		#if DOWNSAMPLE_FACTOR > 1
 			cs_interp_insert(&state->fl_boost, fl_boost);
 			cs_interp_insert(&state->fr_boost, fr_boost);
@@ -518,6 +521,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		smooth_state_init(&state->band[k].sm, istream);
 		event_state_init(&state->band[k].ev, istream);
 	}
+	for (int i = 0; i < 2; ++i)
+		smf_asym_init(&state->dir_boost_smooth[i], DOWNSAMPLED_FS(istream->fs),
+			SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 
 #if DOWNSAMPLE_FACTOR > 1
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs) + CS_INTERP_DELAY_FRAMES;

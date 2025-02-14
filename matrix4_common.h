@@ -24,6 +24,7 @@
 #include <string.h>
 #include "effect.h"
 #include "ewma.h"
+#include "smf.h"
 #include "util.h"
 
 #define ENV_SMOOTH_TIME      30.0
@@ -44,6 +45,11 @@
 #define ORD_SENS_LEVEL       10.0
 #define DIFF_SENS_ERR        10.0
 #define DIFF_SENS_LEVEL       3.0
+
+/* note: implemented in matrix4{,_mb}.c */
+#define DIR_BOOST_RT0       100.0
+#define DIR_BOOST_SENS_RISE   0.1
+#define DIR_BOOST_SENS_FALL   0.002
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
