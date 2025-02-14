@@ -38,7 +38,6 @@ struct matrix4_state {
 	struct smooth_state sm;
 	struct event_state ev;
 	struct event_config evc;
-	struct ewma_state drift[4];
 	struct axes ax, ax_ev;
 	sample_t norm_mult, surr_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
@@ -73,7 +72,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		struct envs env, pwr_env;
 		calc_input_envs(&state->sm, s0_bp, s1_bp, &env, &pwr_env);
 
-		process_events(&state->ev, &state->evc, &env, &pwr_env, state->drift, &state->ax, &state->ax_ev);
+		process_events(&state->ev, &state->evc, &env, &pwr_env, &state->ax, &state->ax_ev);
 		norm_axes(&state->ax);
 
 		struct matrix_coefs m = {0};
@@ -237,7 +236,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	}
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream);
-	drift_init(state->drift, istream);
 
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));

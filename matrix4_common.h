@@ -98,6 +98,7 @@ struct event_state {
 		EVENT_FLAG_END = 1<<4,
 	} flags[2];
 	struct ewma_state accom[4], norm[2], slow[4], smooth[2], avg[4], mask[2];
+	struct ewma_state drift[4];
 	struct axes dir, *ord_buf;
 	struct envs *env_buf, *pwr_env_buf, *adapt_buf;
 	double ord_factor, adj;
@@ -346,6 +347,8 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->smooth[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SMOOTH_TIME));
 	for (int i = 0; i < 4; ++i) ewma_init(&ev->avg[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->mask[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME));
+	for (int i = 0; i < 2; ++i) ewma_init(&ev->drift[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
+	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(RISE_TIME_FAST*2.0));
 	ev->t_hold = -2;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, DOWNSAMPLED_FS(istream->fs));
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
@@ -371,12 +374,6 @@ static void event_state_cleanup(struct event_state *ev)
 			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(ACCOM_TIME*2.0, ev->fs)*ev->max_ord_scale, ev->fs),
 			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(RISE_TIME_FAST*2.0, ev->fs)*ev->max_diff_scale, ev->fs));
 	#endif
-}
-
-static void drift_init(struct ewma_state drift[4], const struct stream_info *istream)
-{
-	for (int i = 0; i < 2; ++i) ewma_init(&drift[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
-	for (int i = 2; i < 4; ++i) ewma_init(&drift[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(RISE_TIME_FAST*2.0));
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream)
@@ -419,7 +416,7 @@ static void calc_input_envs(struct smooth_state *sm, double l, double r, struct 
 	pwr_env->diff = ewma_run(&sm->pwr_env[3], diff*diff);
 }
 
-static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, struct ewma_state drift[4], struct axes *ax, struct axes *ax_ev)
+static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, struct axes *ax, struct axes *ax_ev)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
@@ -505,14 +502,14 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
 		}
 	}
-	const struct axes drift_last = { .lr = ewma_get_last(&drift[0]), .cs = ewma_get_last(&drift[1]) };
+	const struct axes drift_last = { .lr = ewma_get_last(&ev->drift[0]), .cs = ewma_get_last(&ev->drift[1]) };
 	if (ev->hold) {
 		const double ds = drift_scale(&drift_last, &ev->dir, (ev->flags[0] & EVENT_FLAG_USE_ORD) ? &env_d : &adapt_d, DIFF_SENS_ERR, DIFF_SENS_LEVEL);
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_diff_scale = MAXIMUM(ev->max_diff_scale, ds);
 		#endif
-		ax_ev->lr = ax->lr = ewma_set(&drift[0], ewma_run_scale(&drift[2], ev->dir.lr, ds));
-		ax_ev->cs = ax->cs = ewma_set(&drift[1], ewma_run_scale(&drift[3], ev->dir.cs, ds));
+		ax_ev->lr = ax->lr = ewma_set(&ev->drift[0], ewma_run_scale(&ev->drift[2], ev->dir.lr, ds));
+		ax_ev->cs = ax->cs = ewma_set(&ev->drift[1], ewma_run_scale(&ev->drift[3], ev->dir.cs, ds));
 		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm <= EVENT_END_THRESH)
 				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm <= EVENT_END_THRESH)) {
 			ev->flags[0] |= EVENT_FLAG_END;
@@ -528,8 +525,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds);
 		#endif
-		ax->lr = ewma_set(&drift[2], ewma_run_scale(&drift[0], ord.lr, ds));
-		ax->cs = ewma_set(&drift[3], ewma_run_scale(&drift[1], ord.cs, ds));
+		ax->lr = ewma_set(&ev->drift[2], ewma_run_scale(&ev->drift[0], ord.lr, ds));
+		ax->cs = ewma_set(&ev->drift[3], ewma_run_scale(&ev->drift[1], ord.cs, ds));
 		ax_ev->lr = ax_ev->cs = 0.0;
 	}
 	++ev->t;

@@ -73,7 +73,6 @@ struct filter_bank {
 struct matrix4_band {
 	struct smooth_state sm;
 	struct event_state ev;
-	struct ewma_state drift[4];
 	struct axes ax, ax_ev;
 	double fl_boost, fr_boost;
 	#if DOWNSAMPLE_FACTOR > 1
@@ -294,7 +293,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			if (state->s == 0) {
 			#endif
 				const struct envs pwr_env_d = band->ev.pwr_env_buf[band->ev.buf_p];
-				process_events(&band->ev, &state->evc, &env, &pwr_env, band->drift, &band->ax, &band->ax_ev);
+				process_events(&band->ev, &state->evc, &env, &pwr_env, &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
 				struct matrix_coefs m = {0};
@@ -518,7 +517,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	for (int k = 0; k < N_BANDS; ++k) {
 		smooth_state_init(&state->band[k].sm, istream);
 		event_state_init(&state->band[k].ev, istream);
-		drift_init(state->band[k].drift, istream);
 	}
 
 #if DOWNSAMPLE_FACTOR > 1
