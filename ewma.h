@@ -22,7 +22,7 @@
 #include <math.h>
 
 struct ewma_state {
-	double c0, c1, m0;
+	double g0, m0;
 };
 
 #define EWMA_RISE_TIME(x) ((x)/1000.0/2.1972)  /* 10%-90% rise time in ms */
@@ -30,26 +30,23 @@ struct ewma_state {
 /* note: tc is the time constant in seconds */
 static inline void ewma_init(struct ewma_state *state, double fs, double tc)
 {
-	const double a = 1.0-exp(-1.0/(fs*tc));
-	state->c0 = a;
-	state->c1 = 1.0-a;
+	state->g0 = 1.0-exp(-1.0/(fs*tc));
 	state->m0 = 0.0;
 }
 
 static inline double ewma_run(struct ewma_state *state, double s)
 {
-	const double r = state->c0*s + state->c1*state->m0;
-	state->m0 = r;
-	return r;
+	state->m0 = state->g0*(s - state->m0) + state->m0;
+	return state->m0;
 }
 
 /* note: sf > 1.0 means a faster rise time */
 static inline double ewma_run_scale(struct ewma_state *state, double s, double sf)
 {
-	const double c = (state->c0*sf > 0.39) ? 0.39 : state->c0*sf;
-	const double r = c*s + (1.0-c)*state->m0;
-	state->m0 = r;
-	return r;
+	double g = state->g0*sf;
+	if (g > 0.39) g = 0.39;
+	state->m0 = g*(s - state->m0) + state->m0;
+	return state->m0;
 }
 
 static inline double ewma_run_scale_asym(struct ewma_state *state, double s, double rise_sf, double fall_sf)
