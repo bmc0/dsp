@@ -30,17 +30,16 @@ struct smf_state {
 	double g0, m0, m1, c0, c1;
 };
 
-#define SMF_RISE_TIME(x) (0.349/((x)/1000.0))
+#define SMF_RISE_TIME(x) ((x)/1000.0/2.1972)  /* 10%-90% rise time in ms (one pole only) */
 
 static inline void smf_reset(struct smf_state *state)
 {
 	state->m0 = state->m1 = 0.0;
 }
 
-static inline void smf_asym_init(struct smf_state *state, double fs, double f0, double sens_rise, double sens_fall)
+static inline void smf_asym_init(struct smf_state *state, double fs, double tc, double sens_rise, double sens_fall)
 {
-	const double gc = tan(M_PI*(f0/fs));
-	state->g0 = 2.0*gc/(1.0+gc);
+	state->g0 = 1.0-exp(-1.0/(fs*tc));
 	state->c0 = sens_rise*4.0;
 	state->c1 = sens_fall*4.0;
 	smf_reset(state);
@@ -54,9 +53,9 @@ static inline void smf_init(struct smf_state *state, double fs, double f0, doubl
 static inline double smf_run_c(struct smf_state *state, double s, const double c)
 {
 	double g = state->g0 + c*fabs(state->m0 - state->m1);
-	if (g > 1.0) g = 1.0;
-	state->m0 = state->m0 + g*(s - state->m0);
-	state->m1 = state->m1 + g*(state->m0 - state->m1);
+	if (g > 0.39) g = 0.39;
+	state->m0 = g*(s - state->m0) + state->m0;
+	state->m1 = g*(state->m0 - state->m1) + state->m1;
 	return state->m1;
 }
 
