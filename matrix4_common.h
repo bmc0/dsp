@@ -489,6 +489,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 			ev->sample = 0;
 			ev->hold = 1;
 			ev->t_hold = ev->t;
+			ev->dir.lr = ewma_get_last(&ev->avg[2]);
+			ev->dir.cs = ewma_get_last(&ev->avg[3]);
 			if (fabs(ev->dir.lr)+fabs(ev->dir.cs) > M_PI_4*1.001) {
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
 				ev->dir.lr = ewma_get_last(&ev->avg[0]);
@@ -496,15 +498,11 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 				++ev->ord_count;
 				ev->ord_factor += 1.0;
 			}
-			else {
-				ev->dir.lr = ewma_get_last(&ev->avg[2]);
-				ev->dir.cs = ewma_get_last(&ev->avg[3]);
-				if (!(ev->flags[1] & EVENT_FLAG_FUSE))
-					++ev->diff_count;
-			}
+			else if (!(ev->flags[1] & EVENT_FLAG_FUSE))
+				++ev->diff_count;
 			ev->flags[0] = ev->flags[1];
-			/* LOG_FMT(LL_VERBOSE, "%s: event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
-					e->name, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff",
+			/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
+					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff",
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
 		}
 	}
