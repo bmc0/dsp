@@ -40,14 +40,14 @@ struct matrix4_state {
 	struct event_config evc;
 	struct axes ax, ax_ev;
 	sample_t norm_mult, surr_mult;
-	struct smf_state dir_boost_smooth[2];
+	struct smf_state dir_boost_smooth;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 };
 
 sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, oframes = 0;
-	double fl_boost = 0.0, fr_boost = 0.0;
+	double dir_boost = 0.0;
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 
 	for (i = 0; i < *frames; ++i) {
@@ -78,11 +78,10 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 		struct matrix_coefs m = {0};
 		calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
-		fl_boost = smf_asym_run(&state->dir_boost_smooth[0], m.fl_boost);
-		fr_boost = smf_asym_run(&state->dir_boost_smooth[1], m.fr_boost);
+		dir_boost = smf_asym_run(&state->dir_boost_smooth, m.dir_boost);
 
-		const double ll_m = norm_mult + fl_boost;
-		const double rr_m = norm_mult + fr_boost;
+		const double ll_m = norm_mult + dir_boost;
+		const double rr_m = norm_mult + dir_boost;
 		const double lr_m = 0.0, rl_m = 0.0;
 
 		const sample_t out_l = s0_d*ll_m + s1_d*lr_m;
@@ -125,9 +124,9 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		/* TODO: Implement a proper way for effects to show status lines. */
 		if (state->show_status) {
 			dsp_log_acquire();
-			dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: l:%05.3f r:%05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r\033[A",
+			dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r\033[A",
 				e->name, (state->disable) ? " [off]" : "", TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-				fl_boost, fr_boost, state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count);
+				dir_boost, state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count);
 			dsp_log_release();
 		}
 	#endif
@@ -237,9 +236,8 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	}
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream);
-	for (int i = 0; i < 2; ++i)
-		smf_asym_init(&state->dir_boost_smooth[i], istream->fs,
-			SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
+	smf_asym_init(&state->dir_boost_smooth, istream->fs,
+		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
