@@ -474,8 +474,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		if (ev->t - ev->t_hold > 1) {
 			ewma_set(&ev->avg[0], ord.lr);
 			ewma_set(&ev->avg[1], ord.cs);
-			ewma_set(&ev->avg[2], diff.lr);
-			ewma_set(&ev->avg[3], diff.cs);
+			ewma_set(&ev->avg[2], ord.lr);
+			ewma_set(&ev->avg[3], ord.cs);
 		}
 		else ev->flags[1] |= EVENT_FLAG_FUSE;
 	}
