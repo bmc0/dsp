@@ -40,22 +40,22 @@ static const double fb_freqs[]   = { 250, 500, 1000, 2000, 4000 };
 static const int    fb_ap_idx[]  = { 3, 4, 1, 0, 1, 4 };
 static const double fb_bp[2]     = { 125, 8000 };  /* Q=0.7071 */
 static const double fb_weights[] = { 0.16, 0.595, 1.21, 0.824, 1.27, 0.603 };
-#define PHASE_LIN_FILTER_LEN 15  /* milliseconds */
 #elif N_BANDS == 10
 static const double fb_freqs[]   = { 249.17, 437.24, 701.19, 1071, 1588.7, 2313.5, 3328, 4748, 6735.5 };
 static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 3, 2, 1, 0, 2, 3, 0, 3, 7, 8, 5, 8 };
 static const double fb_bp[2]     = { 120, 9500 };  /* Q=0.7071 */
 static const double fb_weights[] = { 0.154, 0.535, 1.02, 1.32, 0.82, 0.797, 1.35, 1.25, 0.585, 0.168 };
-#define PHASE_LIN_FILTER_LEN 16  /* milliseconds */
 #elif N_BANDS == 12
 static const double fb_freqs[]   = { 236.08, 381.19, 572.54, 824.55, 1156.3, 1592.9, 2167.4, 2923.5, 3918.3, 5227.4, 6950 };
 static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
 static const double fb_bp[2]     = { 140, 9200 };  /* Q=0.7071 */
 static const double fb_weights[] = { 0.158, 0.453, 0.849, 1.24, 1.26, 0.748, 0.759, 1.24, 1.41, 1.05, 0.451, 0.157 };
-#define PHASE_LIN_FILTER_LEN 18  /* milliseconds */
 #else
 #error "unsupported number of bands"
 #endif
+
+#define PHASE_LIN_MAX_LEN 30.0  /* maximum filter length in milliseconds */
+#define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
 
 #define DO_FILTER_BANK_TEST 0
 
@@ -533,27 +533,35 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 #ifdef HAVE_FFTW3
 	struct effect *e_fir = NULL;
-	const ssize_t phase_lin_frames = (config.do_phase_lin) ? TIME_TO_FRAMES(PHASE_LIN_FILTER_LEN, istream->fs) : 1;
+	ssize_t phase_lin_frames = 1;
 	if (config.do_phase_lin) {
-		sample_t *phase_lin_filter = calloc(phase_lin_frames, sizeof(sample_t));
-		filter_bank_run(&state->fb[1], 1.0);
-		for (int k = 0; k < N_BANDS; ++k)
-			phase_lin_filter[phase_lin_frames-1] += state->fb[1].s[k];
-		for (int i = phase_lin_frames-2; i >= 0; --i) {
-			filter_bank_run(&state->fb[1], 0.0);
+		phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
+		sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));
+		for (int i = phase_lin_frames-1; i >= 0; --i) {
+			filter_bank_run(&state->fb[1], (i == phase_lin_frames-1) ? 1.0 : 0.0);
 			for (int k = 0; k < N_BANDS; ++k)
-				phase_lin_filter[i] += state->fb[1].s[k];
+				filter[i] += state->fb[1].s[k];
 		}
+		int zx = 0;                      /* last zero crossing index */
+		double integ = fabs(filter[0]);  /* unsigned integral since last zero crossing */
+		for (int k = 1; integ < PHASE_LIN_THRESH; ++k) {
+			if (signbit(filter[k]) != signbit(filter[k-1])) {
+				zx = k;
+				integ = 0.0;
+			}
+			integ += fabs(filter[k]);
+		}
+		phase_lin_frames -= zx;
 	#if DO_FILTER_BANK_TEST
-		e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, phase_lin_filter, 1, phase_lin_frames, 0);
+		e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0);
 	#else
 		char *fir_channel_selector = NEW_SELECTOR(e->ostream.channels);
 		SET_BIT(fir_channel_selector, istream->channels);
 		SET_BIT(fir_channel_selector, istream->channels + 1);
-		e_fir = fir_effect_init_with_filter(ei, &e->ostream, fir_channel_selector, phase_lin_filter, 1, phase_lin_frames, 0);
+		e_fir = fir_effect_init_with_filter(ei, &e->ostream, fir_channel_selector, &filter[zx], 1, phase_lin_frames, 0);
 		free(fir_channel_selector);
 	#endif
-		free(phase_lin_filter);
+		free(filter);
 		state->fb[1] = state->fb[0];  /* reset */
 	}
 #else
