@@ -99,10 +99,21 @@ struct matrix4_mb_state {
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 };
 
-static void filter_bank_init(struct filter_bank *fb, double fs)
+static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank_type fb_type, double fb_stop)
 {
-	for (int i = 0; i < LENGTH(fb_freqs); ++i)
-		cap5_init_butterworth(&fb->f[i], fs, fb_freqs[i]);
+	for (int i = 0; i < LENGTH(fb_freqs); ++i) {
+		switch (fb_type) {
+		case FILTER_BANK_TYPE_BUTTERWORTH:
+			cap5_init_butterworth(&fb->f[i], fs, fb_freqs[i]);
+			break;
+		case FILTER_BANK_TYPE_CHEBYSHEV1:
+			cap5_init_chebyshev(&fb->f[i], fs, fb_freqs[i], 0, fb_stop);
+			break;
+		case FILTER_BANK_TYPE_CHEBYSHEV2:
+			cap5_init_chebyshev(&fb->f[i], fs, fb_freqs[i], 1, fb_stop);
+			break;
+		}
+	}
 	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
 		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
 	biquad_init_using_type(&fb->hp, BIQUAD_HIGHPASS, fs, fb_bp[0], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
@@ -528,7 +539,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 #endif
-	filter_bank_init(&state->fb[0], istream->fs);
+	filter_bank_init(&state->fb[0], istream->fs, config.fb_type, config.fb_stop);
 	state->fb[1] = state->fb[0];
 
 #ifdef HAVE_FFTW3

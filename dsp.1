@@ -244,6 +244,12 @@ filter bank. Has no effect with \fBmatrix4\fR. Requires the \fBfir\fR effect.
 .TP
 surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Surround output delay. Default is zero.
+.TP
+filter_type=\fIfilter\fR[:\fIstop_dB\fR] (\fBmatrix4_mb\fR only)
+Type of filter used for low pass sections of the filter bank. \fIfilter\fR
+may be \fIbutterworth\fR, \fIchebyshev1\fR, or \fIchebyshev2\fR (default).
+The optional \fIstop_dB\fR parameter sets the stopband attenuation in
+decibels for Chebyshev filters. The default is 25.
 .RE
 .TP
 \fBmatrix4_mb\fR [\fIoptions\fR] [\fIsurround_level\fR]

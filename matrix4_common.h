@@ -51,6 +51,9 @@
 #define DIR_BOOST_SENS_RISE   0.1
 #define DIR_BOOST_SENS_FALL   0.002
 
+#define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_CHEBYSHEV2
+#define FILTER_BANK_STOP_DEFAULT 25.0
+
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
 /* 1 = linear; 2 = quarter sine; 3 = half sine; 4 = double-exponential sigmoid */
@@ -121,11 +124,18 @@ struct event_config {
 	double ord_factor_c;
 };
 
+enum filter_bank_type {
+	FILTER_BANK_TYPE_BUTTERWORTH = 0,
+	FILTER_BANK_TYPE_CHEBYSHEV1,
+	FILTER_BANK_TYPE_CHEBYSHEV2,
+};
+
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
-	double surr_mult;
-	char show_status, do_dir_boost, enable_signal, do_phase_lin;
+	double surr_mult, fb_stop;
 	ssize_t surr_delay_frames;
+	char show_status, do_dir_boost, enable_signal, do_phase_lin;
+	enum filter_bank_type fb_type;
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
