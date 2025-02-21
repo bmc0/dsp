@@ -34,7 +34,8 @@ struct cap5_state {
 
 void ap3_reset(struct ap3_state *);
 void cap5_reset(struct cap5_state *);
-void cap5_init(struct cap5_state *, double, double);
+void cap5_init_butterworth(struct cap5_state *, double, double);
+void cap5_init_chebyshev(struct cap5_state *, double, double, int, double);
 
 static inline sample_t ap3_run(struct ap3_state *state, sample_t s)
 {

@@ -102,7 +102,7 @@ struct matrix4_mb_state {
 static void filter_bank_init(struct filter_bank *fb, double fs)
 {
 	for (int i = 0; i < LENGTH(fb_freqs); ++i)
-		cap5_init(&fb->f[i], fs, fb_freqs[i]);
+		cap5_init_butterworth(&fb->f[i], fs, fb_freqs[i]);
 	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
 		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
 	biquad_init_using_type(&fb->hp, BIQUAD_HIGHPASS, fs, fb_bp[0], 0.7071, 0, 0, BIQUAD_WIDTH_Q);

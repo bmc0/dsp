@@ -32,16 +32,11 @@ void cap5_reset(struct cap5_state *state)
 	ap3_reset(&state->a2);
 }
 
-/* doubly complementary 5th-order butterworth filters implemented as the
-   sum (lowpass) and difference (highpass) of two allpass sections */
-void cap5_init(struct cap5_state *state, double fs, double fc)
+static void cap5_init_common(struct cap5_state *state, double fs, double fc, double complex p[3])
 {
 	const double fc_w = 2.0*fs*tan(M_PI*fc/fs);  /* pre-warped corner frequency */
-	double complex p[3];  /* first two have a complex conjugate (not stored), third is real */
 
 	for (int i = 0; i < 3; ++i) {
-		const double theta = (2.0*(i+1)-1.0)*M_PI/10.0;
-		p[i] = -sin(theta) + cos(theta)*I;  /* normalized pole in s-plane */
 		p[i] = p[i]*fc_w;  /* scale */
 		p[i] = (2.0*fs + p[i]) / (2.0*fs - p[i]);  /* bilinear transform */
 		//LOG_FMT(LL_VERBOSE, "%s(): fc=%gHz: p[%d] = %f%+fi", __func__, fc, i, creal(p[i]), cimag(p[i]));
@@ -60,4 +55,32 @@ void cap5_init(struct cap5_state *state, double fs, double fc)
 	//LOG_FMT(LL_VERBOSE, "%s(): fc=%gHz: a2.ap1: c0=%g", __func__, fc, state->a2.ap1.c0);
 
 	cap5_reset(state);
+}
+
+void cap5_init_butterworth(struct cap5_state *state, double fs, double fc)
+{
+	double complex p[3];  /* first two have a complex conjugate (not stored), third is real */
+	for (int i = 0; i < 3; ++i) {
+		const double theta = (2.0*(i+1)-1.0)*M_PI/10.0;
+		p[i] = -sin(theta) + cos(theta)*I;  /* normalized pole in s-plane */
+	}
+	cap5_init_common(state, fs, fc, p);
+}
+
+void cap5_init_chebyshev(struct cap5_state *state, double fs, double fc, int lp_is_type2, double stop_dB)
+{
+	double complex p[3];
+	if (stop_dB > 100.0) {
+		cap5_init_butterworth(state, fs, fc);
+		return;
+	}
+	const double epsilon = sqrt(pow(10.0, stop_dB/10.0) - 1.0);
+	const double sigma = asinh(epsilon)/5.0;
+	for (int i = 0; i < 3; ++i) {
+		const double theta = (2.0*(i+1)-1.0)*M_PI/10.0;
+		p[i] = -sinh(sigma)*sin(theta) + cosh(sigma)*cos(theta)*I;  /* normalized pole in s-plane */
+		p[i] = p[i] / cosh(acosh(epsilon)/5.0);  /* scale so H(1) = sqrt(0.5) */
+		if (lp_is_type2) p[i] = 1.0/p[i];
+	}
+	cap5_init_common(state, fs, fc, p);
 }
