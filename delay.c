@@ -266,7 +266,7 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 		if (cs->has_frac) {
 			if (state->fd_ap_n > 1) {
 				if ((cs->fd_ap.nth = thiran_ap_new(fd_ap_n, fabs(samples_frac))) == NULL) {
-					LOG_FMT(LL_ERROR, "%s: error: thiran_ap_init() failed", argv[0]);
+					LOG_FMT(LL_ERROR, "%s: error: thiran_ap_new() failed", argv[0]);
 					delay_effect_destroy(e);
 					free(e);
 					return NULL;
