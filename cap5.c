@@ -61,7 +61,7 @@ void cap5_init_butterworth(struct cap5_state *state, double fs, double fc)
 {
 	double complex p[3];  /* first two have a complex conjugate (not stored), third is real */
 	for (int i = 0; i < 3; ++i) {
-		const double theta = (2.0*(i+1)-1.0)*M_PI/10.0;
+		const double theta = (2*i+1)*M_PI/10.0;
 		p[i] = -sin(theta) + cos(theta)*I;  /* normalized pole in s-plane */
 	}
 	cap5_init_common(state, fs, fc, p);
@@ -77,7 +77,7 @@ void cap5_init_chebyshev(struct cap5_state *state, double fs, double fc, int lp_
 	const double epsilon = sqrt(pow(10.0, stop_dB/10.0) - 1.0);
 	const double sigma = asinh(epsilon)/5.0;
 	for (int i = 0; i < 3; ++i) {
-		const double theta = (2.0*(i+1)-1.0)*M_PI/10.0;
+		const double theta = (2*i+1)*M_PI/10.0;
 		p[i] = -sinh(sigma)*sin(theta) + cosh(sigma)*cos(theta)*I;  /* normalized pole in s-plane */
 		p[i] = p[i] / cosh(acosh(epsilon)/5.0);  /* scale so H(1) = sqrt(0.5) */
 		if (lp_is_type2) p[i] = 1.0/p[i];
