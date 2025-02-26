@@ -77,12 +77,25 @@ static int is_opt(const char *opt, const char *name)
 	return (strcmp(opt, name) == 0);
 }
 
+static void set_fb_stop_default(struct matrix4_config *config)
+{
+	switch (config->fb_type) {
+	case FILTER_BANK_TYPE_BUTTERWORTH:
+		config->fb_stop = 0.0;  break;  /* not used */
+	case FILTER_BANK_TYPE_CHEBYSHEV1:
+	case FILTER_BANK_TYPE_CHEBYSHEV2:
+		config->fb_stop = 25.0; break;
+	case FILTER_BANK_TYPE_ELLIPTIC:
+		config->fb_stop = 0.0;  break;  /* not used */
+	}
+}
+
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
 	config->do_dir_boost = 1;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
-	config->fb_stop = FILTER_BANK_STOP_DEFAULT;
+	set_fb_stop_default(config);
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
 		char *opt = opt_str, *next_opt, *endptr;
@@ -103,27 +116,33 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;
 				char *opt_subarg = isolate(opt_arg, ':');
-				config->fb_stop = FILTER_BANK_STOP_DEFAULT;
 				if (strcmp(opt_arg, "butterworth") == 0)
 					config->fb_type = FILTER_BANK_TYPE_BUTTERWORTH;
 				else if (strcmp(opt_arg, "chebyshev1") == 0)
 					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV1;
 				else if (strcmp(opt_arg, "chebyshev2") == 0)
 					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV2;
+				else if (strcmp(opt_arg, "elliptic") == 0)
+					config->fb_type = FILTER_BANK_TYPE_ELLIPTIC;
 				else {
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", argv[0], opt_arg);
 					goto fail;
 				}
+				set_fb_stop_default(config);
 				if (*opt_subarg != '\0') {
-					if (config->fb_type != FILTER_BANK_TYPE_BUTTERWORTH) {
+					switch (config->fb_type) {
+					case FILTER_BANK_TYPE_CHEBYSHEV1:
+					case FILTER_BANK_TYPE_CHEBYSHEV2:
 						config->fb_stop = strtod(opt_subarg, &endptr);
 						CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
 						if (config->fb_stop < 10.0) {
 							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
 							goto fail;
 						}
+						break;
+					default:
+						LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg);
 					}
-					else LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg);
 				}
 			}
 			else {

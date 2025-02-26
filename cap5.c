@@ -56,6 +56,14 @@ void cap5_chebyshev_ap(int gen_type2, double stop_dB, double complex ap[3])
 	}
 }
 
+void cap5_elliptic_ap(double complex ap[3])
+{
+	/* 35dB stopband attenuation for low pass; 45dB for high pass */
+	ap[0] = -0.185287191997037 + 0.990129317340409*I;
+	ap[1] = -0.686015538373767 + 0.810354587786414*I;
+	ap[2] = -1.118174003343493;
+}
+
 void cap5_init(struct cap5_state *state, double fs, double fc, const double complex ap[3])
 {
 	const double fc_w = 2.0*fs*tan(M_PI*fc/fs);  /* pre-warped corner frequency */

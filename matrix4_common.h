@@ -52,7 +52,6 @@
 #define DIR_BOOST_SENS_FALL   0.002
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_CHEBYSHEV2
-#define FILTER_BANK_STOP_DEFAULT 25.0
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
@@ -128,6 +127,7 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_BUTTERWORTH = 0,
 	FILTER_BANK_TYPE_CHEBYSHEV1,
 	FILTER_BANK_TYPE_CHEBYSHEV2,
+	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
 struct matrix4_config {

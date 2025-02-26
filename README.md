@@ -250,9 +250,9 @@ Example:
 		Surround output delay. Default is zero.
 	* `filter_type=filter[:stop_dB]` (`matrix4_mb` only)  
 		Type of filter used for low pass sections of the filter bank. `filter`
-		may be `butterworth`, `chebyshev1`, or `chebyshev2` (default).
-		The optional `stop_dB` parameter sets the stopband attenuation in
-		decibels for Chebyshev filters. The default is 25.
+		may be `butterworth`, `chebyshev1`, `chebyshev2` (default), or
+		`elliptic`. The optional `stop_dB` parameter sets the stopband
+		attenuation in decibels for Chebyshev filters. The default is 25.
 
 * `matrix4_mb [options] [surround_level]`  
 	Like the `matrix4` effect, but divides the input into ten individually

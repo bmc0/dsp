@@ -112,6 +112,9 @@ static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank
 	case FILTER_BANK_TYPE_CHEBYSHEV2:
 		cap5_chebyshev_ap(1, fb_stop, ap);
 		break;
+	case FILTER_BANK_TYPE_ELLIPTIC:
+		cap5_elliptic_ap(ap);
+		break;
 	}
 	for (int i = 0; i < LENGTH(fb_freqs); ++i)
 		cap5_init(&fb->f[i], fs, fb_freqs[i], ap);
