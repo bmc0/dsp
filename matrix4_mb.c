@@ -101,19 +101,20 @@ struct matrix4_mb_state {
 
 static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank_type fb_type, double fb_stop)
 {
-	for (int i = 0; i < LENGTH(fb_freqs); ++i) {
-		switch (fb_type) {
-		case FILTER_BANK_TYPE_BUTTERWORTH:
-			cap5_init_butterworth(&fb->f[i], fs, fb_freqs[i]);
-			break;
-		case FILTER_BANK_TYPE_CHEBYSHEV1:
-			cap5_init_chebyshev(&fb->f[i], fs, fb_freqs[i], 0, fb_stop);
-			break;
-		case FILTER_BANK_TYPE_CHEBYSHEV2:
-			cap5_init_chebyshev(&fb->f[i], fs, fb_freqs[i], 1, fb_stop);
-			break;
-		}
+	double complex ap[3];
+	switch (fb_type) {
+	case FILTER_BANK_TYPE_BUTTERWORTH:
+		cap5_butterworth_ap(ap);
+		break;
+	case FILTER_BANK_TYPE_CHEBYSHEV1:
+		cap5_chebyshev_ap(0, fb_stop, ap);
+		break;
+	case FILTER_BANK_TYPE_CHEBYSHEV2:
+		cap5_chebyshev_ap(1, fb_stop, ap);
+		break;
 	}
+	for (int i = 0; i < LENGTH(fb_freqs); ++i)
+		cap5_init(&fb->f[i], fs, fb_freqs[i], ap);
 	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
 		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
 	biquad_init_using_type(&fb->hp, BIQUAD_HIGHPASS, fs, fb_bp[0], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
