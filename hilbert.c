@@ -31,11 +31,19 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	struct effect *e;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int conv = 0, opt;
+	double angle = -M_PI_2;
 
-	while ((opt = dsp_getopt(&g, argc-1, argv, "pz")) != -1) {
+	while ((opt = dsp_getopt(&g, argc-1, argv, "pza:")) != -1) {
 		switch (opt) {
 		case 'p': conv = 1; break;
 		case 'z': conv = 2; break;
+		case 'a':
+			angle = strtod(g.arg, &endptr)/180.0*M_PI;
+			CHECK_ENDPTR(g.arg, endptr, "angle", return NULL);
+			break;
+		case ':':
+			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
+			return NULL;
 		default: goto print_usage;
 		}
 	}
@@ -55,12 +63,15 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 		return NULL;
 	}
 	sample_t *h = calloc(taps, sizeof(sample_t));
+	const double w_h = sin(-angle), w_d = cos(-angle);
 	for (ssize_t i = 0, k = -taps / 2; i < taps; ++i, ++k) {
-		if (k%2 == 0)
+		if (k == 0)
+			h[i] = w_d;
+		else if (k%2 == 0)
 			h[i] = 0;
 		else {
 			double x = 2.0*M_PI*i/(taps-1);
-			h[i] = 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
+			h[i] = w_h * 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
 		}
 	}
 	if (conv == 1)

@@ -218,7 +218,7 @@ shelving filters to the surround outputs is recommended:
 The settings shown above (\-6dB surround level, 15ms delay, and 10kHz
 rolloff) are a good starting point, but may be adjusted to taste. The
 default \fIsurround_level\fR is \-6dB. Applying the \fBdecorrelate\fR effect to the
-surround outputs (optionally with the \fI\-m\fR flag) seems to further improve
+surround outputs (optionally with the \fB\-m\fR flag) seems to further improve
 the spatial impression (note: adjust `surround_delay' to compensate for
 the \fBdecorrelate\fR effect's group delay).
 .sp 0.5
@@ -278,14 +278,14 @@ Convert stereo to mid/side.
 \fBms2st\fR
 Convert mid/side to stereo.
 .TP
-\fBdelay\fR [\fI\-f\fR [\fIorder\fR]] \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+\fBdelay\fR [\fB\-f\fR [\fIorder\fR]] \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 `\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples. If
 \fIdelay\fR is negative, a positive delay is applied to all channels which are
 \fBnot\fR selected (except when plotting\(eman actual negative delay is
 possible in that case).
 .sp 0.5
-By default, the delay is rounded to whole samples. The \fI\-f\fR option enables
+By default, the delay is rounded to whole samples. The \fB\-f\fR option enables
 fractional delay using Thiran allpass interpolation. The \fIorder\fR argument
 sets the allpass filter order and may be any integer from 1 through 50. The
 default value is 5.
@@ -342,16 +342,17 @@ values are filled with zeros.
 .sp 0.5
 See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
-\fBhilbert\fR [\fI\-pz\fR] \fItaps\fR
+\fBhilbert\fR [\fB\-pz\fR] [\fB-a\fR \fIangle\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be
-odd. Bandwidth is controlled by the number of taps. If \fI\-p\fR is given, the
+odd. Bandwidth is controlled by the number of taps. If \fB\-p\fR is given, the
 \fBfir_p\fR convolution engine is used instead of the default \fBfir\fR engine.
-Similarly, if \fI\-z\fR is given, \fBzita_convolver\fR is used (if available).
+Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available).
+The \fB\-a\fR option sets the phase shift in degrees. The default is -90°.
 .TP
-\fBdecorrelate\fR [\fI\-m\fR] [\fIstages\fR]
+\fBdecorrelate\fR [\fB\-m\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder
 Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
-If \fI\-m\fR is given, the same filter parameters are used for all input
+If \fB\-m\fR is given, the same filter parameters are used for all input
 channels. The default number of stages is 5, which results in an
 average group delay of about 9.5ms at high frequencies.
 .TP
@@ -417,7 +418,7 @@ Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 length (s) for each channel. If \fIref_level\fR is given, peak and RMS levels
 relative to \fIref_level\fR will be shown as well (dBr).
 .TP
-\fBwatch\fR [\fI\-e\fR] [~/]\fIpath\fR
+\fBwatch\fR [\fB\-e\fR] [~/]\fIpath\fR
 Load effects from a file into a sub-chain and reload if the file is
 modified. Other than the automatic reload, the behavior is similar to
 sourcing a file using the `@' directive (see ``Effects Files''). Some
@@ -439,7 +440,7 @@ Currently, this effect polls for file modifications once per second.
 Support `inotify` events my be added in the future. Ideally, file
 modifications should be atomic (i.e. by writing to a temporary file, then
 \fIrename\fR(3)-ing it over top of the original file). If this is not possible,
-the \fI\-e\fR flag may be given, which enforces an end-of-file marker in order
+the \fB\-e\fR flag may be given, which enforces an end-of-file marker in order
 to detect partially-written files. This marker, `#EOF#', must be placed at
 the beginning of a line and may only be followed by whitespace characters.
 .SS Selector syntax
