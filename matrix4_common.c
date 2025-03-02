@@ -81,12 +81,18 @@ static void set_fb_stop_default(struct matrix4_config *config)
 {
 	switch (config->fb_type) {
 	case FILTER_BANK_TYPE_BUTTERWORTH:
-		config->fb_stop = 0.0;  break;  /* not used */
+		config->fb_stop[0] = 0.0;
+		config->fb_stop[1] = 0.0;
+		break;
 	case FILTER_BANK_TYPE_CHEBYSHEV1:
 	case FILTER_BANK_TYPE_CHEBYSHEV2:
-		config->fb_stop = 25.0; break;
+		config->fb_stop[0] = 25.0;
+		config->fb_stop[1] = 0.0;
+		break;
 	case FILTER_BANK_TYPE_ELLIPTIC:
-		config->fb_stop = 0.0;  break;  /* not used */
+		config->fb_stop[0] = 35.0;
+		config->fb_stop[1] = 50.0;
+		break;
 	}
 }
 
@@ -130,13 +136,29 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				}
 				set_fb_stop_default(config);
 				if (*opt_subarg != '\0') {
+					char *opt_subarg1 = isolate(opt_subarg, ':');
 					switch (config->fb_type) {
 					case FILTER_BANK_TYPE_CHEBYSHEV1:
 					case FILTER_BANK_TYPE_CHEBYSHEV2:
-						config->fb_stop = strtod(opt_subarg, &endptr);
+						config->fb_stop[0] = strtod(opt_subarg, &endptr);
 						CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
-						if (config->fb_stop < 10.0) {
+						if (config->fb_stop[0] < 10.0) {
 							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
+							goto fail;
+						}
+						if (*opt_subarg1 != '\0')
+							LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg1);
+						break;
+					case FILTER_BANK_TYPE_ELLIPTIC:
+						config->fb_stop[0] = strtod(opt_subarg, &endptr);
+						CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
+						if (*opt_subarg1 != '\0') {
+							config->fb_stop[1] = strtod(opt_subarg1, &endptr);
+							CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
+						}
+						else config->fb_stop[1] = config->fb_stop[0];
+						if (config->fb_stop[0] < 20.0 || config->fb_stop[1] < 20.0) {
+							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 20dB", argv[0], opt_arg);
 							goto fail;
 						}
 						break;

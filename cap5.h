@@ -37,7 +37,7 @@ void ap3_reset(struct ap3_state *);
 void cap5_reset(struct cap5_state *);
 void cap5_butterworth_ap(double complex [3]);
 void cap5_chebyshev_ap(int, double, double complex [3]);
-void cap5_elliptic_ap(double complex [3]);
+void cap5_elliptic_ap(double, double, double complex [3]);
 void cap5_init(struct cap5_state *, double, double, const double complex [3]);
 
 static inline sample_t ap3_run(struct ap3_state *state, sample_t s)

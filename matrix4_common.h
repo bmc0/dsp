@@ -132,7 +132,7 @@ enum filter_bank_type {
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
-	double surr_mult, fb_stop;
+	double surr_mult, fb_stop[2];
 	ssize_t surr_delay_frames;
 	char show_status, do_dir_boost, enable_signal, do_phase_lin;
 	enum filter_bank_type fb_type;
