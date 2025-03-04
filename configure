@@ -18,7 +18,7 @@ Options:
   --disable-zita-convolver
   --disable-alsa
   --disable-ao
-  --disable-mad
+  --enable-mad
   --disable-pulse
   --disable-ladspa_dsp
   --disable-ladspa-host
@@ -37,6 +37,14 @@ for i in "$@"; do
 	esac
 done
 
+unset CONFIG_DISABLE_DSP CONFIG_DISABLE_SNDFILE CONFIG_DISABLE_FFMPEG
+unset CONFIG_DISABLE_FFTW3 CONFIG_DISABLE_ZITA_CONVOLVER CONFIG_DISABLE_ALSA
+unset CONFIG_DISABLE_AO CONFIG_DISABLE_MAD CONFIG_DISABLE_PULSE
+unset CONFIG_DISABLE_LADSPA_DSP CONFIG_DISABLE_LADSPA_HOST CONFIG_DEBUG_BUILD
+
+# Disable libmad by default since libsndfile has mpeg audio support now.
+CONFIG_DISABLE_MAD=y
+
 [ "$NO_CONFIG" != "y" -a -f ./.config ] && . ./.config
 
 for i in "$@"; do
@@ -49,6 +57,7 @@ for i in "$@"; do
 		--disable-alsa)           CONFIG_DISABLE_ALSA=y ;;
 		--disable-ao)             CONFIG_DISABLE_AO=y ;;
 		--disable-mad)            CONFIG_DISABLE_MAD=y ;;
+		--enable-mad)             unset CONFIG_DISABLE_MAD ;;
 		--disable-pulse)          CONFIG_DISABLE_PULSE=y ;;
 		--disable-ladspa_dsp)     CONFIG_DISABLE_LADSPA_DSP=y ;;
 		--disable-ladspa-host)    CONFIG_DISABLE_LADSPA_HOST=y ;;
