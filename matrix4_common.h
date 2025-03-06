@@ -51,7 +51,7 @@
 #define DIR_BOOST_SENS_RISE   0.1
 #define DIR_BOOST_SENS_FALL   0.002
 
-#define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_CHEBYSHEV2
+#define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
