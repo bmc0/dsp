@@ -186,15 +186,15 @@ Example:
 	Second-order lowshelf filter.
 * `highshelf f0[k] width[q|s|d|o|h|k] gain`  
 	Second-order highshelf filter.
-* `lowpass_transform fz[k] qz fp[k] qp`  
+* `lowpass_transform fz[k] width_z[q] fp[k] width_p[q]`  
 	Second-order lowpass transformation filter. Cancels the poles defined by
-	`fz` and `qz` and replaces them with new poles defined by `fp` and `qp`.
-	Gain is unity at DC.
-* `highpass_transform fz[k] qz fp[k] qp`  
+	`fz` and `width_z` and replaces them with new poles defined by `fp` and
+	`width_p`. Gain is unity at DC.
+* `highpass_transform fz[k] width_z[q] fp[k] width_p[q]`  
 	Second-order highpass transformation filter. Also known as a Linkwitz
 	transform (see http://www.linkwitzlab.com/filters.htm#9). Same as
 	`lowpass_transform` except the gain is unity at Fs/2.
-* `linkwitz_transform fz[k] qz fp[k] qp`  
+* `linkwitz_transform fz[k] width_z[q] fp[k] width_p[q]`  
 	Alias for `highpass_transform`.
 * `deemph`  
 	Compact Disc de-emphasis filter.
@@ -425,7 +425,9 @@ Example    | Description
 **Note:** There is no difference between `1,3` and `3,1`. Order is not
 preserved.
 
-#### Filter width suffixes
+#### Filter width
+
+The following suffixes are supported:
 
 Suffix | Description
 ------ | ------------------------------
@@ -438,6 +440,18 @@ Suffix | Description
 
 **Note:** The `d` width suffix also changes the definition of `f0` from center
 frequency to corner frequency (like Room EQ Wizard and the Behringer DCX2496).
+
+Additionally, a macro is provided for constructing arbitrary-order Butterworth
+filters from cascaded second-order sections: `bw<order>[.n]`, where `<order>` is
+the filter order and `n` is an index corresponding to a particular pair of
+poles. The Q-factors are always in ascending order. For example,
+
+	lowpass 1k bw6.0 lowpass 1k bw6.1 lowpass 1k bw6.2
+
+creates a 6th-order Butterworth lowpass filter. Odd-order filters require an
+additional first-order section:
+
+	lowpass_1 1k lowpass 1k bw5.0 lowpass 1k bw5.1
 
 #### File paths
 

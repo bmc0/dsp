@@ -25,34 +25,65 @@
 
 static double parse_width(const char *s, int *type, char **endptr)
 {
-	double w = strtod(s, endptr);
-	if (*endptr != NULL && *endptr != s) {
-		switch(**endptr) {
-		case 'q':
-			*type = BIQUAD_WIDTH_Q;
-			++(*endptr);
-			break;
-		case 's':
-			*type = BIQUAD_WIDTH_SLOPE;
-			++(*endptr);
-			break;
-		case 'd':
-			*type = BIQUAD_WIDTH_SLOPE_DB;
-			++(*endptr);
-			break;
-		case 'o':
-			*type = BIQUAD_WIDTH_BW_OCT;
-			++(*endptr);
-			break;
-		case 'k':
-			w *= 1000.0;
-		case 'h':
-			*type = BIQUAD_WIDTH_BW_HZ;
-			++(*endptr);
-			break;
+	*type = BIQUAD_WIDTH_Q;
+	double w = M_SQRT1_2;
+	if (s[0] == 'b' && s[1] == 'w' && s[2] != '\0') {
+		const char *s_ptr = s + 2;
+		const int order = strtol(s_ptr, endptr, 10);
+		if (*endptr == s_ptr || (**endptr != '\0' && **endptr != '.'))
+			goto fail;  /* failed to parse order */
+		if (order < 2) {
+			LOG_FMT(LL_ERROR, "%s(): filter order must be >= 2", __func__);
+			goto fail;
 		}
-		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+		const int n_biquads = order / 2;
+		int p_idx = 0;
+		if (**endptr == '.') {
+			s_ptr = *endptr + 1;
+			p_idx = strtol(s_ptr, endptr, 10);
+			if (*endptr == s_ptr || **endptr != '\0')
+				goto fail;  /* failed to parse index */
+			if (p_idx < 0 || p_idx >= n_biquads) {
+				LOG_FMT(LL_ERROR, "%s(): filter index out of range", __func__);
+				goto fail;
+			}
+		}
+		p_idx = n_biquads - p_idx;  /* index from outermost conjugate pair */
+		w = 1.0/(2.0*sin(M_PI/order*(p_idx-0.5)));
 	}
+	else {
+		w = strtod(s, endptr);
+		if (*endptr != s) {
+			switch(**endptr) {
+			case 'q':
+				*type = BIQUAD_WIDTH_Q;
+				++(*endptr);
+				break;
+			case 's':
+				*type = BIQUAD_WIDTH_SLOPE;
+				++(*endptr);
+				break;
+			case 'd':
+				*type = BIQUAD_WIDTH_SLOPE_DB;
+				++(*endptr);
+				break;
+			case 'o':
+				*type = BIQUAD_WIDTH_BW_OCT;
+				++(*endptr);
+				break;
+			case 'k':
+				w *= 1000.0;
+			case 'h':
+				*type = BIQUAD_WIDTH_BW_HZ;
+				++(*endptr);
+				break;
+			}
+			if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+		}
+	}
+	return w;
+	fail:
+	*endptr = (char *) s;
 	return w;
 }
 
@@ -427,11 +458,11 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	case BIQUAD_HIGHPASS_TRANSFORM:
 		INIT_COMMON(4, ei->effect_number);
 		GET_FREQ_ARG(arg0, argv[1], "fz");
-		GET_ARG(arg1, argv[2], "qz");
-		CHECK_RANGE(arg1 > 0.0, "qz", return NULL);
+		GET_WIDTH_ARG(arg1, argv[2], "width_z");
+		CHECK_WIDTH_TYPE(width_type == BIQUAD_WIDTH_Q);
 		GET_FREQ_ARG(arg2, argv[3], "fp");
-		GET_ARG(arg3, argv[4], "qp");
-		CHECK_RANGE(arg3 > 0.0, "qp", return NULL);
+		GET_WIDTH_ARG(arg3, argv[4], "width_p");
+		CHECK_WIDTH_TYPE(width_type == BIQUAD_WIDTH_Q);
 		break;
 	case BIQUAD_DEEMPH:
 		INIT_COMMON(0, BIQUAD_HIGHSHELF);
