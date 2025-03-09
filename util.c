@@ -317,30 +317,63 @@ char * get_file_contents(const char *path)
 	return NULL;
 }
 
-char * construct_full_path(const char *dir, const char *path)
+char * construct_full_path(const char *dir, const char *path, const struct stream_info *stream)
 {
-	int i;
-	char *env, *p;
+	int pos = 0, len = strlen(path) + 16 + 1;
+	char *fp = NULL;
 	if (path[0] != '\0' && path[0] == '~' && path[1] == '/') {
-		env = getenv("HOME");
+		char *env = getenv("HOME");
+		path += 1;
 		if (env) {
-			i = strlen(env) + strlen(&path[1]) + 1;
-			p = calloc(i, sizeof(char));
-			snprintf(p, i, "%s%s", env, &path[1]);
+			len += strlen(env);
+			fp = calloc(len, sizeof(char));
+			pos = snprintf(fp, len, "%s", env);
 		}
-		else {
-			LOG_FMT(LL_ERROR, "%s(): warning: $HOME is unset", __func__);
-			p = strdup(&path[1]);
+		else LOG_FMT(LL_ERROR, "%s(): warning: $HOME is unset", __func__);
+	}
+	else if (dir != NULL && path[0] != '/') {
+		len += strlen(dir) + 1;
+		fp = calloc(len, sizeof(char));
+		pos = snprintf(fp, len, "%s/", dir);
+	}
+	if (fp == NULL)
+		fp = calloc(len, sizeof(char));
+	while (*path != '\0') {
+		int w = 1, has_subst = (path[0] == '%' && path[1] != '\0');
+		if (has_subst) {
+			++path;
+			write_subst:
+			switch (*path) {
+			case 'r':
+				w = snprintf(fp+pos, len-pos, "%d", stream->fs);
+				break;
+			case 'k':
+				w = snprintf(fp+pos, len-pos, "%.10g", stream->fs/1000.0);
+				break;
+			case 'c':
+				w = snprintf(fp+pos, len-pos, "%d", stream->channels);
+				break;
+			case '%':
+				if (pos+1 < len) fp[pos] = '%';
+				break;
+			default:
+				--path;
+				has_subst = 0;
+				if (pos+1 < len) fp[pos] = '%';
+			}
 		}
+		else if (pos+1 < len) fp[pos] = *path;
+		if (pos+w >= len) {
+			while (len <= pos+w) len += 32;
+			fp = realloc(fp, len);
+			if (has_subst) goto write_subst;
+			else fp[pos] = *path;
+		}
+		pos += w;
+		++path;
 	}
-	else if (dir == NULL || path[0] == '/')
-		p = strdup(path);
-	else {
-		i = strlen(dir) + 1 + strlen(path) + 1;
-		p = calloc(i, sizeof(char));
-		snprintf(p, i, "%s/%s", dir, path);
-	}
-	return p;
+	fp[pos] = '\0';
+	return fp;
 }
 
 char * isolate(char *s, char c)

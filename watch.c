@@ -263,7 +263,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	}
 
 	struct stream_info stream = *istream;
-	char *path = construct_full_path(dir, argv[g.ind]);
+	char *path = construct_full_path(dir, argv[g.ind], istream);
 	if (build_effects_chain_from_file(path, &chain, &stream, channel_selector, NULL, enforce_eof_marker))
 		goto open_fail;
 	if (stat(path, &sb) < 0) {

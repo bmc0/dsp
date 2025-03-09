@@ -71,7 +71,7 @@ void print_selector(const char *, int);
 int num_bits_set(const char *, int);
 int gen_argv_from_string(const char *, int *, char ***);
 char * get_file_contents(const char *);
-char * construct_full_path(const char *, const char *);
+char * construct_full_path(const char *, const char *, const struct stream_info *);
 char * isolate(char *, char);
 int dsp_getopt(struct dsp_getopt_state *, int, const char *const *, const char *);
 #ifdef HAVE_FFTW3

@@ -373,7 +373,7 @@ Example:
 	[2] R. A. Wannamaker, "Psychoacoustically Optimal Noise Shaping,"
 	J. AES, vol. 40, no. 7/8, July 1992
 
-* `ladspa_host module_path plugin_label [control ...]`  
+* `ladspa_host [~/]module_path plugin_label [control ...]`  
 	Apply a LADSPA plugin. Supports any number of input/output ports (with
 	the exception of zero output ports). If a plugin has one or zero input
 	ports, it will be instantiated multiple times to handle multi-channel
@@ -457,7 +457,15 @@ additional first-order section:
 
 On the command line, relative paths are relative to `$PWD`. Within an effects
 file, relative paths are relative to the directory containing said effects
-file. The `~/` prefix will be expanded to the contents of `$HOME`.
+file. A `~/` prefix will be expanded to the contents of `$HOME`. The following
+substitutions are supported anywhere within a file path:
+
+Sequence | Substitution
+-------- | ------------------
+`%r`     | Sample rate in Hz
+`%k`     | Sample rate in kHz
+`%c`     | Number of channels
+`%%`     | Literal `%`
 
 #### Channel selectors and masks
 

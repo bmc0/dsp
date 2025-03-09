@@ -441,7 +441,7 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 	else {
 		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
 			path += LENGTH(file_str_prefix)-1;
-		char *fp = construct_full_path(dir, path);
+		char *fp = construct_full_path(dir, path, istream);
 		struct codec_params c_params = *p;
 		c_params.path = fp;
 		c_params.mode = CODEC_MODE_READ;

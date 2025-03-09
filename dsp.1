@@ -407,7 +407,7 @@ R. A. Wannamaker, "Psychoacoustically Optimal Noise Shaping,"
 J. AES, vol. 40, no. 7/8, July 1992
 .RE
 .TP
-\fBladspa_host\fR \fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
+\fBladspa_host\fR [~/]\fImodule_path\fR \fIplugin_label\fR [\fIcontrol\fR ...]
 Apply a LADSPA plugin. Supports any number of input/output ports (with
 the exception of zero output ports). If a plugin has one or zero input
 ports, it will be instantiated multiple times to handle multi-channel
@@ -502,7 +502,20 @@ additional first-order section:
 .SS File paths
 On the command line, relative paths are relative to `$PWD'. Within an effects
 file, relative paths are relative to the directory containing said effects
-file. The `~/' prefix will be expanded to the contents of `$HOME'.
+file. A `~/' prefix will be expanded to the contents of `$HOME'. The following
+substitutions are supported anywhere within a file path:
+
+.TS
+tab (|);
+lB lB
+l l.
+Sequence|Substitution
+_
+%r|Sample rate in Hz
+%k|Sample rate in kHz
+%c|Number of channels
+%%|Literal `%'
+.TE
 .SS Channel selectors and masks
 A colon (`:') followed by a selector (see ``Selector syntax'') specifies the
 input channels for effects that follow. For example,

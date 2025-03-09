@@ -140,7 +140,8 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	e->data = state;
 
 	/* Build paths and open the plugin module */
-	if (argv[1][0] == '.' && argv[1][1] == '/') path = construct_full_path(dir, argv[1]);
+	if ((argv[1][0] == '.' || argv[1][0] == '~') && argv[1][1] == '/')
+		path = construct_full_path(dir, argv[1], istream);
 	else path = strdup(argv[1]);
 	if ((state->lt_handle = lt_dlopenext(path)) == NULL) {
 		LOG_FMT(LL_ERROR, "%s: error: failed to open LADSPA plugin: %s: %s", argv[0], path, lt_dlerror());

@@ -289,7 +289,7 @@ static int build_effects_chain_block_from_file(const char *path, struct effects_
 	char **argv = NULL, *tmp, *d = NULL, *p, *c;
 	int i, ret = 0, argc = 0;
 
-	p = construct_full_path(dir, path);
+	p = construct_full_path(dir, path, stream);
 	if (!(c = get_file_contents(p))) {
 		LOG_FMT(LL_ERROR, "error: failed to load effects file: %s: %s", p, strerror(errno));
 		goto fail;
