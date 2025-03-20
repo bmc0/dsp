@@ -36,20 +36,25 @@
 #include "matrix4_common.h"
 
 #if N_BANDS == 6
-static const double fb_freqs[]   = { 250, 500, 1000, 2000, 4000 };
+static const double fb_freqs[]   = { 300, 685.65, 1352.5, 2505.8, 4500 };
 static const int    fb_ap_idx[]  = { 3, 4, 1, 0, 1, 4 };
-static const double fb_bp[2]     = { 125, 8000 };  /* Q=0.7071 */
-static const double fb_weights[] = { 0.151, 0.586, 1.25, 0.778, 1.31, 0.584 };
+static const double fb_bp[2]     = { 120, 8000 };  /* Q=0.7071 */
+static const double fb_weights[] = { 0.191, 0.82, 1.22, 0.768, 1.4, 0.459 };
 #elif N_BANDS == 10
-static const double fb_freqs[]   = { 249.17, 437.24, 701.19, 1071, 1588.7, 2313.5, 3328, 4748, 6735.5 };
+static const double fb_freqs[]   = { 249, 439.14, 704.95, 1076.5, 1596, 2322.1, 3337.2, 4756.3, 6740 };
 static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 3, 2, 1, 0, 2, 3, 0, 3, 7, 8, 5, 8 };
 static const double fb_bp[2]     = { 120, 9500 };  /* Q=0.7071 */
-static const double fb_weights[] = { 0.146, 0.525, 1.02, 1.38, 0.782, 0.754, 1.39, 1.3, 0.571, 0.151 };
+static const double fb_weights[] = { 0.146, 0.527, 1.02, 1.38, 0.774, 0.76, 1.4, 1.3, 0.568, 0.151 };
+#elif N_BANDS == 11
+static const double fb_freqs[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
+static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 9, 3, 2, 1, 0, 2, 3, 0, 3, 8, 9, 6, 5, 6, 9 };
+static const double fb_bp[2]     = { 85, 10000 };  /* Q=0.7071 */
+static const double fb_weights[] = { 0.0662, 0.31, 0.74, 1.24, 1.24, 0.616, 0.97, 1.47, 1.15, 0.427, 0.139 };
 #elif N_BANDS == 12
-static const double fb_freqs[]   = { 159.31, 303.31, 503.09, 779.25, 1160.6, 1686.9, 2413.2, 3415.4, 4798.4, 6706.7, 9339.9 };
+static const double fb_freqs[]   = { 159, 305.57, 507.52, 785.8, 1169.2, 1697.6, 2425.6, 3428.8, 4811, 6715.6, 9340 };
 static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
 static const double fb_bp[2]     = { 80, 13000 };  /* Q=0.7071 */
-static const double fb_weights[] = { 0.0538, 0.263, 0.667, 1.16, 1.33, 0.676, 0.838, 1.43, 1.28, 0.564, 0.145, 0.176 };
+static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.849, 1.44, 1.27, 0.559, 0.145, 0.176 };
 #else
 #error "unsupported number of bands"
 #endif
@@ -127,23 +132,23 @@ static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank
 static void filter_bank_run(struct filter_bank *fb, sample_t s)
 {
 #if N_BANDS == 6
-	cap5_run(&fb->f[2], s, &fb->s[2], &fb->s[3]);  /* split at xover 2 (1000Hz) */
+	cap5_run(&fb->f[2], s, &fb->s[2], &fb->s[3]);  /* split at xover 2 (1352.5Hz) */
 	fb->s[2] = ap2_run(&fb->ap[0], fb->s[2]);  /* xover 3 ap */
 	fb->s[2] = ap2_run(&fb->ap[1], fb->s[2]);  /* xover 4 ap */
 	fb->s[3] = ap2_run(&fb->ap[2], fb->s[3]);  /* xover 1 ap */
 	fb->s[3] = ap2_run(&fb->ap[3], fb->s[3]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (250Hz) */
+	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (300Hz) */
 	fb->s[0] = ap2_run(&fb->ap[4], fb->s[0]);  /* xover 1 ap */
 
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (500Hz) */
+	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (685.65Hz) */
 
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (2000Hz) */
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (2505.8Hz) */
 	fb->s[3] = ap2_run(&fb->ap[5], fb->s[3]);  /* xover 4 ap */
 
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (4000Hz) */
+	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (4500Hz) */
 #elif N_BANDS == 10
-	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1588.7Hz) */
+	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1596Hz) */
 	fb->s[4] = ap2_run(&fb->ap[0], fb->s[4]);  /* xover 5 ap */
 	fb->s[4] = ap2_run(&fb->ap[1], fb->s[4]);  /* xover 6 ap */
 	fb->s[4] = ap2_run(&fb->ap[2], fb->s[4]);  /* xover 7 ap */
@@ -153,31 +158,70 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 	fb->s[5] = ap2_run(&fb->ap[6], fb->s[5]);  /* xover 1 ap */
 	fb->s[5] = ap2_run(&fb->ap[7], fb->s[5]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[1], fb->s[4], &fb->s[1], &fb->s[2]);  /* split at xover 1 (437.24Hz) */
+	cap5_run(&fb->f[1], fb->s[4], &fb->s[1], &fb->s[2]);  /* split at xover 1 (439.14Hz) */
 	fb->s[1] = ap2_run(&fb->ap[8], fb->s[1]);  /* xover 2 ap */
 	fb->s[1] = ap2_run(&fb->ap[9], fb->s[1]);  /* xover 3 ap */
 	fb->s[2] = ap2_run(&fb->ap[10], fb->s[2]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[0], fb->s[1], &fb->s[0], &fb->s[1]);  /* split at xover 0 (249.17Hz) */
+	cap5_run(&fb->f[0], fb->s[1], &fb->s[0], &fb->s[1]);  /* split at xover 0 (249Hz) */
 
-	cap5_run(&fb->f[2], fb->s[2], &fb->s[2], &fb->s[3]);  /* split at xover 2 (701.19Hz) */
+	cap5_run(&fb->f[2], fb->s[2], &fb->s[2], &fb->s[3]);  /* split at xover 2 (704.95Hz) */
 	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 3 ap */
 
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (1071Hz) */
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (1076.5Hz) */
 
-	cap5_run(&fb->f[6], fb->s[5], &fb->s[6], &fb->s[7]);  /* split at xover 6 (3328Hz) */
+	cap5_run(&fb->f[6], fb->s[5], &fb->s[6], &fb->s[7]);  /* split at xover 6 (3337.2Hz) */
 	fb->s[6] = ap2_run(&fb->ap[12], fb->s[6]);  /* xover 7 ap */
 	fb->s[6] = ap2_run(&fb->ap[13], fb->s[6]);  /* xover 8 ap */
 	fb->s[7] = ap2_run(&fb->ap[14], fb->s[7]);  /* xover 5 ap */
 
-	cap5_run(&fb->f[5], fb->s[6], &fb->s[5], &fb->s[6]);  /* split at xover 5 (2313.5Hz) */
+	cap5_run(&fb->f[5], fb->s[6], &fb->s[5], &fb->s[6]);  /* split at xover 5 (2322.1Hz) */
 
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (4748Hz) */
+	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (4756.3Hz) */
 	fb->s[7] = ap2_run(&fb->ap[15], fb->s[7]);  /* xover 8 ap */
 
-	cap5_run(&fb->f[8], fb->s[8], &fb->s[8], &fb->s[9]);  /* split at xover 8 (6735.5Hz) */
+	cap5_run(&fb->f[8], fb->s[8], &fb->s[8], &fb->s[9]);  /* split at xover 8 (6740Hz) */
+#elif N_BANDS == 11
+	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1244.5Hz) */
+	fb->s[4] = ap2_run(&fb->ap[0], fb->s[4]);  /* xover 5 ap */
+	fb->s[4] = ap2_run(&fb->ap[1], fb->s[4]);  /* xover 6 ap */
+	fb->s[4] = ap2_run(&fb->ap[2], fb->s[4]);  /* xover 7 ap */
+	fb->s[4] = ap2_run(&fb->ap[3], fb->s[4]);  /* xover 8 ap */
+	fb->s[4] = ap2_run(&fb->ap[4], fb->s[4]);  /* xover 9 ap */
+	fb->s[5] = ap2_run(&fb->ap[5], fb->s[5]);  /* xover 3 ap */
+	fb->s[5] = ap2_run(&fb->ap[6], fb->s[5]);  /* xover 2 ap */
+	fb->s[5] = ap2_run(&fb->ap[7], fb->s[5]);  /* xover 1 ap */
+	fb->s[5] = ap2_run(&fb->ap[8], fb->s[5]);  /* xover 0 ap */
+
+	cap5_run(&fb->f[1], fb->s[4], &fb->s[1], &fb->s[2]);  /* split at xover 1 (329.29Hz) */
+	fb->s[1] = ap2_run(&fb->ap[9], fb->s[1]);  /* xover 2 ap */
+	fb->s[1] = ap2_run(&fb->ap[10], fb->s[1]);  /* xover 3 ap */
+	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 0 ap */
+
+	cap5_run(&fb->f[0], fb->s[1], &fb->s[0], &fb->s[1]);  /* split at xover 0 (175Hz) */
+
+	cap5_run(&fb->f[2], fb->s[2], &fb->s[2], &fb->s[3]);  /* split at xover 2 (542.52Hz) */
+	fb->s[2] = ap2_run(&fb->ap[12], fb->s[2]);  /* xover 3 ap */
+
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (837.21Hz) */
+
+	cap5_run(&fb->f[7], fb->s[5], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3660.5Hz) */
+	fb->s[7] = ap2_run(&fb->ap[13], fb->s[7]);  /* xover 8 ap */
+	fb->s[7] = ap2_run(&fb->ap[14], fb->s[7]);  /* xover 9 ap */
+	fb->s[8] = ap2_run(&fb->ap[15], fb->s[8]);  /* xover 6 ap */
+	fb->s[8] = ap2_run(&fb->ap[16], fb->s[8]);  /* xover 5 ap */
+
+	cap5_run(&fb->f[5], fb->s[7], &fb->s[5], &fb->s[6]);  /* split at xover 5 (1807.4Hz) */
+	fb->s[5] = ap2_run(&fb->ap[17], fb->s[5]);  /* xover 6 ap */
+
+	cap5_run(&fb->f[6], fb->s[6], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2585.3Hz) */
+
+	cap5_run(&fb->f[8], fb->s[8], &fb->s[8], &fb->s[9]);  /* split at xover 8 (5146.4Hz) */
+	fb->s[8] = ap2_run(&fb->ap[18], fb->s[8]);  /* xover 9 ap */
+
+	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (7200Hz) */
 #elif N_BANDS == 12
-	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1686.9Hz) */
+	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1697.6Hz) */
 	fb->s[5] = ap2_run(&fb->ap[0], fb->s[5]);  /* xover 6 ap */
 	fb->s[5] = ap2_run(&fb->ap[1], fb->s[5]);  /* xover 7 ap */
 	fb->s[5] = ap2_run(&fb->ap[2], fb->s[5]);  /* xover 8 ap */
@@ -189,37 +233,37 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 	fb->s[6] = ap2_run(&fb->ap[8], fb->s[6]);  /* xover 1 ap */
 	fb->s[6] = ap2_run(&fb->ap[9], fb->s[6]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (503.09Hz) */
+	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (507.52Hz) */
 	fb->s[2] = ap2_run(&fb->ap[10], fb->s[2]);  /* xover 3 ap */
 	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 4 ap */
 	fb->s[3] = ap2_run(&fb->ap[12], fb->s[3]);  /* xover 1 ap */
 	fb->s[3] = ap2_run(&fb->ap[13], fb->s[3]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (159.31Hz) */
+	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (159Hz) */
 	fb->s[0] = ap2_run(&fb->ap[14], fb->s[0]);  /* xover 1 ap */
 
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (303.31Hz) */
+	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (305.57Hz) */
 
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (779.25Hz) */
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (785.8Hz) */
 	fb->s[3] = ap2_run(&fb->ap[15], fb->s[3]);  /* xover 4 ap */
 
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1160.6Hz) */
+	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1169.2Hz) */
 
-	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (4798.4Hz) */
+	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (4811Hz) */
 	fb->s[8] = ap2_run(&fb->ap[16], fb->s[8]);  /* xover 9 ap */
 	fb->s[8] = ap2_run(&fb->ap[17], fb->s[8]);  /* xover 10 ap */
 	fb->s[9] = ap2_run(&fb->ap[18], fb->s[9]);  /* xover 7 ap */
 	fb->s[9] = ap2_run(&fb->ap[19], fb->s[9]);  /* xover 6 ap */
 
-	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2413.2Hz) */
+	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2425.6Hz) */
 	fb->s[6] = ap2_run(&fb->ap[20], fb->s[6]);  /* xover 7 ap */
 
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3415.4Hz) */
+	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3428.8Hz) */
 
-	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (6706.7Hz) */
+	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (6715.6Hz) */
 	fb->s[9] = ap2_run(&fb->ap[21], fb->s[9]);  /* xover 10 ap */
 
-	cap5_run(&fb->f[10], fb->s[10], &fb->s[10], &fb->s[11]);  /* split at xover 10 (9339.9Hz) */
+	cap5_run(&fb->f[10], fb->s[10], &fb->s[10], &fb->s[11]);  /* split at xover 10 (9340Hz) */
 #endif
 
 	fb->s_bp[0] = biquad(&fb->hp, fb->s[0]);
