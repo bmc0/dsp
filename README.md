@@ -262,7 +262,7 @@ Example:
 		`elliptic`.
 
 * `matrix4_mb [options] [surround_level]`  
-	Like the `matrix4` effect, but divides the input into ten individually
+	Like the `matrix4` effect, but divides the input into eleven individually
 	steered bands in order to improve separation of concurrent sound sources.
 	See the `matrix4` effect description for more information.
 * `remix selector|. ...`  
