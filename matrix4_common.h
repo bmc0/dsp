@@ -40,7 +40,7 @@
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
 #define EVENT_MASK_TIME     100.0
-#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST)
+#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.75)
 #define ORD_SENS_ERR         10.0
 #define ORD_SENS_LEVEL       10.0
 #define DIFF_SENS_ERR        10.0
@@ -539,8 +539,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds);
 		#endif
-		ax->lr = ewma_set(&ev->drift[2], ewma_run_scale(&ev->drift[0], ord.lr, ds));
-		ax->cs = ewma_set(&ev->drift[3], ewma_run_scale(&ev->drift[1], ord.cs, ds));
+		ax->lr = ewma_set(&ev->drift[2], ewma_run_scale(&ev->drift[0], ord_d.lr, ds));
+		ax->cs = ewma_set(&ev->drift[3], ewma_run_scale(&ev->drift[1], ord_d.cs, ds));
 		ax_ev->lr = ax_ev->cs = 0.0;
 	}
 	++ev->t;
