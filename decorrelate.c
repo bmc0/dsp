@@ -144,7 +144,7 @@ void decorrelate_effect_destroy(struct effect *e)
 	free(state);
 }
 
-#define RANDOM_FILTER_DELAY ((double)pm_rand()/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
+#define RANDOM_FILTER_DELAY ((double)((seed>0)?pm_rand1_r(&seed):pm_rand())/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
 
 struct effect * decorrelate_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
@@ -153,10 +153,21 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	char *endptr;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int mono = 0, n_stages = 5, opt;
+	uint32_t seed = 0;
 
-	while ((opt = dsp_getopt(&g, argc, argv, "m")) != -1) {
+	while ((opt = dsp_getopt(&g, argc, argv, "ms:")) != -1) {
+		long int v;
 		switch (opt) {
 		case 'm': mono = 1; break;
+		case 's':
+			v = strtol(g.arg, &endptr, 10);
+			CHECK_ENDPTR(g.arg, endptr, "seed", return NULL);
+			CHECK_RANGE(v > 0 && v <= PM_RAND_MAX, "seed", return NULL);
+			seed = v;
+			break;
+		case ':':
+			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
+			return NULL;
 		default: goto print_usage;
 		}
 	}
@@ -168,7 +179,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	else if (g.ind == argc-1) {
 		n_stages = strtol(argv[g.ind], &endptr, 10);
 		CHECK_ENDPTR(argv[g.ind], endptr, "stages", return NULL);
-		CHECK_RANGE(n_stages > 0, "stages", return NULL);
+		CHECK_RANGE(n_stages > 0 && n_stages <= 100, "stages", return NULL);
 	}
 
 	e = calloc(1, sizeof(struct effect));

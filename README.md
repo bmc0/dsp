@@ -333,12 +333,13 @@ Example:
 	`fir_p` convolution engine is used instead of the default `fir` engine.
 	Similarly, if `-z` is given, `zita_convolver` is used (if available).
 	The `-a` option sets the phase shift in degrees. The default is -90°.
-* `decorrelate [-m] [stages]`  
+* `decorrelate [-m] [-s seed] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
 	If `-m` is given, the same filter parameters are used for all input
 	channels. The default number of stages is 5, which results in an
-	average group delay of about 9.5ms at high frequencies.
+	average group delay of about 9.5ms at high frequencies. The `-s` option
+	sets the random seed for filter parameter generation.
 * `noise level[b]`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	in dBFS if no suffix is given, or the effective precision in bits if the

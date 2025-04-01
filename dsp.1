@@ -349,19 +349,20 @@ values are filled with zeros.
 .sp 0.5
 See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
 .TP
-\fBhilbert\fR [\fB\-pz\fR] [\fB-a\fR \fIangle\fR] \fItaps\fR
+\fBhilbert\fR [\fB\-pz\fR] [\fB\-a\fR \fIangle\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be
 odd. Bandwidth is controlled by the number of taps. If \fB\-p\fR is given, the
 \fBfir_p\fR convolution engine is used instead of the default \fBfir\fR engine.
 Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available).
 The \fB\-a\fR option sets the phase shift in degrees. The default is -90°.
 .TP
-\fBdecorrelate\fR [\fB\-m\fR] [\fIstages\fR]
+\fBdecorrelate\fR [\fB\-m\fR] [\fB\-s\fR \fIseed\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder
 Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
 If \fB\-m\fR is given, the same filter parameters are used for all input
 channels. The default number of stages is 5, which results in an
-average group delay of about 9.5ms at high frequencies.
+average group delay of about 9.5ms at high frequencies. The \fB\-s\fR option
+sets the random seed for filter parameter generation.
 .TP
 \fBnoise\fR \fIlevel\fR[\fBb\fR]
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise
