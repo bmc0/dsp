@@ -256,7 +256,7 @@ static void cleanup_and_exit(int s)
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (clip_count > 0)
-		LOG_FMT(LL_NORMAL, "warning: clipped %ld samples (%.2fdBFS peak)",
+		LOG_FMT(LL_NORMAL, "warning: clipped %zd samples (%.2fdBFS peak)",
 			clip_count, 20.0*log10(peak));
 	pthread_mutex_destroy(&log_lock);
 	exit(s);
@@ -478,7 +478,7 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
 		}
 		if (pl < PROGRESS_MAX_LEN - 1 && (verbose_progress || clip_count != 0)) {
-			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%ld  ",
+			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%zd  ",
 				20.0*log10(peak), clip_count);
 		}
 		dsp_log_printf("\r%s\033[K", progress_line);
