@@ -60,7 +60,8 @@ struct effects_chain {
 	struct effect *tail;
 };
 
-#define EFFECTS_CHAIN_INITIALIZER ((struct effects_chain) { NULL, NULL })
+#define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL }  /* needed for GCC 12 and earlier */
+#define EFFECTS_CHAIN_INITIALIZER ((struct effects_chain) EFFECTS_CHAIN_INITIALIZER_BARE)
 #define IS_EFFECTS_CHAIN_START(x) ( \
 	get_effect_info(x) != NULL \
 	|| (x)[0] == ':' \
@@ -98,8 +99,8 @@ struct effects_chain_xfade_state {
 
 #define EFFECTS_CHAIN_XFADE_TIME 100  /* milliseconds */
 #define EFFECTS_CHAIN_XFADE_STATE_INITIALIZER ((struct effects_chain_xfade_state) { \
-	.chain[0] = EFFECTS_CHAIN_INITIALIZER, \
-	.chain[1] = EFFECTS_CHAIN_INITIALIZER, \
+	.chain[0] = EFFECTS_CHAIN_INITIALIZER_BARE, \
+	.chain[1] = EFFECTS_CHAIN_INITIALIZER_BARE, \
 })
 
 void effects_chain_xfade_reset(struct effects_chain_xfade_state *);
