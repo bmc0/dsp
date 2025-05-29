@@ -29,7 +29,8 @@
 #endif
 
 #define DOWNSAMPLE_FACTOR   8
-#define EVENT_THRESH      3.1
+#define EVENT_THRESH      2.6
+#define NORM_ACCOM_FACTOR 0.6
 #define N_BANDS            11
 
 #include "matrix4_common.h"
