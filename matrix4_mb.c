@@ -62,6 +62,8 @@ static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.
 #define PHASE_LIN_MAX_LEN 30.0  /* maximum filter length in milliseconds */
 #define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
 
+#define CROSS_COUPLE_FACTOR 0.2
+
 #define DO_FILTER_BANK_TEST 0
 
 struct filter_bank_frame {
@@ -77,6 +79,7 @@ struct filter_bank {
 
 struct matrix4_band {
 	struct smooth_state sm;
+	struct envs pwr_env_xc;
 	struct event_state ev;
 	struct axes ax, ax_ev;
 	double dir_boost;
@@ -307,6 +310,15 @@ void matrix4_mb_test_fb_effect_destroy(struct effect *e)
 
 #else
 
+static inline void band_cross_couple(struct envs *dest, struct envs *src, const double fact)
+{
+	const double norm = 1.0 - fact;
+	dest->l = dest->l*norm + src->l*fact;
+	dest->r = dest->r*norm + src->r*fact;
+	dest->sum = dest->sum*norm + src->sum*fact;
+	dest->diff = dest->diff*norm + src->diff*fact;
+}
+
 sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, oframes = 0;
@@ -352,15 +364,18 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			#if DOWNSAMPLE_FACTOR > 1
 			if (state->s == 0) {
 			#endif
-				const struct envs pwr_env_d = band->ev.pwr_env_buf[band->ev.buf_p];
-				process_events(&band->ev, &state->evc, &env, &pwr_env, &band->ax, &band->ax_ev);
+				const struct envs env_d = band->ev.env_buf[band->ev.buf_p];
+				band->pwr_env_xc = pwr_env;
+				if (k > 0) band_cross_couple(&band->pwr_env_xc, &state->band[k-1].pwr_env_xc, CROSS_COUPLE_FACTOR);
+				/* else band_cross_couple(&band->pwr_env_xc, &state->band[k+1].pwr_env_xc, CROSS_COUPLE_FACTOR*0.5); */
+				process_events(&band->ev, &state->evc, &env, &band->pwr_env_xc, &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
 				struct matrix_coefs m = {0};
 				calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
 				band->dir_boost = m.dir_boost;
 
-				const double weight = pwr_env_d.sum * fb_weights[k];
+				const double weight = env_d.sum * env_d.sum * fb_weights[k];
 				dir_boost += m.dir_boost * m.dir_boost * weight;
 				dir_boost_norm += weight;
 

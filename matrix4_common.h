@@ -112,7 +112,7 @@ struct event_state {
 	struct ewma_state accom[6], norm[2], slow[4], smooth[2], avg[4];
 	struct ewma_state drift[4];
 	struct axes dir, *ord_buf;
-	struct envs *env_buf, *pwr_env_buf, *adapt_buf;
+	struct envs *env_buf, *adapt_buf;
 	double ord_factor, adj;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count;
@@ -372,7 +372,6 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, DOWNSAMPLED_FS(istream->fs));
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
 	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
-	ev->pwr_env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_diff_scale = ev->max_ord_scale = 1.0;
@@ -384,7 +383,6 @@ static void event_state_cleanup(struct event_state *ev)
 {
 	free(ev->ord_buf);
 	free(ev->env_buf);
-	free(ev->pwr_env_buf);
 	free(ev->adapt_buf);
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		#define EWMA_CONST_TO_RT(x, fs) (-1.0/log(1.0-(x))/(fs)*1000.0*2.1972)
@@ -455,8 +453,6 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	ev->ord_buf[ev->buf_p] = ord;
 	const struct envs env_d = ev->env_buf[ev->buf_p];
 	ev->env_buf[ev->buf_p] = *env;
-	/* const struct envs pwr_env_d = ev->pwr_env_buf[ev->buf_p]; */
-	ev->pwr_env_buf[ev->buf_p] = *pwr_env;
 	const struct envs adapt_d = ev->adapt_buf[ev->buf_p];
 	ev->adapt_buf[ev->buf_p] = adapt;
 	ev->buf_p = (ev->buf_p + 1 >= ev->buf_len) ? 0 : ev->buf_p + 1;

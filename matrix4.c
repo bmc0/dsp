@@ -24,8 +24,7 @@
 #include "biquad.h"
 #include "util.h"
 
-#define EVENT_THRESH      1.8
-#define EVENT_END_THRESH  0.2
+#define EVENT_THRESH 1.8
 
 #include "matrix4_common.h"
 
