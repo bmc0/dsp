@@ -29,7 +29,7 @@
 #endif
 
 #define DOWNSAMPLE_FACTOR   8
-#define EVENT_THRESH      2.6
+#define EVENT_THRESH_MB   2.6
 #define NORM_ACCOM_FACTOR 0.6
 #define N_BANDS            11
 
@@ -367,7 +367,6 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				const struct envs env_d = band->ev.env_buf[band->ev.buf_p];
 				band->pwr_env_xc = pwr_env;
 				if (k > 0) band_cross_couple(&band->pwr_env_xc, &state->band[k-1].pwr_env_xc, CROSS_COUPLE_FACTOR);
-				/* else band_cross_couple(&band->pwr_env_xc, &state->band[k+1].pwr_env_xc, CROSS_COUPLE_FACTOR*0.5); */
 				process_events(&band->ev, &state->evc, &env, &band->pwr_env_xc, &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
@@ -582,7 +581,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 	for (int k = 0; k < N_BANDS; ++k) {
 		smooth_state_init(&state->band[k].sm, istream);
-		event_state_init(&state->band[k].ev, istream);
+		event_state_init(&state->band[k].ev, istream, EVENT_THRESH_MB/EVENT_THRESH);
 	}
 	smf_asym_init(&state->dir_boost_smooth, DOWNSAMPLED_FS(istream->fs),
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);

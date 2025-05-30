@@ -27,6 +27,8 @@
 #include "smf.h"
 #include "util.h"
 
+#define EVENT_THRESH          1.8
+#define EVENT_END_THRESH      0.2
 #define ENV_SMOOTH_TIME      30.0
 #define EVENT_SMOOTH_TIME    30.0
 #define ACCOM_TIME          300.0
@@ -60,17 +62,9 @@
 #ifndef DOWNSAMPLE_FACTOR
 	#define DOWNSAMPLE_FACTOR 1
 #endif
-#ifndef EVENT_THRESH
-	#define EVENT_THRESH 1.8
-#endif
-#ifndef EVENT_END_THRESH
-	#define EVENT_END_THRESH 0.2
-#endif
 #ifndef NORM_ACCOM_FACTOR
 	#define NORM_ACCOM_FACTOR 0.9
 #endif
-
-#define EVENT_CLIP_THRESH (EVENT_THRESH*10.0)
 
 /* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = polyphase FIR (blackman window) */
 #ifndef CS_INTERP_TYPE
@@ -113,7 +107,7 @@ struct event_state {
 	struct ewma_state drift[4];
 	struct axes dir, *ord_buf;
 	struct envs *env_buf, *adapt_buf;
-	double ord_factor, adj;
+	double thresh, end_thresh, clip_thresh, ord_factor, adj;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count;
 	ssize_t buf_len, buf_p;
@@ -359,7 +353,7 @@ static void smooth_state_init(struct smooth_state *sm, const struct stream_info 
 	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
-static void event_state_init(struct event_state *ev, const struct stream_info *istream)
+static void event_state_init(struct event_state *ev, const struct stream_info *istream, double thresh_scale)
 {
 	for (int i = 0; i < 6; ++i) ewma_init(&ev->accom[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->norm[i], DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(NORM_TIME));
@@ -373,6 +367,9 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
 	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
+	ev->thresh = EVENT_THRESH * thresh_scale;
+	ev->end_thresh = EVENT_END_THRESH * thresh_scale;
+	ev->clip_thresh = EVENT_THRESH * 10.0 * thresh_scale;
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_diff_scale = ev->max_ord_scale = 1.0;
 		ev->fs = DOWNSAMPLED_FS(istream->fs);
@@ -469,14 +466,14 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	ewma_run_scale_asym(&ev->accom[5], pwr_env->r, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
 	const double l_mask = MAXIMUM(pwr_env->l - ewma_get_last(&ev->accom[4]), 0.0);
 	const double r_mask = MAXIMUM(pwr_env->r - ewma_get_last(&ev->accom[5]), 0.0);
-	const double l_mask_norm = (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : EVENT_CLIP_THRESH;
-	const double r_mask_norm = (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : EVENT_CLIP_THRESH;
-	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(l_mask_norm, EVENT_CLIP_THRESH));
-	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(r_mask_norm, EVENT_CLIP_THRESH));
+	const double l_mask_norm = (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : ev->clip_thresh;
+	const double r_mask_norm = (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : ev->clip_thresh;
+	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(l_mask_norm, ev->clip_thresh));
+	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(r_mask_norm, ev->clip_thresh));
 	const double l_event = (l_mask_norm_sm - ewma_run(&ev->slow[2], l_mask_norm_sm)) * ev->adj;
 	const double r_event = (r_mask_norm_sm - ewma_run(&ev->slow[3], r_mask_norm_sm)) * ev->adj;
 
-	if (!ev->sample && (l_event > EVENT_THRESH || r_event > EVENT_THRESH)) {
+	if (!ev->sample && (l_event > ev->thresh || r_event > ev->thresh)) {
 		ev->sample = 1;
 		ev->flags[1] = 0;
 		ev->flags[1] |= (l_event >= r_event) ? EVENT_FLAG_L : 0;
@@ -525,8 +522,8 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		#endif
 		ax_ev->lr = ax->lr = ewma_set(&ev->drift[0], ewma_run_scale(&ev->drift[2], ev->dir.lr, ds));
 		ax_ev->cs = ax->cs = ewma_set(&ev->drift[1], ewma_run_scale(&ev->drift[3], ev->dir.cs, ds));
-		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm_sm <= EVENT_END_THRESH)
-				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm_sm <= EVENT_END_THRESH)) {
+		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm_sm <= ev->end_thresh)
+				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm_sm <= ev->end_thresh)) {
 			ev->flags[0] |= EVENT_FLAG_END;
 		}
 		if ((ev->t - ev->t_hold >= evc->min_hold_frames && ev->flags[0] & EVENT_FLAG_END)

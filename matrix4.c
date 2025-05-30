@@ -24,8 +24,6 @@
 #include "biquad.h"
 #include "util.h"
 
-#define EVENT_THRESH 1.8
-
 #include "matrix4_common.h"
 
 struct matrix4_state {
@@ -233,7 +231,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		biquad_init_using_type(&state->in_lp[i], BIQUAD_LOWPASS,  istream->fs, 5000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
 	}
 	smooth_state_init(&state->sm, istream);
-	event_state_init(&state->ev, istream);
+	event_state_init(&state->ev, istream, 1.0);
 	smf_asym_init(&state->dir_boost_smooth, istream->fs,
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 
