@@ -581,7 +581,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 	for (int k = 0; k < N_BANDS; ++k) {
 		smooth_state_init(&state->band[k].sm, istream);
-		event_state_init(&state->band[k].ev, istream, EVENT_THRESH_MB/EVENT_THRESH);
+		event_state_init(&state->band[k].ev, istream, EVENT_THRESH_MB/EVENT_THRESH * ((k==0)?1.2:1.0));
 	}
 	smf_asym_init(&state->dir_boost_smooth, DOWNSAMPLED_FS(istream->fs),
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
