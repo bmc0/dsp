@@ -626,7 +626,6 @@ static void handle_tstp(int is_paused)
 		stream.channels = in_codecs.head->channels; \
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL)) \
 			cleanup_and_exit(1); \
-		chain_needs_dither = effects_chain_needs_dither(&chain); \
 	} while (0)
 
 #define REOPEN_OUTPUT \
@@ -653,10 +652,11 @@ static void handle_tstp(int is_paused)
 		} \
 	} while (0)
 
-#define SET_DITHER \
+#define SET_DITHER(chain) \
 	do { \
+		const int chain_needs_dither = effects_chain_needs_dither(chain); \
 		const int do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_needs_dither); \
-		add_dither = effects_chain_set_dither_params(&chain, out_codec->prec, do_dither); \
+		add_dither = effects_chain_set_dither_params(chain, out_codec->prec, do_dither); \
 		LOG_FMT(LL_VERBOSE, "info: auto dither %s%s", (do_dither) ? "on" : "off", \
 			(do_dither && !add_dither) ? " (effect)" : ""); \
 	} while (0)
@@ -664,7 +664,7 @@ static void handle_tstp(int is_paused)
 int main(int argc, char *argv[])
 {
 	int is_paused = 0, add_dither = 0, term_sig, err;
-	int chain_start, chain_argc, chain_needs_dither;
+	int chain_start, chain_argc;
 	int read_buf_blocks = 0;
 	double in_time = 0.0;
 	struct codec *c = NULL;
@@ -753,7 +753,6 @@ int main(int argc, char *argv[])
 
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 			cleanup_and_exit(1);
-		chain_needs_dither = effects_chain_needs_dither(&chain);
 		if ((in_codec_buf = codec_read_buf_init(&in_codecs, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
 
@@ -783,7 +782,7 @@ int main(int argc, char *argv[])
 		while (in_codecs.head != NULL) {
 			ssize_t r, pos = 0;
 			int k = 0;
-			SET_DITHER;
+			SET_DITHER(&chain);
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
 			print_progress(in_codecs.head, pos, is_paused, 1);
 			do {
@@ -848,10 +847,8 @@ int main(int argc, char *argv[])
 								xfade_state.ostream = stream;
 								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 								xfade_state.pos = xfade_state.frames;
-								if (xfade_state.pos == 0 || stream.fs != out_codec->fs || stream.channels != out_codec->channels) {
+								if (xfade_state.pos == 0 || stream.fs != out_codec->fs || stream.channels != out_codec->channels)
 									finish_xfade();  /* no crossfade */
-									chain_needs_dither = effects_chain_needs_dither(&chain);
-								}
 							}
 							else {
 								if (!is_paused) DRAIN_EFFECTS_CHAIN;
@@ -868,9 +865,14 @@ int main(int argc, char *argv[])
 								}
 							}
 							else REOPEN_OUTPUT;
-							if (xfade_state.pos > 0) REALLOC_BUFS(&xfade_state.chain[1]);
-							else REALLOC_BUFS(&chain);
-							SET_DITHER;
+							if (xfade_state.pos > 0) {
+								REALLOC_BUFS(&xfade_state.chain[1]);
+								SET_DITHER(&xfade_state.chain[1]);
+							}
+							else {
+								REALLOC_BUFS(&chain);
+								SET_DITHER(&chain);
+							}
 							break;
 						case 'v':
 							verbose_progress = !verbose_progress;
@@ -897,7 +899,6 @@ int main(int argc, char *argv[])
 					obuf = effects_chain_xfade_run(&xfade_state, &w, buf1, buf2);
 					if (xfade_state.pos == 0) {
 						finish_xfade();
-						chain_needs_dither = effects_chain_needs_dither(&chain);
 						LOG_S(LL_VERBOSE, "info: end of crossfade");
 					}
 				}

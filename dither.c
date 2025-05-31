@@ -276,6 +276,7 @@ void dither_effect_set_params(struct effect *e, int bits, int enabled)
 				dither_set_quantize_bits(&state[k], (bits < 2) ? 32 : bits);  /* FIXME: perhaps allow no quantization? */
 		}
 	}
+	/* LOG_FMT(LL_VERBOSE, "%s(): info: bits=%d enabled=%s", __func__, bits, (enabled)?"yes":"no"); */
 }
 
 #define ARG_IS_AUTO(s) (strcmp((s), "auto") == 0)
