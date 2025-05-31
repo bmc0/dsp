@@ -120,9 +120,9 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		/* TODO: Implement a proper way for effects to show status lines. */
 		if (state->show_status) {
 			dsp_log_acquire();
-			dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r\033[A",
+			dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
 				e->name, (state->disable) ? " [off]" : "", TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-				dir_boost, state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count);
+				dir_boost, state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
 			dsp_log_release();
 		}
 	#endif

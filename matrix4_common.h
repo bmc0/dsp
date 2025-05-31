@@ -110,7 +110,7 @@ struct event_state {
 	double thresh, end_thresh, clip_thresh, max, weight;
 	double ord_factor, adj;
 	ssize_t t, t_sample, t_hold;
-	ssize_t ord_count, diff_count, early_count;
+	ssize_t ord_count, diff_count, early_count, ignore_count;
 	ssize_t buf_len, buf_p;
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		double max_ord_scale, max_diff_scale, fs;
@@ -499,26 +499,35 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		if (r_event > ev->max) ev->max = r_event;
 		if (ev->t - ev->t_sample >= evc->sample_frames) {
 			ev->sample = 0;
-			ev->hold = 1;
-			ev->t_hold = ev->t;
-			ev->dir.lr = ewma_get_last(&ev->avg[2]);
-			ev->dir.cs = ewma_get_last(&ev->avg[3]);
-			if (fabs(ev->dir.lr)+fabs(ev->dir.cs) > M_PI_4*1.001) {
+			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.001)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
-				ev->dir.lr = ewma_get_last(&ev->avg[0]);
-				ev->dir.cs = ewma_get_last(&ev->avg[1]);
-				ev->ord_factor += 1.0;
-				if (!(ev->flags[1] & EVENT_FLAG_FUSE))
-					++ev->ord_count;
-			}
-			else if (!(ev->flags[1] & EVENT_FLAG_FUSE))
-				++ev->diff_count;
-			ev->flags[0] = ev->flags[1];
-			const double wx = (ev->max - ev->thresh) / (ev->thresh*0.3);
-			ev->weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
-			/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
+			if (!(ev->flags[1] & EVENT_FLAG_FUSE) || !(ev->flags[1] & EVENT_FLAG_USE_ORD)
+					|| (ev->flags[0] & EVENT_FLAG_USE_ORD)) {
+				ev->hold = 1;
+				ev->t_hold = ev->t;
+				ev->dir.lr = ewma_get_last(&ev->avg[2]);
+				ev->dir.cs = ewma_get_last(&ev->avg[3]);
+				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
+					ev->dir.lr = ewma_get_last(&ev->avg[0]);
+					ev->dir.cs = ewma_get_last(&ev->avg[1]);
+					ev->ord_factor += 1.0;
+					if (!(ev->flags[1] & EVENT_FLAG_FUSE))
+						++ev->ord_count;
+				}
+				else if (!(ev->flags[1] & EVENT_FLAG_FUSE))
+					++ev->diff_count;
+				ev->flags[0] = ev->flags[1];
+				const double wx = (ev->max - ev->thresh) / (ev->thresh*0.3);
+				ev->weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
+				/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
 					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff",
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
+			}
+			else {
+				++ev->ignore_count;
+				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
+					__func__, TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
+			}
 		}
 	}
 	const double ds_ord = drift_scale(&ev->drift_last[0], &ord_d, &env_d, ORD_SENS_ERR, ORD_SENS_LEVEL);

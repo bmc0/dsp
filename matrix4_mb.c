@@ -449,10 +449,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		if (state->show_status) {
 			dsp_log_acquire();
 			for (i = 0; i < N_BANDS; ++i) {
-				dsp_log_printf("\n%s%s: band %zd: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd\033[K\r",
+				dsp_log_printf("\n%s%s: band %zd: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
 					e->name, (state->disable) ? " [off]" : "", i,
 					TO_DEGREES(state->band[i].ax.lr), TO_DEGREES(state->band[i].ax_ev.lr), TO_DEGREES(state->band[i].ax.cs), TO_DEGREES(state->band[i].ax_ev.cs),
-					state->band[i].dir_boost, state->band[i].ev.adj, state->band[i].ev.ord_count, state->band[i].ev.diff_count, state->band[i].ev.early_count);
+					state->band[i].dir_boost, state->band[i].ev.adj, state->band[i].ev.ord_count, state->band[i].ev.diff_count, state->band[i].ev.early_count, state->band[i].ev.ignore_count);
 			}
 			dsp_log_printf("\n%s%s: weighted RMS dir_boost: %05.3f\033[K\r",
 				e->name, (state->disable) ? " [off]" : "",
