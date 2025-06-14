@@ -53,6 +53,7 @@
 #define DIR_BOOST_SENS_FALL   0.002
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
+#define DIR_BOOST_TYPE_DEFAULT   DIR_BOOST_TYPE_SIMPLE
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
@@ -129,12 +130,20 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
+enum dir_boost_type {
+	DIR_BOOST_TYPE_NONE = 0,
+	DIR_BOOST_TYPE_SIMPLE,
+	DIR_BOOST_TYPE_BAND,
+	DIR_BOOST_TYPE_COMBINED,
+};
+
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
 	double surr_mult, fb_stop[2];
 	ssize_t surr_delay_frames;
-	char show_status, do_dir_boost, enable_signal, do_phase_lin;
+	char show_status, enable_signal, do_phase_lin;
 	enum filter_bank_type fb_type;
+	enum dir_boost_type db_type;
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
@@ -346,6 +355,14 @@ static inline double cs_interp(const struct cs_interp_state *state, int x)
 #else
 	#error "illegal CS_INTERP_TYPE"
 #endif
+#else
+/* dummy definitions for DOWNSAMPLE_FACTOR=1 */
+struct cs_interp_state {
+	double m;
+};
+#define cs_interp_insert(s, x) do { (s)->m = x; } while(0)
+#define cs_interp(s, x) ((s)->m)
+#define CS_INTERP_PEEK(s) ((s)->m)
 #endif
 
 static void smooth_state_init(struct smooth_state *sm, const struct stream_info *istream)

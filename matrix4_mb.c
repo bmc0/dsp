@@ -64,6 +64,11 @@ static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.
 
 #define CROSS_COUPLE_FACTOR 0.2
 
+/* DIR_BOOST_TYPE_COMBINED parameters */
+#define DIR_BOOST_BAND_RISE 300.0  /* band weight rise time in milliseconds */
+#define DIR_BOOST_BAND_MAX    0.9  /* maximum band weight */
+#define DIR_BOOST_BAND_MIN    0.1  /* minimum band weight */
+
 #define DO_FILTER_BANK_TEST 0
 
 struct filter_bank_frame {
@@ -82,29 +87,28 @@ struct matrix4_band {
 	struct envs pwr_env_xc;
 	struct event_state ev;
 	struct axes ax, ax_ev;
-	double dir_boost;
-	#if DOWNSAMPLE_FACTOR > 1
-		struct cs_interp_state lsl_m, lsr_m;
-		struct cs_interp_state rsl_m, rsr_m;
-	#endif
+	double dir_boost_m;
+	struct cs_interp_state lsl_m, lsr_m;
+	struct cs_interp_state rsl_m, rsr_m;
+	struct cs_interp_state dir_boost;
+	struct smf_state dir_boost_smooth;
 };
 
 struct matrix4_mb_state {
 	int s, c0, c1;
 	char has_output, is_draining, disable, show_status, do_dir_boost;
+	enum dir_boost_type db_type;
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
 	struct filter_bank_frame *fb_buf[2];
 	sample_t norm_mult, surr_mult;
 	struct event_config evc;
-	#if DOWNSAMPLE_FACTOR > 1
-		struct cs_interp_state dir_boost;
-	#else
-		double dir_boost;
-	#endif
+	struct cs_interp_state dir_boost;
+	struct ewma_state dir_boost_band_weight;
 	struct smf_state dir_boost_smooth;
-	ssize_t len, p, drain_frames, fade_frames, fade_p;
+	ssize_t len, p, fb_buf_len, fb_buf_p;
+	ssize_t drain_frames, fade_frames, fade_p;
 };
 
 static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank_type fb_type, double fb_stop[2])
@@ -326,13 +330,6 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 	for (i = 0; i < *frames; ++i) {
 		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
-		double dir_boost = 0.0, dir_boost_norm = 0.0;
-		sample_t out_ls = 0.0, out_rs = 0.0;
-		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
-		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
-		const sample_t s0_d = state->bufs[state->c0][state->p];
-		const sample_t s1_d = state->bufs[state->c1][state->p];
-
 		if (state->fade_p > 0) {
 			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
 			norm_mult = CALC_NORM_MULT(surr_mult);
@@ -343,6 +340,11 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			surr_mult = 0.0;
 		}
 
+		double dir_boost_sum = 0.0, dir_boost_norm = 0.0;
+		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0;
+		char has_ev = 0;
+		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
+		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
 		filter_bank_run(&state->fb[0], s0);
 		filter_bank_run(&state->fb[1], s1);
 		#if DOWNSAMPLE_FACTOR > 1
@@ -353,32 +355,31 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 			const sample_t s0_bp = state->fb[0].s_bp[k];
 			const sample_t s1_bp = state->fb[1].s_bp[k];
-			const sample_t s0_d_fb = state->fb_buf[0][state->p].s[k];
-			const sample_t s1_d_fb = state->fb_buf[1][state->p].s[k];
-			state->fb_buf[0][state->p].s[k] = state->fb[0].s[k];
-			state->fb_buf[1][state->p].s[k] = state->fb[1].s[k];
+			const sample_t s0_d_fb = state->fb_buf[0][state->fb_buf_p].s[k];
+			const sample_t s1_d_fb = state->fb_buf[1][state->fb_buf_p].s[k];
 
 			struct envs env, pwr_env;
 			calc_input_envs(&band->sm, s0_bp, s1_bp, &env, &pwr_env);
 
 			#if DOWNSAMPLE_FACTOR > 1
 			if (state->s == 0) {
+			#else
+			if (1) {
 			#endif
 				const struct envs env_d = band->ev.env_buf[band->ev.buf_p];
 				band->pwr_env_xc = pwr_env;
 				if (k > 0) band_cross_couple(&band->pwr_env_xc, &state->band[k-1].pwr_env_xc, CROSS_COUPLE_FACTOR);
 				process_events(&band->ev, &state->evc, &env, &band->pwr_env_xc, &band->ax, &band->ax_ev);
+				has_ev = has_ev | band->ev.hold;
 				norm_axes(&band->ax);
 
 				struct matrix_coefs m = {0};
 				calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
-				band->dir_boost = m.dir_boost;
-
+				band->dir_boost_m = m.dir_boost;
 				const double weight = env_d.sum * env_d.sum * fb_weights[k];
-				dir_boost += m.dir_boost * m.dir_boost * weight;
+				dir_boost_sum += m.dir_boost * m.dir_boost * weight;
 				dir_boost_norm += weight;
 
-			#if DOWNSAMPLE_FACTOR > 1
 				cs_interp_insert(&band->lsl_m, m.lsl);
 				cs_interp_insert(&band->lsr_m, m.lsr);
 				cs_interp_insert(&band->rsl_m, m.rsl);
@@ -386,32 +387,60 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			}
 			out_ls += s0_d_fb*cs_interp(&band->lsl_m, state->s) + s1_d_fb*cs_interp(&band->lsr_m, state->s);
 			out_rs += s0_d_fb*cs_interp(&band->rsl_m, state->s) + s1_d_fb*cs_interp(&band->rsr_m, state->s);
-			#else
-			out_ls += s0_d_fb*m.lsl + s1_d_fb*m.lsr;
-			out_rs += s0_d_fb*m.rsl + s1_d_fb*m.rsr;
-			#endif
 		}
 
 		#if DOWNSAMPLE_FACTOR > 1
 		if (state->s == 0) {
-		#endif
-			dir_boost = smf_asym_run(&state->dir_boost_smooth,
-				(dir_boost_norm > 0.0) ? sqrt(dir_boost / dir_boost_norm) : 0.0);
-		#if DOWNSAMPLE_FACTOR > 1
-			cs_interp_insert(&state->dir_boost, dir_boost);
-		}
-		const double dir_boost_interp = cs_interp(&state->dir_boost, state->s);
-		const double ll_m = norm_mult + dir_boost_interp;
-		const double rr_m = norm_mult + dir_boost_interp;
 		#else
-		state->dir_boost = dir_boost;
-		const double ll_m = norm_mult + dir_boost;
-		const double rr_m = norm_mult + dir_boost;
+		if (1) {
 		#endif
-		const double lr_m = 0.0, rl_m = 0.0;
+			const double dir_boost_wavg = (dir_boost_norm > 0.0) ? sqrt(dir_boost_sum/dir_boost_norm) : 0.0;
+			double band_weight = 1.0;
+			switch (state->db_type) {
+			case DIR_BOOST_TYPE_COMBINED:
+				band_weight = (has_ev) ? ewma_set(&state->dir_boost_band_weight, DIR_BOOST_BAND_MIN)
+					: ewma_run(&state->dir_boost_band_weight, DIR_BOOST_BAND_MAX);
+			case DIR_BOOST_TYPE_BAND:
+				for (k = 0; k < N_BANDS; ++k) {
+					struct matrix4_band *band = &state->band[k];
+					cs_interp_insert(&band->dir_boost, smf_asym_run(&band->dir_boost_smooth,
+						dir_boost_wavg*(1.0-band_weight) + band->dir_boost_m*band_weight));
+				}
+				break;
+			default:
+				cs_interp_insert(&state->dir_boost, smf_asym_run(&state->dir_boost_smooth, dir_boost_wavg));
+			}
+		}
+		if (state->db_type == DIR_BOOST_TYPE_BAND || state->db_type == DIR_BOOST_TYPE_COMBINED) {
+			for (k = 0; k < N_BANDS; ++k) {
+				struct matrix4_band *band = &state->band[k];
+				const double dir_boost_interp = cs_interp(&band->dir_boost, state->s);
+				const double ll_m = norm_mult + dir_boost_interp;
+				const double rr_m = norm_mult + dir_boost_interp;
+				const double lr_m = 0.0, rl_m = 0.0;
 
-		const sample_t out_l = s0_d*ll_m + s1_d*lr_m;
-		const sample_t out_r = s0_d*rl_m + s1_d*rr_m;
+				const sample_t s0_d_fb = state->fb_buf[0][state->fb_buf_p].s[k];
+				const sample_t s1_d_fb = state->fb_buf[1][state->fb_buf_p].s[k];
+				out_l += s0_d_fb*ll_m + s1_d_fb*lr_m;
+				out_r += s0_d_fb*rl_m + s1_d_fb*rr_m;
+			}
+		}
+		else {
+			const double dir_boost_interp = cs_interp(&state->dir_boost, state->s);
+			const double ll_m = norm_mult + dir_boost_interp;
+			const double rr_m = norm_mult + dir_boost_interp;
+			const double lr_m = 0.0, rl_m = 0.0;
+
+			const sample_t s0_d = state->bufs[state->c0][state->p];
+			const sample_t s1_d = state->bufs[state->c1][state->p];
+			out_l = s0_d*ll_m + s1_d*lr_m;
+			out_r = s0_d*rl_m + s1_d*rr_m;
+		}
+
+		for (k = 0; k < N_BANDS; ++k) {
+			state->fb_buf[0][state->fb_buf_p].s[k] = state->fb[0].s[k];
+			state->fb_buf[1][state->fb_buf_p].s[k] = state->fb[1].s[k];
+		}
 
 		if (state->has_output) {
 			for (k = 0; k < e->istream.channels; ++k) {
@@ -441,6 +470,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			#endif
 		}
 		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+		state->fb_buf_p = (state->fb_buf_p + 1 >= state->fb_buf_len) ? 0 : state->fb_buf_p + 1;
 		if (state->p == 0)
 			state->has_output = 1;
 	}
@@ -452,16 +482,16 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				dsp_log_printf("\n%s%s: band %zd: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); dir_boost: %05.3f; adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
 					e->name, (state->disable) ? " [off]" : "", i,
 					TO_DEGREES(state->band[i].ax.lr), TO_DEGREES(state->band[i].ax_ev.lr), TO_DEGREES(state->band[i].ax.cs), TO_DEGREES(state->band[i].ax_ev.cs),
-					state->band[i].dir_boost, state->band[i].ev.adj, state->band[i].ev.ord_count, state->band[i].ev.diff_count, state->band[i].ev.early_count, state->band[i].ev.ignore_count);
+					(state->db_type == DIR_BOOST_TYPE_BAND || state->db_type == DIR_BOOST_TYPE_COMBINED)
+						? CS_INTERP_PEEK(&state->band[i].dir_boost) : state->band[i].dir_boost_m,
+					state->band[i].ev.adj, state->band[i].ev.ord_count, state->band[i].ev.diff_count, state->band[i].ev.early_count, state->band[i].ev.ignore_count);
 			}
-			dsp_log_printf("\n%s%s: weighted RMS dir_boost: %05.3f\033[K\r",
-				e->name, (state->disable) ? " [off]" : "",
-				#if DOWNSAMPLE_FACTOR > 1
-					CS_INTERP_PEEK(&state->dir_boost));
-				#else
-					state->dir_boost);
-				#endif
-			dsp_log_printf("\033[%zdA", i+1);
+			if (state->db_type == DIR_BOOST_TYPE_SIMPLE) {
+				dsp_log_printf("\n%s%s: weighted RMS dir_boost: %05.3f\033[K\r",
+					e->name, (state->disable) ? " [off]" : "", CS_INTERP_PEEK(&state->dir_boost));
+				dsp_log_printf("\033[%zdA", i+1);
+			}
+			else dsp_log_printf("\033[%zdA", i);
 			dsp_log_release();
 		}
 	#endif
@@ -481,11 +511,12 @@ void matrix4_mb_effect_reset(struct effect *e)
 	int i;
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->p = 0;
+	state->fb_buf_p = 0;
 	state->has_output = 0;
 	for (i = 0; i < e->istream.channels; ++i)
 		memset(state->bufs[i], 0, state->len * sizeof(sample_t));
-	memset(state->fb_buf[0], 0, state->len * sizeof(struct filter_bank_frame));
-	memset(state->fb_buf[1], 0, state->len * sizeof(struct filter_bank_frame));
+	memset(state->fb_buf[0], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
+	memset(state->fb_buf[1], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
 }
 
 void matrix4_mb_effect_signal(struct effect *e)
@@ -531,8 +562,9 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	#ifndef LADSPA_FRONTEND
 		if (state->show_status) {
 			dsp_log_acquire();
-			for (int i = 0; i < N_BANDS+1; ++i) dsp_log_printf("\033[K\n");
-			dsp_log_printf("\033[K\r\033[%dA", N_BANDS+1);
+			const int n_status_lines = N_BANDS + ((state->db_type == DIR_BOOST_TYPE_SIMPLE) ? 1 : 0);
+			for (int i = 0; i < n_status_lines; ++i) dsp_log_printf("\033[K\n");
+			dsp_log_printf("\033[K\r\033[%dA", n_status_lines);
 			dsp_log_release();
 		}
 	#endif
@@ -576,26 +608,27 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->c1 = config.c1;
 #if !(DO_FILTER_BANK_TEST)
 	state->show_status = config.show_status;
-	state->do_dir_boost = config.do_dir_boost;
+	state->do_dir_boost = (config.db_type != DIR_BOOST_TYPE_NONE);
+	state->db_type = config.db_type;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 
 	for (int k = 0; k < N_BANDS; ++k) {
 		smooth_state_init(&state->band[k].sm, istream);
 		event_state_init(&state->band[k].ev, istream, EVENT_THRESH_MB/EVENT_THRESH * ((k==0)?1.2:1.0));
+		smf_asym_init(&state->band[k].dir_boost_smooth, DOWNSAMPLED_FS(istream->fs),
+			SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 	}
+	ewma_init(&state->dir_boost_band_weight, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(DIR_BOOST_BAND_RISE));
+	ewma_set(&state->dir_boost_band_weight, DIR_BOOST_BAND_MAX);
 	smf_asym_init(&state->dir_boost_smooth, DOWNSAMPLED_FS(istream->fs),
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 
+	state->fb_buf_len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
 #if DOWNSAMPLE_FACTOR > 1
-	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs) + CS_INTERP_DELAY_FRAMES;
-#else
-	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
+	state->fb_buf_len += CS_INTERP_DELAY_FRAMES;
 #endif
-	state->bufs = calloc(istream->channels, sizeof(sample_t *));
-	for (int i = 0; i < istream->channels; ++i)
-		state->bufs[i] = calloc(state->len, sizeof(sample_t));
-	state->fb_buf[0] = calloc(state->len, sizeof(struct filter_bank_frame));
-	state->fb_buf[1] = calloc(state->len, sizeof(struct filter_bank_frame));
+	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
+	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
 	state->surr_mult = config.surr_mult;
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
@@ -628,11 +661,15 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	#if DO_FILTER_BANK_TEST
 		e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0);
 	#else
-		char *fir_channel_selector = NEW_SELECTOR(e->ostream.channels);
-		SET_BIT(fir_channel_selector, istream->channels);
-		SET_BIT(fir_channel_selector, istream->channels + 1);
-		e_fir = fir_effect_init_with_filter(ei, &e->ostream, fir_channel_selector, &filter[zx], 1, phase_lin_frames, 0);
-		free(fir_channel_selector);
+		if (config.db_type == DIR_BOOST_TYPE_BAND || config.db_type == DIR_BOOST_TYPE_COMBINED)
+			e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0);
+		else {
+			char *fir_channel_selector = NEW_SELECTOR(e->ostream.channels);
+			SET_BIT(fir_channel_selector, istream->channels);
+			SET_BIT(fir_channel_selector, istream->channels + 1);
+			e_fir = fir_effect_init_with_filter(ei, &e->ostream, fir_channel_selector, &filter[zx], 1, phase_lin_frames, 0);
+			free(fir_channel_selector);
+		}
 	#endif
 		free(filter);
 		state->fb[1] = state->fb[0];  /* reset */
@@ -644,29 +681,40 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #endif
 
 #if !(DO_FILTER_BANK_TEST)
-	const ssize_t surr_delay_frames = config.surr_delay_frames - phase_lin_frames + 1;
+	state->len = state->fb_buf_len;
+	ssize_t surr_delay_frames = config.surr_delay_frames - (phase_lin_frames - 1);
+	if (config.db_type == DIR_BOOST_TYPE_BAND || config.db_type == DIR_BOOST_TYPE_COMBINED) {
+		state->len += phase_lin_frames - 1;
+		surr_delay_frames += phase_lin_frames - 1;
+	}
+	state->bufs = calloc(istream->channels, sizeof(sample_t *));
+	for (int i = 0; i < istream->channels; ++i)
+		state->bufs[i] = calloc(state->len, sizeof(sample_t));
 	struct effect *e_delay = matrix4_delay_effect_init(ei, &e->ostream, surr_delay_frames);
 #endif
 
 	e->data = state;
-#ifdef HAVE_FFTW3
 #if DO_FILTER_BANK_TEST
+#ifdef HAVE_FFTW3
 	if (e_fir) {
 		e_fir->next = e;
 		return e_fir;
 	}
+#endif
 	return e;
 #else
+#ifdef HAVE_FFTW3
+	if (e_fir && (config.db_type == DIR_BOOST_TYPE_BAND || config.db_type == DIR_BOOST_TYPE_COMBINED)) {
+		e_fir->next = e;
+		e->next = e_delay;
+		return e_fir;
+	}
 	if (e_fir) {
 		e->next = e_fir;
 		e_fir->next = e_delay;
+		return e;
 	}
-	else {
-		e->next = e_delay;
-	}
-	return e;
 #endif
-#else
 	e->next = e_delay;
 	return e;
 #endif

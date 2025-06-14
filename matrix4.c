@@ -48,11 +48,6 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 	for (i = 0; i < *frames; ++i) {
 		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
-		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
-		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
-		const sample_t s0_d = state->bufs[state->c0][state->p];
-		const sample_t s1_d = state->bufs[state->c1][state->p];
-
 		if (state->fade_p > 0) {
 			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
 			norm_mult = CALC_NORM_MULT(surr_mult);
@@ -63,6 +58,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			surr_mult = 0.0;
 		}
 
+		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
+		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
 		const sample_t s0_bp = biquad(&state->in_lp[0], biquad(&state->in_hp[0], s0));
 		const sample_t s1_bp = biquad(&state->in_lp[1], biquad(&state->in_hp[1], s1));
 
@@ -80,6 +77,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		const double rr_m = norm_mult + dir_boost;
 		const double lr_m = 0.0, rl_m = 0.0;
 
+		const sample_t s0_d = state->bufs[state->c0][state->p];
+		const sample_t s1_d = state->bufs[state->c1][state->p];
 		const sample_t out_l = s0_d*ll_m + s1_d*lr_m;
 		const sample_t out_r = s0_d*rl_m + s1_d*rr_m;
 		const sample_t out_ls = s0_d*m.lsl + s1_d*m.lsr;
@@ -223,7 +222,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->show_status = config.show_status;
-	state->do_dir_boost = config.do_dir_boost;
+	state->do_dir_boost = (config.db_type != DIR_BOOST_TYPE_NONE);
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
 
 	for (int i = 0; i < 2; ++i) {

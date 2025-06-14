@@ -99,8 +99,8 @@ static void set_fb_stop_default(struct matrix4_config *config)
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
-	config->do_dir_boost = 1;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
+	config->db_type = DIR_BOOST_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
@@ -108,10 +108,29 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 		while (*opt != '\0') {
 			next_opt = isolate(opt, ',');
 			if (*opt == '\0') /* do nothing */;
-			else if (is_opt(opt, "show_status"))   config->show_status   = 1;
-			else if (is_opt(opt, "no_dir_boost"))  config->do_dir_boost  = 0;
-			else if (is_opt(opt, "signal"))        config->enable_signal = 1;
-			else if (is_opt(opt, "linear_phase"))  config->do_phase_lin  = 1;
+			else if (is_opt(opt, "show_status")) config->show_status = 1;
+			else if (is_opt(opt, "dir_boost=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0' || strcmp(opt_arg, "simple") == 0)
+					config->db_type = DIR_BOOST_TYPE_SIMPLE;
+				else if (strcmp(opt_arg, "band") == 0) {
+					config->db_type = DIR_BOOST_TYPE_BAND;
+					config->do_phase_lin = 1;
+				}
+				else if (strcmp(opt_arg, "combined") == 0) {
+					config->db_type = DIR_BOOST_TYPE_COMBINED;
+					config->do_phase_lin = 1;
+				}
+				else if (strcmp(opt_arg, "none") == 0)
+					config->db_type = DIR_BOOST_TYPE_NONE;
+				else {
+					LOG_FMT(LL_ERROR, "%s: error: unrecognized directional boost type: %s", argv[0], opt_arg);
+					goto fail;
+				}
+			}
+			else if (is_opt(opt, "no_dir_boost")) config->db_type = DIR_BOOST_TYPE_NONE;
+			else if (is_opt(opt, "signal"))       config->enable_signal = 1;
+			else if (is_opt(opt, "linear_phase")) config->do_phase_lin  = 1;
 			else if (is_opt(opt, "surround_delay=")) {
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;

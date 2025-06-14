@@ -236,11 +236,20 @@ Example:
 
 	Options are given as a comma-separated list. Recognized options are:
 
-	* `no_dir_boost`  
-		Disable directional boost of front channels.
 	* `show_status`  
 		Show a status line (slightly broken currently, but still useful for
 		debugging).
+	* `dir_boost[=simple|band|combined|none]`  
+		Directional boost method for the front channels. The default is
+		`simple`, which affects all frequencies equally. The `band` and
+		`combined` methods only apply to `matrix4_mb`. `band` simply makes each
+		band independent. This minimizes pumping of the uncorrelated component
+		outside of a given band, but can cause audible timbre changes to the
+		correlated component in some cases. `combined` computes weighted
+		averages of the `simple` and `band` methods based on the status of the
+		event detection algorithm.
+	* `no_dir_boost`  
+		Alias for `dir_boost=none`.
 	* `signal`  
 		Toggle the effect when `effect.signal()` is called.
 	* `linear_phase` (`matrix4_mb` only)  
