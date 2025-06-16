@@ -644,15 +644,10 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 
 	m->dir_boost = 0.0;
 	if (do_dir_boost) {
-		const double b_norm = 1.0-norm_mult;
-		if (cs > 0.0) {
-			const double b_gl = 1.0+tan(abs_lr+cs-M_PI_4);
-			m->dir_boost = b_norm*b_gl*b_gl;
-		}
-		else {
-			const double b_lr = b_norm*gsl;
-			m->dir_boost = (cs > -M_PI_4/2) ? b_lr*cos(3.0*cs) : b_lr*cos(cs-M_PI_4);
-		}
+		const double b_gc = (cs > 0.0) ? 1.0+tan(abs_lr+cs-M_PI_4) : gl;
+		const double b_gu = norm_mult*surr_mult*(1.0-b_gc)/(1.0-b_gc+0.5*b_gc*b_gc);  /* uncorrelated part */
+		m->dir_boost = sqrt(1.0-b_gu*b_gu)-norm_mult;
+		if (cs < 0.0) m->dir_boost *= ((cs>-M_PI_4/2)?cos(3.0*cs):cos(cs-M_PI_4));
 	}
 }
 #endif
