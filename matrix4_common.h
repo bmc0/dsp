@@ -635,8 +635,9 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 	}
 
 	/* Power correction and scaling */
-	const double ls_m_scale = norm_mult*surr_mult/sqrt(m->lsl*m->lsl + m->lsr*m->lsr);
-	const double rs_m_scale = norm_mult*surr_mult/sqrt(m->rsl*m->rsl + m->rsr*m->rsr);
+	const double surr_gain = norm_mult*surr_mult;
+	const double ls_m_scale = surr_gain/sqrt(m->lsl*m->lsl + m->lsr*m->lsr);
+	const double rs_m_scale = surr_gain/sqrt(m->rsl*m->rsl + m->rsr*m->rsr);
 	m->lsl *= ls_m_scale;
 	m->lsr *= ls_m_scale;
 	m->rsl *= rs_m_scale;
@@ -645,8 +646,18 @@ static void calc_matrix_coefs(const struct axes *ax, int do_dir_boost, double no
 	m->dir_boost = 0.0;
 	if (do_dir_boost) {
 		const double b_gc = (cs > 0.0) ? 1.0+tan(abs_lr+cs-M_PI_4) : gl;
-		const double b_gu = norm_mult*surr_mult*(1.0-b_gc)/(1.0-b_gc+0.5*b_gc*b_gc);  /* uncorrelated part */
-		m->dir_boost = sqrt(1.0-b_gu*b_gu)-norm_mult;
+		const double b_gc2 = b_gc*b_gc;
+		const double b_lr_c0 = (1.0-b_gc2)*(1.0-b_gc2);
+		const double b_lr_c1 = (b_gc2-b_gc)*(b_gc2-b_gc);
+		const double b_lr_gu2 = surr_gain*surr_gain*(b_lr_c0+b_lr_c1)/(b_lr_c0+b_gc2);
+		const double b_lr = sqrt(1.0-b_lr_gu2)-norm_mult;
+		if (cs > 0.0) {
+			const double b_cs_gu = surr_gain*(1.0-b_gc)/(1.0-b_gc+0.5*b_gc2);
+			const double b_cs = sqrt(1.0-b_cs_gu*b_cs_gu)-norm_mult;
+			const double b_cs_weight = cs/sqrt(lr*lr+cs*cs);  /* FIXME: slight error along diagonals */
+			m->dir_boost = b_lr*(1.0-b_cs_weight) + b_cs*b_cs_weight;
+		}
+		else m->dir_boost = b_lr;
 		if (cs < 0.0) m->dir_boost *= ((cs>-M_PI_4/2)?cos(3.0*cs):cos(cs-M_PI_4));
 	}
 }
