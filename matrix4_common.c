@@ -276,7 +276,6 @@ struct effect * matrix4_delay_effect_init(const struct effect_info *ei, const st
 	if (frames == 0)
 		return NULL;
 
-	LOG_FMT(LL_VERBOSE, "%s: info: net surround delay is %gms (%zd sample%s)", ei->name, frames*1000.0/istream->fs, frames, (frames == 1) ? "" : "s");
 	struct effect *e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
@@ -295,6 +294,9 @@ struct effect * matrix4_delay_effect_init(const struct effect_info *ei, const st
 	state->len = (frames < 0) ? -frames : frames;
 	state->n_ch = (frames > 0) ? 2 : e->istream.channels - 2;
 	state->buf = calloc(state->len * state->n_ch, sizeof(sample_t));
+
+	LOG_FMT(LL_VERBOSE, "%s: info: net surround delay is %gms (%zd sample%s)",
+		ei->name, frames*1000.0/istream->fs, frames, (state->len == 1) ? "" : "s");
 
 	e->data = state;
 	return e;
