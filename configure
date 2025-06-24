@@ -117,6 +117,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	TARGETS="$TARGETS dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_dsp"
+	unset NEED_FIR_UTIL
 	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ladspa.h && check_header ltdl.h && check_lib ltdl; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lltdl"
@@ -127,8 +128,9 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	fi
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE
 	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
-	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3
+	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3 && NEED_FIR_UTIL=y
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header zita-convolver.h && check_lib zita-convolver; then
+		NEED_FIR_UTIL=y
 		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lzita-convolver"
 		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DHAVE_ZITA_CONVOLVER"
@@ -136,6 +138,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	else
 		echo "[dsp] disabled zita_convolver.o"
 	fi
+	[ "$NEED_FIR_UTIL" = "y" ] && DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS fir_util.o"
 	check_pkg_dsp alsa "$CONFIG_DISABLE_ALSA" alsa.o -DHAVE_ALSA
 	check_pkg_dsp ao "$CONFIG_DISABLE_AO" ao.o -DHAVE_AO
 	check_pkg_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -DHAVE_MAD
@@ -149,7 +152,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	TARGETS="$TARGETS ladspa_dsp"
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_ladspa_dsp"
-	unset INCLUDE_CODECS
+	unset INCLUDE_CODECS NEED_FIR_UTIL
 	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ltdl.h && check_lib ltdl; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS ladspa_host.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lltdl"
@@ -158,9 +161,13 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	else
 		echo "[ladspa_dsp] disabled ladspa_host.o"
 	fi
-	check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "fir.o fir_p.o hilbert.o" -DHAVE_FFTW3 && INCLUDE_CODECS=y
+	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "fir.o fir_p.o hilbert.o" -DHAVE_FFTW3; then
+		INCLUDE_CODECS=y
+		NEED_FIR_UTIL=y
+	fi
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header zita-convolver.h && check_lib zita-convolver; then
 		INCLUDE_CODECS=y
+		NEED_FIR_UTIL=y
 		LADSPA_DSP_OPTIONAL_CPP_OBJECTS="$LADSPA_DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
 		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lzita-convolver"
 		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DHAVE_ZITA_CONVOLVER"
@@ -168,6 +175,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	else
 		echo "[ladspa_dsp] disabled zita_convolver.o"
 	fi
+	[ "$NEED_FIR_UTIL" = "y" ] && LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS fir_util.o"
 	if [ "$INCLUDE_CODECS" = "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sampleconv.o"
 		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE \

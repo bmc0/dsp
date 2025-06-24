@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,13 +16,18 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#ifndef DSP_FIR_H
-#define DSP_FIR_H
+#ifndef DSP_FIR_UTIL_H
+#define DSP_FIR_UTIL_H
 
 #include "dsp.h"
 #include "effect.h"
+#include "codec.h"
+#include "util.h"
 
-struct effect * fir_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int);
-struct effect * fir_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+#define FIR_INPUT_CODEC_OPTS "t:e:BLNr:c:"
+
+sample_t * fir_read_filter(const struct effect_info *, const struct stream_info *, const char *, const struct codec_params *, int *, ssize_t *);
+int fir_parse_opts(const struct effect_info *, const struct stream_info *, struct codec_params *, struct dsp_getopt_state *, int, const char *const *, const char *,
+	int (*)(const struct effect_info *, const struct stream_info *, const struct codec_params *, int, const char *, void *), void *);
 
 #endif

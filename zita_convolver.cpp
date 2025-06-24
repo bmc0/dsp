@@ -25,7 +25,7 @@ extern "C" {
 	#include "util.h"
 	#include "codec.h"
 	#include "sampleconv.h"
-	#include "fir.h"
+	#include "fir_util.h"
 }
 
 struct zita_convolver_state {
@@ -243,7 +243,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	char *endptr;
 
-	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL);
+	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL, NULL);
 	if (err || g.ind < argc-3 || g.ind > argc-1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;

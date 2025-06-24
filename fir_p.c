@@ -28,7 +28,9 @@
 #include <semaphore.h>
 #include "fir_p.h"
 #include "fir.h"
+#include "fir_util.h"
 #include "util.h"
+#include "codec.h"
 
 #define DIRECT_LEN           (1<<5)
 #define FFT_LEN_STEP_DEFAULT (1<<2)
@@ -528,7 +530,7 @@ struct effect * fir_p_effect_init(const struct effect_info *ei, const struct str
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	char *endptr;
 
-	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL);
+	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL, NULL);
 	if (err || g.ind < argc-2 || g.ind > argc-1) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return NULL;
