@@ -21,7 +21,6 @@
 #include <complex.h>
 #include <math.h>
 #include "matrix4_mb.h"
-#include "ewma.h"
 #include "biquad.h"
 #include "cap5.h"
 #include "util.h"
