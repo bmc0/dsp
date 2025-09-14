@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <pthread.h>
 #include "decorrelate.h"
 #include "util.h"
 
@@ -144,16 +145,19 @@ void decorrelate_effect_destroy(struct effect *e)
 	free(state);
 }
 
-#define RANDOM_FILTER_DELAY ((double)((seed>0)?pm_rand1_r(&seed):pm_rand())/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
+#define RANDOM_FILTER_DELAY ((double)pm_rand1_r((opt_seed>0)?&opt_seed:&seed)/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
 
 struct effect * decorrelate_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
+	static pthread_mutex_t rand_lock = PTHREAD_MUTEX_INITIALIZER;
+	static uint32_t seed = 1;
+
 	struct decorrelate_state *state;
 	struct effect *e;
 	char *endptr;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int mono = 0, n_stages = 5, opt;
-	uint32_t seed = 0;
+	uint32_t opt_seed = 0;
 
 	while ((opt = dsp_getopt(&g, argc, argv, "ms:")) != -1) {
 		long int v;
@@ -198,6 +202,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 		if (GET_BIT(channel_selector, k))
 			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
 	}
+	pthread_mutex_lock(&rand_lock);
 	for (int j = 0; j < n_stages; ++j) {
 		const double d = (mono) ? RANDOM_FILTER_DELAY : 0.0;
 		for (int k = 0; k < istream->channels; ++k) {
@@ -205,6 +210,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY);
 		}
 	}
+	pthread_mutex_unlock(&rand_lock);
 	e->data = state;
 	return e;
 }
