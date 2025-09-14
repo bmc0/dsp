@@ -28,10 +28,6 @@
  * (doi:10.3390/app10010187) https://www.mdpi.com/2076-3417/10/1/187
 */
 
-#define FILTER_FC 1100.0
-#define RT60_LF   0.1
-#define RT60_HF   0.008
-
 struct sch_ap_state {
 	int len, p;
 	sample_t *mx, *my;
@@ -43,17 +39,16 @@ struct decorrelate_state {
 	struct sch_ap_state **ap;
 };
 
-static void sch_ap_init(struct sch_ap_state *ap, int fs, double delay)
+static void sch_ap_init(struct sch_ap_state *ap, int fs, ssize_t delay_samples, double fc, double rt60_lf, double rt60_hf)
 {
-	const int delay_samples = lround(delay*fs);
 	ap->len = delay_samples+1;
 	ap->p = 0;
 	ap->mx = calloc(ap->len, sizeof(sample_t));
 	ap->my = calloc(ap->len, sizeof(sample_t));
 
-	const double gain_lf = -60.0/(RT60_LF * fs) * delay_samples;
-	const double gain_hf = -60.0/(RT60_HF * fs) * delay_samples;
-	const double w0 = 2.0 * M_PI * FILTER_FC / fs;
+	const double gain_lf = -60.0/(rt60_lf * fs) * delay_samples;
+	const double gain_hf = -60.0/(rt60_hf * fs) * delay_samples;
+	const double w0 = 2.0 * M_PI * fc / fs;
 	const double t = tan(w0/2.0);
 	const double g_hf = pow(10.0, gain_hf/20.0);
 	const double gd = pow(10.0, (gain_lf-gain_hf)/20.0);
@@ -145,7 +140,7 @@ void decorrelate_effect_destroy(struct effect *e)
 	free(state);
 }
 
-#define RANDOM_FILTER_DELAY ((double)pm_rand1_r((opt_seed>0)?&opt_seed:&seed)/PM_RAND_MAX * 2.2917e-3 + 0.83333e-3)
+#define RANDOM_FILTER_DELAY lround((double)pm_rand1_r((opt_seed>0)?&opt_seed:&seed)/PM_RAND_MAX*(delay_max-delay_min) + delay_min)
 
 struct effect * decorrelate_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
@@ -158,8 +153,10 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int mono = 0, n_stages = 5, opt;
 	uint32_t opt_seed = 0;
+	ssize_t delay_min = lround(0.83333e-3*istream->fs), delay_max = lround(3.12503e-3*istream->fs);
+	double filter_fc = 1100.0, rt60_lf = 0.1, rt60_hf = 0.008;
 
-	while ((opt = dsp_getopt(&g, argc, argv, "ms:")) != -1) {
+	while ((opt = dsp_getopt(&g, argc, argv, "ms:d:D:f:l:h:")) != -1) {
 		long int v;
 		switch (opt) {
 		case 'm': mono = 1; break;
@@ -169,11 +166,40 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 			CHECK_RANGE(v > 0 && v <= PM_RAND_MAX, "seed", return NULL);
 			seed = v;
 			break;
+		case 'd':
+			delay_min = parse_len(g.arg, istream->fs, &endptr);
+			CHECK_ENDPTR(g.arg, endptr, "delay_min", return NULL);
+			CHECK_RANGE(delay_min > 0 && delay_min <= istream->fs*2, "delay_min", return NULL);
+			break;
+		case 'D':
+			delay_max = parse_len(g.arg, istream->fs, &endptr);
+			CHECK_ENDPTR(g.arg, endptr, "delay_max", return NULL);
+			CHECK_RANGE(delay_max > 0 && delay_max <= istream->fs*2, "delay_max", return NULL);
+			break;
+		case 'f':
+			filter_fc = parse_freq(g.arg, &endptr);
+			CHECK_ENDPTR(g.arg, endptr, "fc", return NULL);
+			CHECK_FREQ(filter_fc, istream->fs, "fc", return NULL);
+			break;
+		case 'l':
+			rt60_lf = parse_len_frac(g.arg, istream->fs, &endptr) / istream->fs;
+			CHECK_ENDPTR(g.arg, endptr, "rt60_lf", return NULL);
+			CHECK_RANGE(rt60_lf > 0.0, "rt60_lf", return NULL);
+			break;
+		case 'h':
+			rt60_hf = parse_len_frac(g.arg, istream->fs, &endptr) / istream->fs;
+			CHECK_ENDPTR(g.arg, endptr, "rt60_hf", return NULL);
+			CHECK_RANGE(rt60_hf > 0.0, "rt60_hf", return NULL);
+			break;
 		case ':':
 			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
 			return NULL;
 		default: goto print_usage;
 		}
+	}
+	if (delay_max <= delay_min) {
+		LOG_FMT(LL_ERROR, "%s: error: delay_max must be greater than delay_min", argv[0]);
+		return NULL;
 	}
 	if (g.ind < argc-1) {
 		print_usage:
@@ -204,10 +230,10 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	}
 	pthread_mutex_lock(&rand_lock);
 	for (int j = 0; j < n_stages; ++j) {
-		const double d = (mono) ? RANDOM_FILTER_DELAY : 0.0;
+		const ssize_t d = (mono) ? RANDOM_FILTER_DELAY : 0;
 		for (int k = 0; k < istream->channels; ++k) {
 			if (GET_BIT(channel_selector, k))
-				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY);
+				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY, filter_fc, rt60_lf, rt60_hf);
 		}
 	}
 	pthread_mutex_unlock(&rand_lock);

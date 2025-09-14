@@ -366,13 +366,37 @@ odd. Bandwidth is controlled by the number of taps. If \fB\-p\fR is given, the
 Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available).
 The \fB\-a\fR option sets the phase shift in degrees. The default is -90°.
 .TP
-\fBdecorrelate\fR [\fB\-m\fR] [\fB\-s\fR \fIseed\fR] [\fIstages\fR]
+\fBdecorrelate\fR [\fIoptions\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder
-Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187).
-If \fB\-m\fR is given, the same filter parameters are used for all input
-channels. The default number of stages is 5, which results in an
-average group delay of about 9.5ms at high frequencies. The \fB\-s\fR option
-sets the random seed for filter parameter generation.
+Allpass Filters'' by Sebastian J. Schlecht (doi:10.3390/app10010187). With
+the default settings, the average group delay is around 9.5ms at high
+frequencies. The \fIoptions\fR are:
+.RS
+.TP
+\fB\-m\fR
+Use the same filters for all input channels.
+.TP
+\fB\-s\fR \fIseed\fR
+Random seed value.
+.TP
+\fB\-d\fR \fIdelay_min\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Minimum filter delay (default: 0.83333ms).
+.TP
+\fB\-D\fR \fIdelay_max\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+Maximum filter delay (default: 3.12503ms).
+.TP
+\fB\-f\fR \fIfc\fR[\fBk\fR]
+Damping filter center frequency (default: 1kHz).
+.TP
+\fB\-l\fR \fIrt60_lf\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+RT60 at low frequencies (default: 100ms).
+.TP
+\fB\-h\fR \fIrt60_hf\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+RT60 at high frequencies (default: 8ms).
+.RE
+.TP
+\ 
+The default number of stages is 5.
 .TP
 \fBnoise\fR \fIlevel\fR[\fBb\fR]
 Add TPDF noise. The \fIlevel\fR argument specifies the peak level of the noise

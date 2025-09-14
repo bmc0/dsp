@@ -90,7 +90,7 @@ static const struct effect_info effects[] = {
 #ifdef HAVE_FFTW3
 	{ "hilbert",            "hilbert [-pz] [-a angle] taps",           hilbert_effect_init,   0 },
 #endif
-	{ "decorrelate",        "decorrelate [-m] [-s seed] [stages]",     decorrelate_effect_init, 0 },
+	{ "decorrelate",        "decorrelate [options] [stages]",          decorrelate_effect_init, 0 },
 	{ "noise",              "noise level[b]",                          noise_effect_init,     0 },
 	{ "dither",             "dither [shape] [[quantize_bits] bits]",   dither_effect_init,    0 },
 #ifdef ENABLE_LADSPA_HOST

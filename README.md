@@ -342,13 +342,24 @@ Example:
 	`fir_p` convolution engine is used instead of the default `fir` engine.
 	Similarly, if `-z` is given, `zita_convolver` is used (if available).
 	The `-a` option sets the phase shift in degrees. The default is -90°.
-* `decorrelate [-m] [-s seed] [stages]`  
+* `decorrelate [options] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
-	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187).
-	If `-m` is given, the same filter parameters are used for all input
-	channels. The default number of stages is 5, which results in an
-	average group delay of about 9.5ms at high frequencies. The `-s` option
-	sets the random seed for filter parameter generation.
+	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187). With
+	the default settings, the average group delay is around 9.5ms at high
+	frequencies. The options are:
+
+	Flag                    | Description
+	----------------------- | -----------------------------
+	`-m`                    | Use the same filters for all input channels.
+	`-s seed`               | Random seed value.
+	`-d delay_min[s\|m\|S]` | Minimum filter delay (default: 0.83333ms).
+	`-D delay_max[s\|m\|S]` | Maximum filter delay (default: 3.12503ms).
+	`-f fc[k]`              | Damping filter center frequency (default: 1.1kHz).
+	`-l rt60_lf[s\|m\|S]`   | RT60 at low frequencies (default: 100ms).
+	`-h rt60_hf[s\|m\|S]`   | RT60 at high frequencies (default: 8ms).
+
+	The default number of stages is 5.
+
 * `noise level[b]`  
 	Add TPDF noise. The `level` argument specifies the peak level of the noise
 	in dBFS if no suffix is given, or the effective precision in bits if the
