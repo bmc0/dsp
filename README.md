@@ -41,7 +41,7 @@ options. Run `./configure --help` to see all available options.
 
 #### Global options
 
-Flag        | Description
+Option      | Description
 ----------- | --------------------------------------------------------------------------
 `-h`        | Show help text.
 `-b frames` | Block size (must be given before the first input).
@@ -60,7 +60,7 @@ Flag        | Description
 
 #### Input/output options
 
-Flag              | Description
+Option            | Description
 ----------------- | -----------------------------
 `-o`              | Output.
 `-t type`         | Type.
@@ -227,7 +227,7 @@ Example:
 	The settings shown above (-6dB surround level, 15ms delay, and 10kHz
 	rolloff) are a good starting point, but may be adjusted to taste. The
 	default `surround_level` is -6dB. Applying the `decorrelate` effect to the
-	surround outputs (optionally with the `-m` flag) seems to further improve
+	surround outputs (optionally with the `-m` option) seems to further improve
 	the spatial impression (note: adjust `surround_delay` to compensate for
 	the `decorrelate` effect's group delay).
 
@@ -309,7 +309,7 @@ Example:
 	The `input_options` are useful mostly when loading raw (headerless) input
 	files and are as follows:
 
-	Flag              | Description
+	Option            | Description
 	----------------- | -----------------------------
 	`-t type`         | Type.
 	`-e encoding`     | Encoding.
@@ -348,7 +348,7 @@ Example:
 	the default settings, the average group delay is around 9.5ms at high
 	frequencies. The options are:
 
-	Flag                    | Description
+	Option                  | Description
 	----------------------- | -----------------------------
 	`-m`                    | Use the same filters for all input channels.
 	`-s seed`               | Random seed value.
@@ -368,7 +368,7 @@ Example:
 	Apply dither with optional noise shaping. The `shape` argument determines
 	the type of dither and the noise shaping filter (if any):
 
-	`shape`    | Description
+	Name       | Description
 	---------- | ----------------------
 	`flat`     | Flat TPDF with no feedback (default).
 	`sloped`   | Flat TPDF with feedback. First-order highpass response.
@@ -428,7 +428,7 @@ Example:
 	Support `inotify` events my be added in the future. Ideally, file
 	modifications should be atomic (i.e. by writing to a temporary file, then
 	`rename(3)`-ing it over top of the original file). If this is not possible,
-	the `-e` flag may be given, which enforces an end-of-file marker in order
+	the `-e` option may be given, which enforces an end-of-file marker in order
 	to detect partially-written files. This marker, `#EOF#`, must be placed at
 	the beginning of a line and may only be followed by whitespace characters.
 
