@@ -101,6 +101,8 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	char *opt_str = NULL;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	config->db_type = DIR_BOOST_TYPE_DEFAULT;
+	config->db_band_weight[0] = DIR_BOOST_MIN_BAND_WEIGHT_DEFAULT;
+	config->db_band_weight[1] = DIR_BOOST_MAX_BAND_WEIGHT_DEFAULT;
 	set_fb_stop_default(config);
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
@@ -111,6 +113,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			else if (is_opt(opt, "show_status")) config->show_status = 1;
 			else if (is_opt(opt, "dir_boost=")) {
 				char *opt_arg = isolate(opt, '=');
+				char *opt_subarg = isolate(opt_arg, ':');
 				if (*opt_arg == '\0' || strcmp(opt_arg, "simple") == 0)
 					config->db_type = DIR_BOOST_TYPE_SIMPLE;
 				else if (strcmp(opt_arg, "band") == 0) {
@@ -120,6 +123,26 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				else if (strcmp(opt_arg, "combined") == 0) {
 					config->db_type = DIR_BOOST_TYPE_COMBINED;
 					config->do_phase_lin = 1;
+					if (*opt_subarg != '\0') {
+						char *opt_subarg1 = isolate(opt_subarg, ':');
+						config->db_band_weight[0] = strtod(opt_subarg, &endptr);
+						CHECK_ENDPTR(opt_subarg, endptr, "min_band_weight", goto fail);
+						CHECK_RANGE(config->db_band_weight[0] >= 0.0 && config->db_band_weight[0] <= 1.0,
+							"min_band_weight", goto fail);
+						if (*opt_subarg1 != '\0') {
+							config->db_band_weight[1] = strtod(opt_subarg1, &endptr);
+							CHECK_ENDPTR(opt_subarg1, endptr, "max_band_weight", goto fail);
+							CHECK_RANGE(config->db_band_weight[1] >= 0.0 && config->db_band_weight[1] <= 1.0,
+								"max_band_weight", goto fail);
+							if (config->db_band_weight[0] > config->db_band_weight[1])
+								LOG_FMT(LL_ERROR, "%s: warning: min_band_weight probably shouldn't be greater than max_band_weight", argv[0]);
+						}
+						else config->db_band_weight[1] = MAXIMUM(config->db_band_weight[0], DIR_BOOST_MAX_BAND_WEIGHT_DEFAULT);
+					}
+					else {
+						config->db_band_weight[0] = DIR_BOOST_MIN_BAND_WEIGHT_DEFAULT;
+						config->db_band_weight[1] = DIR_BOOST_MAX_BAND_WEIGHT_DEFAULT;
+					}
 				}
 				else if (strcmp(opt_arg, "none") == 0)
 					config->db_type = DIR_BOOST_TYPE_NONE;
@@ -127,6 +150,8 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized directional boost type: %s", argv[0], opt_arg);
 					goto fail;
 				}
+				if (*opt_subarg != '\0' && config->db_type != DIR_BOOST_TYPE_COMBINED)
+					LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg);
 			}
 			else if (is_opt(opt, "no_dir_boost")) config->db_type = DIR_BOOST_TYPE_NONE;
 			else if (is_opt(opt, "signal"))       config->enable_signal = 1;

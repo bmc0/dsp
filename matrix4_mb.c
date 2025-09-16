@@ -63,11 +63,7 @@ static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.
 #define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
 
 #define CROSS_COUPLE_FACTOR 0.2
-
-/* DIR_BOOST_TYPE_COMBINED parameters */
-#define DIR_BOOST_BAND_RISE 300.0  /* band weight rise time in milliseconds */
-#define DIR_BOOST_BAND_MAX    0.9  /* maximum band weight */
-#define DIR_BOOST_BAND_MIN    0.1  /* minimum band weight */
+#define DIR_BOOST_BAND_RISE 160.0  /* band weight rise time in milliseconds */
 
 #define DO_FILTER_BANK_TEST 0
 
@@ -103,6 +99,7 @@ struct matrix4_mb_state {
 	sample_t **bufs;
 	struct filter_bank_frame *fb_buf[2];
 	sample_t norm_mult, surr_mult;
+	double dir_boost_band_weight_limits[2];
 	struct event_config evc;
 	struct cs_interp_state dir_boost;
 	struct ewma_state dir_boost_band_weight;
@@ -398,8 +395,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			double band_weight = 1.0;
 			switch (state->db_type) {
 			case DIR_BOOST_TYPE_COMBINED:
-				band_weight = (has_ev) ? ewma_set(&state->dir_boost_band_weight, DIR_BOOST_BAND_MIN)
-					: ewma_run(&state->dir_boost_band_weight, DIR_BOOST_BAND_MAX);
+				band_weight = (has_ev) ? ewma_set(&state->dir_boost_band_weight, state->dir_boost_band_weight_limits[0])
+					: ewma_run(&state->dir_boost_band_weight, state->dir_boost_band_weight_limits[1]);
 			case DIR_BOOST_TYPE_BAND:
 				for (k = 0; k < N_BANDS; ++k) {
 					struct matrix4_band *band = &state->band[k];
@@ -610,6 +607,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->show_status = config.show_status;
 	state->do_dir_boost = (config.db_type != DIR_BOOST_TYPE_NONE);
 	state->db_type = config.db_type;
+	state->dir_boost_band_weight_limits[0] = config.db_band_weight[0];  /* min */
+	state->dir_boost_band_weight_limits[1] = config.db_band_weight[1];  /* max */
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 
 	for (int k = 0; k < N_BANDS; ++k) {
@@ -619,7 +618,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 			SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 	}
 	ewma_init(&state->dir_boost_band_weight, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(DIR_BOOST_BAND_RISE));
-	ewma_set(&state->dir_boost_band_weight, DIR_BOOST_BAND_MAX);
+	ewma_set(&state->dir_boost_band_weight, state->dir_boost_band_weight_limits[1]);
 	smf_asym_init(&state->dir_boost_smooth, DOWNSAMPLED_FS(istream->fs),
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 

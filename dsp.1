@@ -232,7 +232,7 @@ show_status
 Show a status line (slightly broken currently, but still useful for
 debugging).
 .TP
-dir_boost[=\fIsimple\fR|\fIband\fR|\fIcombined\fR|\fInone\fR]
+dir_boost[=\fIsimple\fR|\fIband\fR|\fIcombined\fR[:\fImin_band_weight\fR[:\fImax_band_weight\fR]]|\fInone\fR]
 Directional boost method for the front channels. The default is
 \fIsimple\fR, which affects all frequencies equally. The \fIband\fR and
 \fIcombined\fR methods only apply to \fBmatrix4_mb\fR. \fIband\fR simply makes each

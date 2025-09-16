@@ -239,7 +239,7 @@ Example:
 	* `show_status`  
 		Show a status line (slightly broken currently, but still useful for
 		debugging).
-	* `dir_boost[=simple|band|combined|none]`  
+	* `dir_boost[=simple|band|combined[:min_band_weight[:max_band_weight]]|none]`  
 		Directional boost method for the front channels. The default is
 		`simple`, which affects all frequencies equally. The `band` and
 		`combined` methods only apply to `matrix4_mb`. `band` simply makes each

@@ -55,6 +55,9 @@
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 #define DIR_BOOST_TYPE_DEFAULT   DIR_BOOST_TYPE_SIMPLE
 
+#define DIR_BOOST_MIN_BAND_WEIGHT_DEFAULT 0.1
+#define DIR_BOOST_MAX_BAND_WEIGHT_DEFAULT 0.9
+
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
 /* 1 = linear; 2 = quarter sine; 3 = half sine; 4 = double-exponential sigmoid */
@@ -139,7 +142,7 @@ enum dir_boost_type {
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
-	double surr_mult, fb_stop[2];
+	double surr_mult, fb_stop[2], db_band_weight[2];
 	ssize_t surr_delay_frames;
 	char show_status, enable_signal, do_phase_lin;
 	enum filter_bank_type fb_type;
