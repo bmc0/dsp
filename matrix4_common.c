@@ -160,7 +160,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					case FILTER_BANK_TYPE_CHEBYSHEV1:
 					case FILTER_BANK_TYPE_CHEBYSHEV2:
 						config->fb_stop[0] = strtod(opt_subarg, &endptr);
-						CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
+						CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto fail);
 						if (config->fb_stop[0] < 10.0) {
 							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
 							goto fail;
@@ -170,10 +170,10 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 						break;
 					case FILTER_BANK_TYPE_ELLIPTIC:
 						config->fb_stop[0] = strtod(opt_subarg, &endptr);
-						CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
+						CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto fail);
 						if (*opt_subarg1 != '\0') {
 							config->fb_stop[1] = strtod(opt_subarg1, &endptr);
-							CHECK_ENDPTR(opt_arg, endptr, "stop_dB", goto fail);
+							CHECK_ENDPTR(opt_subarg1, endptr, "stop_dB", goto fail);
 						}
 						else config->fb_stop[1] = config->fb_stop[0];
 						if (config->fb_stop[0] < 20.0 || config->fb_stop[1] < 20.0) {
