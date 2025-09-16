@@ -62,7 +62,7 @@ static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.
 #define PHASE_LIN_MAX_LEN 30.0  /* maximum filter length in milliseconds */
 #define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
 
-#define CROSS_COUPLE_FACTOR 0.2
+#define CROSS_COUPLE_FACTOR 0.4
 #define DIR_BOOST_BAND_RISE 160.0  /* band weight rise time in milliseconds */
 
 #define DO_FILTER_BANK_TEST 0
@@ -313,11 +313,11 @@ void matrix4_mb_test_fb_effect_destroy(struct effect *e)
 
 static inline void band_cross_couple(struct envs *dest, struct envs *src, const double fact)
 {
-	const double norm = 1.0 - fact;
-	dest->l = dest->l*norm + src->l*fact;
-	dest->r = dest->r*norm + src->r*fact;
-	dest->sum = dest->sum*norm + src->sum*fact;
-	dest->diff = dest->diff*norm + src->diff*fact;
+	const double fact_c = 1.0 - fact;
+	dest->l = dest->l*fact_c + src->l*fact;
+	dest->r = dest->r*fact_c + src->r*fact;
+	dest->sum = dest->sum*fact_c + src->sum*fact;
+	dest->diff = dest->diff*fact_c + src->diff*fact;
 }
 
 sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -365,7 +365,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			#endif
 				const struct envs env_d = band->ev.env_buf[band->ev.buf_p];
 				band->pwr_env_xc = pwr_env;
-				if (k > 0) band_cross_couple(&band->pwr_env_xc, &state->band[k-1].pwr_env_xc, CROSS_COUPLE_FACTOR);
+				if (k > 0) {
+					band_cross_couple(&band->pwr_env_xc, &state->band[k-1].pwr_env_xc,
+						fb_weights[k-1]/(fb_weights[k-1]+fb_weights[k]) * CROSS_COUPLE_FACTOR);
+				}
 				process_events(&band->ev, &state->evc, &env, &band->pwr_env_xc, &band->ax, &band->ax_ev);
 				has_ev = has_ev | band->ev.hold;
 				norm_axes(&band->ax);
