@@ -401,8 +401,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					const double band_weight = (has_ev)
 						? ewma_set(&band->db_band_weight, state->db_band_weight_limits[0])
 						: ewma_run(&band->db_band_weight, state->db_band_weight_limits[1]);
-					cs_interp_insert(&band->dir_boost, smf_asym_run(&band->db_smooth,
-						db_wavg*(1.0-band_weight) + band->dir_boost_m*band_weight));
+					const double db_combined = (db_wavg > band->dir_boost_m)
+						? db_wavg*(1.0-band_weight) + band->dir_boost_m*band_weight
+						: band->dir_boost_m;
+					cs_interp_insert(&band->dir_boost, smf_asym_run(&band->db_smooth, db_combined));
 				}
 			}
 			else if (state->db_type == DIR_BOOST_TYPE_BAND) {
