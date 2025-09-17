@@ -521,8 +521,22 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 			ev->sample = 0;
 			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.001)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
-			if (!(ev->flags[1] & EVENT_FLAG_FUSE) || !(ev->flags[1] & EVENT_FLAG_USE_ORD)
-					|| (ev->flags[0] & EVENT_FLAG_USE_ORD)) {
+			const double wx = (ev->max - ev->thresh) / (ev->thresh*0.3);
+			const double new_ev_weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
+			if (((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD))
+					|| (ev->hold && new_ev_weight < ev->weight)) {
+				++ev->ignore_count;
+				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
+					__func__, TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
+			}
+			else {
+				if (ev->hold && new_ev_weight != ev->weight) {
+					/* needed to avoid discontinuities if ev->weight changes */
+					ewma_set(&ev->drift[0], ewma_set(&ev->drift[2],
+						ev->drift_last[1].lr*ev->weight + ev->drift_last[0].lr*(1.0-ev->weight)));
+					ewma_set(&ev->drift[1], ewma_set(&ev->drift[3],
+						ev->drift_last[1].cs*ev->weight + ev->drift_last[0].cs*(1.0-ev->weight)));
+				}
 				ev->hold = 1;
 				ev->t_hold = ev->t;
 				ev->dir.lr = ewma_get_last(&ev->avg[2]);
@@ -537,16 +551,10 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 				else if (!(ev->flags[1] & EVENT_FLAG_FUSE))
 					++ev->diff_count;
 				ev->flags[0] = ev->flags[1];
-				const double wx = (ev->max - ev->thresh) / (ev->thresh*0.3);
-				ev->weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
+				ev->weight = new_ev_weight;
 				/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; lr: %+06.2f°; cs: %+06.2f°",
 					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff",
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
-			}
-			else {
-				++ev->ignore_count;
-				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
-					__func__, TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
 			}
 		}
 	}
@@ -575,9 +583,9 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 				|| ev->t - ev->t_hold >= evc->max_hold_frames) {
 			if (ev->t - ev->t_hold < evc->max_hold_frames) ++ev->early_count;
 			ev->hold = 0;
-			ewma_set(&ev->drift[0], ax->lr);
-			ewma_set(&ev->drift[1], ax->cs);
-			ev->drift_last[0] = *ax;
+			ewma_set(&ev->drift[0], ewma_set(&ev->drift[2], ax->lr));
+			ewma_set(&ev->drift[1], ewma_set(&ev->drift[3], ax->cs));
+			ev->drift_last[0] = ev->drift_last[1] = *ax;
 		}
 	}
 	else {
