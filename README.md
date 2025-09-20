@@ -243,11 +243,17 @@ Example:
 		Directional boost method for the front channels. The default is
 		`simple`, which affects all frequencies equally. The `band` and
 		`combined` methods only apply to `matrix4_mb`. `band` simply makes each
-		band independent. This minimizes pumping of the uncorrelated component
-		outside of a given band, but can cause audible timbre changes to the
-		correlated component in some cases. `combined` computes weighted
-		averages of the `simple` and `band` methods based on the status of the
-		event detection algorithm.
+		band independent, which minimizes pumping of the uncorrelated component
+		outside of a given band. `combined` computes weighted averages of the
+		`simple` and `band` methods based on the status of the event detection
+		algorithm. The default `{min,max}_band_weight` values are 0.5 and 0.9,
+		respectively.
+
+		Any of the methods can cause audible timbre changes when compared
+		directly to the original 2-channel mix. However, `band` and `combined`
+		are often better in this regard as they are better able to preserve the
+		total power in each band. Transient coloration of the uncorrelated part
+		seems to be masked in most cases.
 	* `no_dir_boost`  
 		Alias for `dir_boost=none`.
 	* `signal`  
