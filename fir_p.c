@@ -32,12 +32,12 @@
 #include "util.h"
 #include "codec.h"
 
-#define DIRECT_LEN           (1<<5)
+#define DIRECT_LEN           (1<<5)  /* must be >= 1<<4 */
 #define FFT_LEN_STEP_DEFAULT (1<<2)
 #define MAX_FFT_GROUPS       4
 #define MAX_PART_LEN_LIMIT   INT_MAX
 #define MAX_PART_LEN_DEFAULT (1<<14)
-#define USE_SINGLE_THREAD    0  /* for testing */
+#define FORCE_SINGLE_THREAD  0  /* for testing */
 
 struct direct_part {
 	sample_t *lbuf, **filter, **buf;
@@ -131,9 +131,17 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (state->part0.buf[k]) {
 				const sample_t s = ibuf[i*e->istream.channels + k];
-				for (int n = state->part0.p, m = 0; m < DIRECT_LEN; ++m) {
-					state->part0.buf[k][n] += s * state->part0.filter[k][m];
-					n = (n+1) & (DIRECT_LEN-1);
+				sample_t *p0_buf = state->part0.buf[k], *p0_filter = state->part0.filter[k];
+				for (int n = state->part0.p, m = 0; m < DIRECT_LEN;) {
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
+					p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1; p0_buf[n++] += s * p0_filter[m++]; n &= DIRECT_LEN-1;
 				}
 				ibuf[i*e->istream.channels + k] = state->part0.buf[k][state->part0.p];
 				state->part0.buf[k][state->part0.p] = 0.0;
@@ -405,8 +413,9 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->data = state;
 
 	state->filter_frames = filter_frames;
-	find_partitions(state, max_part_len, USE_SINGLE_THREAD);
-	if (verify_and_print_partitions(ei, state, USE_SINGLE_THREAD)) goto fail;
+	const int use_single_thread = (filter_frames < 4096 || FORCE_SINGLE_THREAD);
+	find_partitions(state, max_part_len, use_single_thread);
+	if (verify_and_print_partitions(ei, state, use_single_thread)) goto fail;
 
 	sample_t *l_filter_p = state->part0.lbuf = calloc(DIRECT_LEN * (filter_channels + n_channels), sizeof(sample_t));
 	sample_t *l_buf_p = l_filter_p + (DIRECT_LEN * filter_channels);
