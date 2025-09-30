@@ -50,7 +50,7 @@
 /* note: implemented in matrix4{,_mb}.c */
 #define DIR_BOOST_RT0       100.0
 #define DIR_BOOST_SENS_RISE   0.1
-#define DIR_BOOST_SENS_FALL   0.002
+#define DIR_BOOST_SENS_FALL   0.01
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 #define DIR_BOOST_TYPE_DEFAULT   DIR_BOOST_TYPE_SIMPLE
