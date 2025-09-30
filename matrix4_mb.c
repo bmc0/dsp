@@ -64,7 +64,7 @@ static const double fb_weights[] = { 0.0536, 0.265, 0.675, 1.17, 1.32, 0.668, 0.
 
 /* #define BAND_XC_FACTOR 0.4 */
 #define DIR_BOOST_BAND_RISE 160.0  /* band weight rise time in milliseconds */
-#define DIR_BOOST_BAND_FALL  15.0  /* band weight fall time in milliseconds */
+#define DIR_BOOST_BAND_FALL  10.0  /* band weight fall time in milliseconds */
 
 #define DO_FILTER_BANK_TEST 0
 
@@ -91,6 +91,7 @@ struct matrix4_band {
 	struct cs_interp_state rsl_m, rsr_m;
 	struct cs_interp_state dir_boost;
 	struct ewma_state db_band_weight;
+	struct smf_state db_smooth;
 };
 
 struct matrix4_mb_state {
@@ -401,11 +402,11 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			if (state->db_type == DIR_BOOST_TYPE_BAND) {
 				for (k = 0; k < N_BANDS; ++k) {
 					struct matrix4_band *band = &state->band[k];
-					cs_interp_insert(&band->dir_boost, band->dir_boost_m);
+					cs_interp_insert(&band->dir_boost, smf_asym_run(&band->db_smooth, band->dir_boost_m));
 				}
 			}
 			else {
-				const double db_wavg = smf_asym_run(&state->db_smooth, (db_norm>0.0)?sqrt(db_sum/db_norm):0.0);
+				const double db_wavg = (NEAR_POS_ZERO(db_norm)) ? 0.0 : sqrt(db_sum/db_norm);
 				if (state->db_type == DIR_BOOST_TYPE_COMBINED) {
 					char has_ev = 0;
 					for (k = 0; k < N_BANDS; ++k) {
@@ -415,10 +416,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 							? ewma_run_scale(&band->db_band_weight, state->db_band_weight_limits[0], DIR_BOOST_BAND_RISE/DIR_BOOST_BAND_FALL)
 							: ewma_run(&band->db_band_weight, state->db_band_weight_limits[1]);
 						const double db_combined = db_wavg*(1.0-band_weight) + band->dir_boost_m*band_weight;
-						cs_interp_insert(&band->dir_boost, db_combined);
+						cs_interp_insert(&band->dir_boost, smf_asym_run(&band->db_smooth, db_combined));
 					}
 				}
-				else cs_interp_insert(&state->dir_boost, db_wavg);
+				else cs_interp_insert(&state->dir_boost, smf_asym_run(&state->db_smooth, db_wavg));
 			}
 		}
 		if (state->db_type == DIR_BOOST_TYPE_BAND || state->db_type == DIR_BOOST_TYPE_COMBINED) {
@@ -629,6 +630,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		event_state_init(&state->band[k].ev, istream, EVENT_THRESH_MB/EVENT_THRESH * ((k==0)?1.2:1.0));
 		ewma_init(&state->band[k].db_band_weight, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(DIR_BOOST_BAND_RISE));
 		ewma_set(&state->band[k].db_band_weight, state->db_band_weight_limits[1]);
+		smf_asym_init(&state->band[k].db_smooth, DOWNSAMPLED_FS(istream->fs),
+			SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
 	}
 	smf_asym_init(&state->db_smooth, DOWNSAMPLED_FS(istream->fs),
 		SMF_RISE_TIME(DIR_BOOST_RT0), DIR_BOOST_SENS_RISE, DIR_BOOST_SENS_FALL);
