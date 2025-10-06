@@ -41,7 +41,7 @@
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
 #define EVENT_MASK_TIME     100.0
-#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.75)
+#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.7)
 #define ORD_SENS_ERR         10.0
 #define ORD_SENS_LEVEL       10.0
 #define DIFF_SENS_ERR        10.0
@@ -79,6 +79,10 @@
 #endif
 #endif
 
+#define CBUF_NEXT(x, len) (((x)+1<(len))?(x)+1:0)
+#define CBUF_PREV(x, len) (((x)>0)?(x)-1:(len)-1)
+
+#define ENABLE_LOOKBACK 1
 #define DEBUG_PRINT_MIN_RISE_TIME 0
 
 struct envs {
@@ -110,6 +114,10 @@ struct event_state {
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
 	struct ewma_state drift[4];
 	struct axes dir, drift_last[2], *ord_buf;
+	#if ENABLE_LOOKBACK
+		struct axes *diff_buf;
+		double (*slope_buf)[2];
+	#endif
 	struct envs *env_buf, *adapt_buf;
 	double last[2], thresh, end_thresh, clip_thresh, max, weight;
 	double ord_factor, adj;
@@ -387,6 +395,10 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	ev->t_hold = -2;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, DOWNSAMPLED_FS(istream->fs));
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
+	#if ENABLE_LOOKBACK
+		ev->diff_buf = calloc(ev->buf_len, sizeof(struct axes));
+		ev->slope_buf = calloc(ev->buf_len, sizeof(double [2]));
+	#endif
 	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->thresh = EVENT_THRESH * thresh_scale;
@@ -401,6 +413,10 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 static void event_state_cleanup(struct event_state *ev)
 {
 	free(ev->ord_buf);
+	#if ENABLE_LOOKBACK
+		free(ev->diff_buf);
+		free(ev->slope_buf);
+	#endif
 	free(ev->env_buf);
 	free(ev->adapt_buf);
 	#if DEBUG_PRINT_MIN_RISE_TIME
@@ -470,11 +486,13 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	};
 	const struct axes ord_d = ev->ord_buf[ev->buf_p];
 	ev->ord_buf[ev->buf_p] = ord;
+	#if ENABLE_LOOKBACK
+		ev->diff_buf[ev->buf_p] = diff;
+	#endif
 	const struct envs env_d = ev->env_buf[ev->buf_p];
 	ev->env_buf[ev->buf_p] = *env;
 	const struct envs adapt_d = ev->adapt_buf[ev->buf_p];
 	ev->adapt_buf[ev->buf_p] = adapt;
-	ev->buf_p = (ev->buf_p + 1 >= ev->buf_len) ? 0 : ev->buf_p + 1;
 
 	ev->adj = 1.0 - ev->ord_factor/20.0;
 	ev->adj = (ev->adj > 0.5) ? ev->adj : 0.5;
@@ -498,6 +516,10 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 	const double r_slope = r_event - ev->last[1];
 	ev->last[0] = l_event;
 	ev->last[1] = r_event;
+	#if ENABLE_LOOKBACK
+		ev->slope_buf[ev->buf_p][0] = l_slope;
+		ev->slope_buf[ev->buf_p][1] = r_slope;
+	#endif
 
 	if (!ev->sample && ((l_slope > 0.0 && l_event > ev->thresh) || (r_slope > 0.0 && r_event > ev->thresh))) {
 		ev->sample = 1;
@@ -506,11 +528,41 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		ev->flags[1] |= (r_event >= l_event) ? EVENT_FLAG_R : 0;
 		ev->t_sample = ev->t;
 		if (ev->t - ev->t_hold > 1) {
-			ewma_set(&ev->avg[0], ord.lr);
-			ewma_set(&ev->avg[1], ord.cs);
-			ewma_set(&ev->avg[2], ord.lr);
-			ewma_set(&ev->avg[3], ord.cs);
 			ev->max = 0.0;
+			#if ENABLE_LOOKBACK
+				ssize_t i = CBUF_PREV(ev->buf_p, ev->buf_len), k = ev->buf_p;
+				switch (ev->flags[1] & (EVENT_FLAG_L | EVENT_FLAG_R)) {
+				case EVENT_FLAG_L:
+					while (ev->slope_buf[i][0] > ev->slope_buf[k][0])
+					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
+					break;
+				case EVENT_FLAG_R:
+					while (ev->slope_buf[i][1] > ev->slope_buf[k][1])
+					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
+					break;
+				default:
+					while (ev->slope_buf[i][0] + ev->slope_buf[i][1] > ev->slope_buf[k][0] + ev->slope_buf[k][1])
+					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
+				}
+				i = CBUF_NEXT(i, ev->buf_len);
+				ewma_set(&ev->avg[0], ev->ord_buf[i].lr);
+				ewma_set(&ev->avg[1], ev->ord_buf[i].cs);
+				ewma_set(&ev->avg[2], ev->ord_buf[i].lr);
+				ewma_set(&ev->avg[3], ev->ord_buf[i].cs);
+				while (i != ev->buf_p) {
+					ewma_run(&ev->avg[0], ev->ord_buf[i].lr);
+					ewma_run(&ev->avg[1], ev->ord_buf[i].cs);
+					ewma_run(&ev->avg[2], ev->diff_buf[i].lr);
+					ewma_run(&ev->avg[3], ev->diff_buf[i].cs);
+					i = CBUF_NEXT(i, ev->buf_len);
+				}
+				/* LOG_FMT(LL_VERBOSE, "%s(): lookback: %zd samples", __func__, ev->t - ev->t_sample); */
+			#else
+				ewma_set(&ev->avg[0], ord.lr);
+				ewma_set(&ev->avg[1], ord.cs);
+				ewma_set(&ev->avg[2], ord.lr);
+				ewma_set(&ev->avg[3], ord.cs);
+			#endif
 		}
 		else ev->flags[1] |= EVENT_FLAG_FUSE;
 	}
@@ -600,6 +652,7 @@ static void process_events(struct event_state *ev, const struct event_config *ev
 		ev->drift_last[1] = *ax;
 	}
 	++ev->t;
+	ev->buf_p = CBUF_NEXT(ev->buf_p, ev->buf_len);
 }
 
 static void norm_axes(struct axes *ax)

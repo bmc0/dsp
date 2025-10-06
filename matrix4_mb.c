@@ -480,8 +480,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				++oframes;
 			#endif
 		}
-		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
-		state->fb_buf_p = (state->fb_buf_p + 1 >= state->fb_buf_len) ? 0 : state->fb_buf_p + 1;
+		state->p = CBUF_NEXT(state->p, state->len);
+		state->fb_buf_p = CBUF_NEXT(state->fb_buf_p, state->fb_buf_len);
 		if (state->p == 0)
 			state->has_output = 1;
 	}

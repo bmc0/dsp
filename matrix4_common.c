@@ -250,7 +250,7 @@ sample_t * matrix4_delay_surr_effect_run(struct effect *e, ssize_t *frames, samp
 		b[0] = s0;
 		b[1] = s1;
 		ibuf_p += e->istream.channels;
-		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+		state->p = CBUF_NEXT(state->p, state->len);
 	}
 	return ibuf;
 }
@@ -269,7 +269,7 @@ sample_t * matrix4_delay_front_effect_run(struct effect *e, ssize_t *frames, sam
 			b[k] = s;
 		}
 		ibuf_p += e->istream.channels;
-		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+		state->p = CBUF_NEXT(state->p, state->len);
 	}
 	return ibuf;
 }

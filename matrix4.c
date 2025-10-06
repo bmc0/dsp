@@ -111,7 +111,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				++oframes;
 			#endif
 		}
-		state->p = (state->p + 1 >= state->len) ? 0 : state->p + 1;
+		state->p = CBUF_NEXT(state->p, state->len);
 		if (state->p == 0)
 			state->has_output = 1;
 	}
