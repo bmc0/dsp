@@ -72,7 +72,9 @@ static const struct effect_info effects[] = {
 	{ "add",                "add value",                               gain_effect_init,      GAIN_EFFECT_NUMBER_ADD },
 	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
 	{ "matrix4",            "matrix4 [options] [surround_level]",      matrix4_effect_init,   0 },
+#ifdef HAVE_FFTW3
 	{ "matrix4_mb",         "matrix4_mb [options] [surround_level]",   matrix4_mb_effect_init, 0 },
+#endif
 	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
 	{ "st2ms",              "st2ms",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_ST2MS },
 	{ "ms2st",              "ms2st",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_MS2ST },

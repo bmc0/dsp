@@ -32,9 +32,14 @@ struct smf_state {
 
 #define SMF_RISE_TIME(x) ((x)/1000.0/2.1972)  /* 10%-90% rise time in ms (one pole only) */
 
+static inline void smf_set(struct smf_state *state, double v)
+{
+	state->m0 = state->m1 = v;
+}
+
 static inline void smf_reset(struct smf_state *state)
 {
-	state->m0 = state->m1 = 0.0;
+	smf_set(state, 0.0);
 }
 
 static inline void smf_asym_init(struct smf_state *state, double fs, double tc, double sens_rise, double sens_fall)

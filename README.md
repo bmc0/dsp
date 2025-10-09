@@ -11,7 +11,7 @@ dsp is an audio processing program with an interactive mode.
 
 #### Optional dependencies
 
-* fftw3: For `resample`, `fir`, `fir_p`, and `hilbert` effects.
+* fftw3: For `matrix4_mb`, `resample`, `fir`, `fir_p`, and `hilbert` effects.
 * zita-convolver: For the `zita_convolver` effect.
 * libsndfile: For sndfile input/output support (recommended).
 * ffmpeg (libavcodec, libavformat, and libavutil): For ffmpeg input support.
@@ -210,8 +210,8 @@ Example:
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
 * `matrix4 [options] [surround_level]`  
-	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
-	plain (i.e. unencoded) stereo material.
+	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
+	primarily for music.
 
 	The intended speaker configuration is fronts at ±30° and surrounds between
 	±60° and ±120°. The surround speakers must be calibrated correctly in
@@ -236,31 +236,25 @@ Example:
 
 	Options are given as a comma-separated list. Recognized options are:
 
-	* `show_status`  
+	* `show_status[=true|false]`  
 		Show a status line (slightly broken currently, but still useful for
 		debugging).
-	* `dir_boost[=simple|band|combined[:min_band_weight[:max_band_weight]]|none]`  
-		Directional boost method for the front channels. The default is
-		`simple`, which affects all frequencies equally. The `band` and
-		`combined` methods only apply to `matrix4_mb`. `band` simply makes each
-		band independent, which minimizes pumping of the uncorrelated component
-		outside of a given band. `combined` computes weighted averages of the
-		`simple` and `band` methods based on the status of the event detection
-		algorithm. The default `{min,max}_band_weight` values are 0.5 and 0.9,
-		respectively.
-
-		Any of the methods can cause audible timbre changes when compared
-		directly to the original 2-channel mix. However, `band` and `combined`
-		are often better in this regard as they are better able to preserve the
-		total power in each band. Transient coloration of the uncorrelated part
-		seems to be masked in most cases.
+	* `matrix=v1|v2|v3`  
+		Controls steering behavior for rear-encoded sounds. `v1` does not
+		remove anything from the front outputs. `v2` adds full steering of
+		sounds encoded to -45° in the C/S axis and restores full lateral
+		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
+		four outputs. `v3` adds strong steering (20dB) of sounds encoded to the
+		left and right surround positions (L/R=±22.5° CS=-22.5°). The default
+		is `v2` as it seems work best for most music recordings.
+	* `dir_boost[=true|false]`  
+		If `true` (the default), keep total power approximately constant for
+		directionally-encoded sounds. If `false`, the total power of the
+		uncorrelated component is constant.
 	* `no_dir_boost`  
-		Alias for `dir_boost=none`.
-	* `signal`  
+		Alias for `dir_boost=false`.
+	* `signal[=true|false]`  
 		Toggle the effect when `effect.signal()` is called.
-	* `linear_phase` (`matrix4_mb` only)  
-		Apply an FIR filter to correct the phase distortion caused by the IIR
-		filter bank. Has no effect with `matrix4`. Requires the `fir` effect.
 	* `surround_delay=delay[s|m|S]`  
 		Surround output delay. Default is zero.
 	* `filter_type=filter[:stop_dB[:stop_dB]]` (`matrix4_mb` only)  

@@ -203,8 +203,8 @@ Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 crossfeed.
 .TP
 \fBmatrix4\fR [\fIoptions\fR] [\fIsurround_level\fR]
-2-to-4 channel (2 front and 2 surround) active matrix upmixer designed for
-plain (i.e. unencoded) stereo material.
+2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
+primarily for music.
 .sp 0.5
 The intended speaker configuration is fronts at ±30° and surrounds between
 ±60° and ±120°. The surround speakers must be calibrated correctly in
@@ -228,35 +228,29 @@ outputs are appended to the end of the channel list.
 Options are given as a comma-separated list. Recognized options are:
 .RS
 .TP
-show_status
+show_status[=\fItrue\fR|\fIfalse\fR]
 Show a status line (slightly broken currently, but still useful for
 debugging).
 .TP
-dir_boost[=\fIsimple\fR|\fIband\fR|\fIcombined\fR[:\fImin_band_weight\fR[:\fImax_band_weight\fR]]|\fInone\fR]
-Directional boost method for the front channels. The default is
-\fIsimple\fR, which affects all frequencies equally. The \fIband\fR and
-\fIcombined\fR methods only apply to \fBmatrix4_mb\fR. \fIband\fR simply makes each
-band independent, which minimizes pumping of the uncorrelated component
-outside of a given band. \fIcombined\fR computes weighted averages of the
-\fIsimple\fR and \fIband\fR methods based on the status of the event detection
-algorithm. The default {\fImin\fR,\fImax\fR}\fI_band_weight\fR values are 0.5 and 0.9,
-respectively
-.sp 0.5
-Any of the methods can cause audible timbre changes when compared
-directly to the original 2-channel mix. However, \fIband\fR and \fIcombined\fR
-are often better in this regard as they are better able to preserve the
-total power in each band. Transient coloration of the uncorrelated part
-seems to be masked in most cases.
+matrix=\fIv1\fR|\fIv2\fR|\fIv3\fR
+Controls steering behavior for rear-encoded sounds. \fIv1\fR does not
+remove anything from the front outputs. \fIv2\fR adds full steering of
+sounds encoded to \-45° in the C/S axis and restores full lateral
+separation of sounds encoded from 0° to \-22.5° in the C/S axis in all
+four outputs. \fIv3\fR adds strong steering (20dB) of sounds encoded to the
+left and right surround positions (L/R=±22.5° CS=\-22.5°). The default
+is \fIv2\fR as it seems work best for most music recordings.
+.TP
+dir_boost[=\fItrue\fR|\fIfalse\fR]
+If \fItrue\fR (the default), keep total power approximately constant for
+directionally-encoded sounds. If \fIfalse\fR, the total power of the
+uncorrelated component is constant.
 .TP
 no_dir_boost
 Alias for `dir_boost=none'.
 .TP
-signal
+signal[=\fItrue\fR|\fIfalse\fR]
 Toggle the effect when `effect.signal()' is called.
-.TP
-linear_phase (\fBmatrix4_mb\fR only)
-Apply an FIR filter to correct the phase distortion caused by the IIR
-filter bank. Has no effect with \fBmatrix4\fR. Requires the \fBfir\fR effect.
 .TP
 surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Surround output delay. Default is zero.

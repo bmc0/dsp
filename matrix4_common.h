@@ -24,7 +24,6 @@
 #include <string.h>
 #include "effect.h"
 #include "ewma.h"
-#include "smf.h"
 #include "util.h"
 
 #define EVENT_THRESH          1.8
@@ -47,16 +46,7 @@
 #define DIFF_SENS_ERR        10.0
 #define DIFF_SENS_LEVEL       3.0
 
-/* note: implemented in matrix4{,_mb}.c */
-#define DIR_BOOST_RT0       100.0
-#define DIR_BOOST_SENS_RISE   0.1
-#define DIR_BOOST_SENS_FALL   0.01
-
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
-#define DIR_BOOST_TYPE_DEFAULT   DIR_BOOST_TYPE_SIMPLE
-
-#define DIR_BOOST_MIN_BAND_WEIGHT_DEFAULT 0.5
-#define DIR_BOOST_MAX_BAND_WEIGHT_DEFAULT 0.9
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
@@ -95,8 +85,8 @@ struct axes {
 };
 
 struct matrix_coefs {
+	double ll, lr, rl, rr;
 	double lsl, lsr, rsl, rsr;
-	double dir_boost;
 };
 
 struct event_state {
@@ -138,20 +128,13 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
-enum dir_boost_type {
-	DIR_BOOST_TYPE_NONE = 0,
-	DIR_BOOST_TYPE_SIMPLE,
-	DIR_BOOST_TYPE_BAND,
-	DIR_BOOST_TYPE_COMBINED,
-};
-
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
 	double surr_mult, fb_stop[2], db_band_weight[2];
 	ssize_t surr_delay_frames;
-	char show_status, enable_signal, do_phase_lin;
+	char show_status, enable_signal, do_dir_boost;
 	enum filter_bank_type fb_type;
-	enum dir_boost_type db_type;
+	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
@@ -169,10 +152,9 @@ int get_args_and_channels(const struct effect_info *, const struct stream_info *
 int parse_effect_opts(const char *const *, const struct stream_info *, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void event_state_cleanup(struct event_state *);
-void calc_matrix_coefs(const struct axes *, int, double, double, struct matrix_coefs *);
 
 /* private functions */
-void event_state_init_priv(struct event_state *, double, double);
+void event_state_init_priv(struct event_state *, double, double, double);
 void event_config_init_priv(struct event_config *, double);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, struct axes *, struct axes *);
 
@@ -181,7 +163,7 @@ struct effect * matrix4_delay_effect_init(const struct effect_info *, const stru
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 static void event_state_init(struct event_state *ev, const struct stream_info *istream, double thresh_scale)
 {
-	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), thresh_scale);
+	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), thresh_scale, NORM_ACCOM_FACTOR);
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream)

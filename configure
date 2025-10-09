@@ -128,7 +128,7 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	fi
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE
 	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
-	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "resample.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3 && NEED_FIR_UTIL=y
+	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "matrix4_mb.o resample.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3 && NEED_FIR_UTIL=y
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header zita-convolver.h && check_lib zita-convolver; then
 		NEED_FIR_UTIL=y
 		DSP_OPTIONAL_CPP_OBJECTS="$DSP_OPTIONAL_CPP_OBJECTS zita_convolver.o"
@@ -161,7 +161,7 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	else
 		echo "[ladspa_dsp] disabled ladspa_host.o"
 	fi
-	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "fir.o fir_p.o hilbert.o" -DHAVE_FFTW3; then
+	if check_pkg_ladspa_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "matrix4_mb.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3; then
 		INCLUDE_CODECS=y
 		NEED_FIR_UTIL=y
 	fi
