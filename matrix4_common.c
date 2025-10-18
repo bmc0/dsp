@@ -399,7 +399,10 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				ewma_set(&ev->avg[3], ord.cs);
 			#endif
 		}
-		else ev->flags[1] |= EVENT_FLAG_FUSE;
+		else {
+			ev->t_sample -= evc->sample_frames/2;
+			ev->flags[1] |= EVENT_FLAG_FUSE;
+		}
 	}
 
 	if (ev->sample) {
