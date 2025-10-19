@@ -229,7 +229,7 @@ void smooth_state_init(struct smooth_state *sm, const struct stream_info *istrea
 	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
-void event_state_init_priv(struct event_state *ev, double fs, double thresh_scale, double norm_accom_factor)
+void event_state_init_priv(struct event_state *ev, double fs, double norm_accom_factor)
 {
 	for (int i = 0; i < 6; ++i) ewma_init(&ev->accom[i], fs, EWMA_RISE_TIME(ACCOM_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->norm[i], fs, EWMA_RISE_TIME(NORM_TIME));
@@ -248,9 +248,7 @@ void event_state_init_priv(struct event_state *ev, double fs, double thresh_scal
 	#endif
 	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
 	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
-	ev->thresh = EVENT_THRESH * thresh_scale;
-	ev->end_thresh = EVENT_END_THRESH * thresh_scale;
-	ev->clip_thresh = EVENT_THRESH * thresh_scale * (10.0/MAXIMUM(1.0-NORM_ACCOM_FACTOR, 0.01));
+	ev->clip_thresh = EVENT_THRESH * (10.0/MAXIMUM(1.0-NORM_ACCOM_FACTOR, 0.01));
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_diff_scale = ev->max_ord_scale = 1.0;
 		ev->fs = fs;
@@ -303,7 +301,7 @@ static inline double drift_scale(const struct axes *ax0, const struct axes *ax1,
 	return MAXIMUM(lr_scale, cs_scale);
 }
 
-void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, struct axes *ax, struct axes *ax_ev)
+void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
@@ -319,6 +317,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		.lr = CALC_LR(adapt.l, adapt.r, sqrt(adapt.l/adapt.r)),
 		.cs = CALC_CS(adapt.sum, adapt.diff, sqrt(adapt.sum/adapt.diff)),
 	};
+	ev->diff_last = diff;
 	const struct axes ord_d = ev->ord_buf[ev->buf_p];
 	ev->ord_buf[ev->buf_p] = ord;
 	#if ENABLE_LOOKBACK
@@ -333,6 +332,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ev->adj = (ev->adj > 0.5) ? ev->adj : 0.5;
 	ev->ord_factor *= evc->ord_factor_c;
 
+	const double thresh = EVENT_THRESH * thresh_scale;
+	const double clip_thresh = ev->clip_thresh * thresh_scale;
 	const double l_pwr_xf = pwr_env->l*(1.0-NORM_CROSSFEED) + pwr_env->r*NORM_CROSSFEED;
 	const double r_pwr_xf = pwr_env->r*(1.0-NORM_CROSSFEED) + pwr_env->l*NORM_CROSSFEED;
 	const double l_norm_div = ewma_run(&ev->norm[0], fabs(l_pwr_xf - ewma_run(&ev->norm[2], l_pwr_xf)*norm_accom_factor*ev->adj));
@@ -341,22 +342,24 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ewma_run_scale_asym(&ev->accom[5], pwr_env->r, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
 	const double l_mask = MAXIMUM(pwr_env->l - ewma_get_last(&ev->accom[4]), 0.0);
 	const double r_mask = MAXIMUM(pwr_env->r - ewma_get_last(&ev->accom[5]), 0.0);
-	const double l_mask_norm = (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : ev->clip_thresh;
-	const double r_mask_norm = (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : ev->clip_thresh;
-	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(l_mask_norm, ev->clip_thresh));
-	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(r_mask_norm, ev->clip_thresh));
+	const double l_mask_norm = (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : clip_thresh;
+	const double r_mask_norm = (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : clip_thresh;
+	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(l_mask_norm, clip_thresh));
+	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(r_mask_norm, clip_thresh));
 	const double l_event = (l_mask_norm_sm - ewma_run(&ev->slow[0], l_mask_norm_sm)) * ev->adj;
 	const double r_event = (r_mask_norm_sm - ewma_run(&ev->slow[1], r_mask_norm_sm)) * ev->adj;
 	const double l_slope = l_event - ev->last[0];
 	const double r_slope = r_event - ev->last[1];
 	ev->last[0] = l_event;
 	ev->last[1] = r_event;
+	ev->slope_last[0] = l_slope;
+	ev->slope_last[1] = r_slope;
 	#if ENABLE_LOOKBACK
 		ev->slope_buf[ev->buf_p][0] = l_slope;
 		ev->slope_buf[ev->buf_p][1] = r_slope;
 	#endif
 
-	if (!ev->sample && ((l_slope > 0.0 && l_event > ev->thresh) || (r_slope > 0.0 && r_event > ev->thresh))) {
+	if (!ev->sample && ((l_slope > 0.0 && l_event > thresh) || (r_slope > 0.0 && r_event > thresh))) {
 		ev->sample = 1;
 		ev->flags[1] = 0;
 		ev->flags[1] |= (l_event >= r_event) ? EVENT_FLAG_L : 0;
@@ -416,7 +419,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			ev->sample = 0;
 			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.001)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
-			const double wx = (ev->max - ev->thresh) / (ev->thresh*0.3);
+			const double wx = (ev->max - thresh) / (thresh*0.3);
 			const double new_ev_weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
 			if (((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD))
 					|| (ev->hold && new_ev_weight < ev->weight)) {
@@ -470,8 +473,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ev->drift_last[1] = *ax_ev;
 		ax->lr = ax_ev->lr*ev->weight + ax->lr*(1.0-ev->weight);
 		ax->cs = ax_ev->cs*ev->weight + ax->cs*(1.0-ev->weight);
-		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm_sm <= ev->end_thresh)
-				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm_sm <= ev->end_thresh)) {
+		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm_sm <= EVENT_END_THRESH)
+				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm_sm <= EVENT_END_THRESH)) {
 			ev->flags[0] |= EVENT_FLAG_END;
 		}
 		if ((ev->t - ev->t_hold >= evc->min_hold_frames && ev->flags[0] & EVENT_FLAG_END)

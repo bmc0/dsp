@@ -100,13 +100,13 @@ struct event_state {
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
 	struct ewma_state drift[4];
-	struct axes dir, drift_last[2], *ord_buf;
+	struct axes dir, drift_last[2], diff_last, *ord_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
 		double (*slope_buf)[2];
 	#endif
 	struct envs *env_buf, *adapt_buf;
-	double last[2], thresh, end_thresh, clip_thresh, max, weight;
+	double last[2], slope_last[2], clip_thresh, max, weight;
 	double ord_factor, adj;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
@@ -154,16 +154,16 @@ void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void event_state_cleanup(struct event_state *);
 
 /* private functions */
-void event_state_init_priv(struct event_state *, double, double, double);
+void event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double);
-void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, struct axes *, struct axes *);
+void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *);
 
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
-static void event_state_init(struct event_state *ev, const struct stream_info *istream, double thresh_scale)
+static void event_state_init(struct event_state *ev, const struct stream_info *istream)
 {
-	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), thresh_scale, NORM_ACCOM_FACTOR);
+	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), NORM_ACCOM_FACTOR);
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream)
@@ -171,9 +171,9 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs));
 }
 
-static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, struct axes *ax, struct axes *ax_ev)
+static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev)
 {
-	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, ax, ax_ev);
+	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev);
 }
 
 static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)

@@ -65,7 +65,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		struct envs env, pwr_env;
 		calc_input_envs(&state->sm, s0_bp, s1_bp, &env, &pwr_env);
 
-		process_events(&state->ev, &state->evc, &env, &pwr_env, &state->ax, &state->ax_ev);
+		process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
 		norm_axes(&state->ax);
 
 		struct matrix_coefs m = {0};
@@ -225,7 +225,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		biquad_init_using_type(&state->in_lp[i], BIQUAD_LOWPASS,  istream->fs, 5000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
 	}
 	smooth_state_init(&state->sm, istream);
-	event_state_init(&state->ev, istream, 1.0);
+	event_state_init(&state->ev, istream);
 
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
