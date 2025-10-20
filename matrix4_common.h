@@ -40,11 +40,11 @@
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
 #define EVENT_MASK_TIME     100.0
-#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.7)
-#define ORD_SENS_ERR         10.0
-#define ORD_SENS_LEVEL       10.0
-#define DIFF_SENS_ERR        10.0
-#define DIFF_SENS_LEVEL       3.0
+#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.4)
+#define ORD_SENS_ERR          5.0
+#define ORD_SENS_WEIGHT       3.0
+#define ORD_WEIGHT_THRESH     0.3
+#define DIFF_SENS_WEIGHT      2.0
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
@@ -105,9 +105,9 @@ struct event_state {
 		struct axes *diff_buf;
 		double (*slope_buf)[2];
 	#endif
-	struct envs *env_buf, *adapt_buf;
+	struct envs *env_buf;
 	double last[2], slope_last[2], clip_thresh, max, weight;
-	double ord_factor, adj;
+	double ord_factor, adj, *ds_weight_buf;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	ssize_t buf_len, buf_p;

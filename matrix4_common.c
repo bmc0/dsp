@@ -238,7 +238,7 @@ void event_state_init_priv(struct event_state *ev, double fs, double norm_accom_
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->smooth[i], fs, EWMA_RISE_TIME(EVENT_SMOOTH_TIME));
 	for (int i = 0; i < 4; ++i) ewma_init(&ev->avg[i], fs, EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(ACCOM_TIME*2.0));
-	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST*2.0));
+	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
 	ev->t_hold = -2;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
@@ -246,8 +246,7 @@ void event_state_init_priv(struct event_state *ev, double fs, double norm_accom_
 		ev->diff_buf = calloc(ev->buf_len, sizeof(struct axes));
 		ev->slope_buf = calloc(ev->buf_len, sizeof(double [2]));
 	#endif
-	ev->env_buf = calloc(ev->buf_len, sizeof(struct envs));
-	ev->adapt_buf = calloc(ev->buf_len, sizeof(struct envs));
+	ev->ds_weight_buf = calloc(ev->buf_len, sizeof(double));
 	ev->clip_thresh = EVENT_THRESH * (10.0/MAXIMUM(1.0-NORM_ACCOM_FACTOR, 0.01));
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_diff_scale = ev->max_ord_scale = 1.0;
@@ -262,8 +261,7 @@ void event_state_cleanup(struct event_state *ev)
 		free(ev->diff_buf);
 		free(ev->slope_buf);
 	#endif
-	free(ev->env_buf);
-	free(ev->adapt_buf);
+	free(ev->ds_weight_buf);
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		#define EWMA_CONST_TO_RT(x, fs) (-1.0/log(1.0-(x))/(fs)*1000.0*2.1972)
 		#define EWMA_RT_TO_CONST(x, fs) (1.0-exp(-1.0/((fs)*((x)/1000.0/2.1972))))
@@ -281,24 +279,11 @@ void event_config_init_priv(struct event_config *evc, double fs)
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
 }
 
-static inline double err_scale(double a, double b, double err, double max_err_gain)
+static inline double drift_err_scale(const struct axes *ax0, const struct axes *ax1, double sens_err)
 {
-	if (NEAR_POS_ZERO(a) && NEAR_POS_ZERO(b))
-		return 1.0;
-	const double n = a+b;
-	const double d = MAXIMUM(MINIMUM(a, b), n/max_err_gain);
-	if (NEAR_POS_ZERO(d))
-		return 1.0 + err*max_err_gain;
-	return 1.0 + err*n/d;
-}
-
-static inline double drift_scale(const struct axes *ax0, const struct axes *ax1, const struct envs *env, double sens_err, double sens_level)
-{
-	const double lr_err = fabs(ax1->lr - ax0->lr) / M_PI_2;
-	const double cs_err = fabs(ax1->cs - ax0->cs) / M_PI_2;
-	const double lr_scale = err_scale(env->l, env->r, lr_err*sens_err, sens_level);
-	const double cs_scale = err_scale(env->sum, env->diff, cs_err*sens_err, sens_level);
-	return MAXIMUM(lr_scale, cs_scale);
+	const double lr_err = fabs(ax1->lr - ax0->lr) * M_2_PI;
+	const double cs_err = fabs(ax1->cs - ax0->cs) * M_2_PI;
+	return 1.0 + (lr_err+cs_err)*sens_err;
 }
 
 void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev)
@@ -323,10 +308,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	#if ENABLE_LOOKBACK
 		ev->diff_buf[ev->buf_p] = diff;
 	#endif
-	const struct envs env_d = ev->env_buf[ev->buf_p];
-	ev->env_buf[ev->buf_p] = *env;
-	const struct envs adapt_d = ev->adapt_buf[ev->buf_p];
-	ev->adapt_buf[ev->buf_p] = adapt;
 
 	ev->adj = 1.0 - ev->ord_factor/20.0;
 	ev->adj = (ev->adj > 0.5) ? ev->adj : 0.5;
@@ -367,6 +348,10 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ev->t_sample = ev->t;
 		if (ev->t - ev->t_hold > 1) {
 			ev->max = 0.0;
+			ewma_set(&ev->avg[0], ord.lr);
+			ewma_set(&ev->avg[1], ord.cs);
+			ewma_set(&ev->avg[2], diff.lr);
+			ewma_set(&ev->avg[3], diff.cs);
 			#if ENABLE_LOOKBACK
 				ssize_t i = CBUF_PREV(ev->buf_p, ev->buf_len), k = ev->buf_p;
 				switch (ev->flags[1] & (EVENT_FLAG_L | EVENT_FLAG_R)) {
@@ -382,11 +367,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					while (ev->slope_buf[i][0] + ev->slope_buf[i][1] > ev->slope_buf[k][0] + ev->slope_buf[k][1])
 					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
 				}
-				i = CBUF_NEXT(i, ev->buf_len);
-				ewma_set(&ev->avg[0], ev->ord_buf[i].lr);
-				ewma_set(&ev->avg[1], ev->ord_buf[i].cs);
-				ewma_set(&ev->avg[2], ev->ord_buf[i].lr);
-				ewma_set(&ev->avg[3], ev->ord_buf[i].cs);
+				i = k;
 				while (i != ev->buf_p) {
 					ewma_run(&ev->avg[0], ev->ord_buf[i].lr);
 					ewma_run(&ev->avg[1], ev->ord_buf[i].cs);
@@ -395,11 +376,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					i = CBUF_NEXT(i, ev->buf_len);
 				}
 				/* LOG_FMT(LL_VERBOSE, "%s(): lookback: %zd samples", __func__, ev->t - ev->t_sample); */
-			#else
-				ewma_set(&ev->avg[0], ord.lr);
-				ewma_set(&ev->avg[1], ord.cs);
-				ewma_set(&ev->avg[2], ord.lr);
-				ewma_set(&ev->avg[3], ord.cs);
 			#endif
 		}
 		else {
@@ -417,7 +393,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		if (r_event > ev->max) ev->max = r_event;
 		if (ev->t - ev->t_sample >= evc->sample_frames) {
 			ev->sample = 0;
-			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.001)
+			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.01)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
 			const double wx = (ev->max - thresh) / (thresh*0.3);
 			const double new_ev_weight = (wx >= 1.0) ? 1.0 : wx*wx*(3.0-2.0*wx);
@@ -456,7 +432,13 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			}
 		}
 	}
-	const double ds_ord = drift_scale(&ev->drift_last[0], &ord_d, &env_d, ORD_SENS_ERR, ORD_SENS_LEVEL);
+	const double ds_ord = drift_err_scale(&ev->drift_last[0], &ord_d, ORD_SENS_ERR) * ev->ds_weight_buf[ev->buf_p];
+	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
+	if (l_mask_norm_sm > ds_ord_thresh || r_mask_norm_sm > ds_ord_thresh) {
+		const double x = (MAXIMUM(l_mask_norm_sm, r_mask_norm_sm) - ds_ord_thresh) / (thresh*1.5 - ds_ord_thresh);
+		ev->ds_weight_buf[ev->buf_p] = ((x >= 1.0) ? 1.0 : x*x*(3.0-2.0*x))*ORD_SENS_WEIGHT + 1.0;
+	}
+	else ev->ds_weight_buf[ev->buf_p] = 1.0;
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds_ord);
 	#endif
@@ -464,7 +446,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ax->cs = ewma_run_scale(&ev->drift[1], ord_d.cs, ds_ord);
 	ev->drift_last[0] = *ax;
 	if (ev->hold) {
-		const double ds_diff = drift_scale(&ev->drift_last[1], &ev->dir, (ev->flags[0] & EVENT_FLAG_USE_ORD) ? &env_d : &adapt_d, DIFF_SENS_ERR, DIFF_SENS_LEVEL);
+		const double ds_diff = 1.0 + ev->weight*DIFF_SENS_WEIGHT;
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_diff_scale = MAXIMUM(ev->max_diff_scale, ds_diff);
 		#endif
