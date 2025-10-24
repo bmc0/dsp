@@ -45,6 +45,7 @@
 #define ORD_SENS_WEIGHT       3.0
 #define ORD_WEIGHT_THRESH     0.3
 #define DIFF_SENS_WEIGHT      2.0
+#define DIFF_WEIGHT_SCALE     2.5
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
@@ -99,7 +100,7 @@ struct event_state {
 		EVENT_FLAG_END = 1<<4,
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4];
+	struct ewma_state drift[4], drift_scale[2];
 	struct axes dir, drift_last[2], diff_last, *ord_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
@@ -107,7 +108,7 @@ struct event_state {
 	#endif
 	struct envs *env_buf;
 	double last[2], slope_last[2], clip_thresh, max, weight;
-	double ord_factor, adj, *ds_weight_buf;
+	double ord_factor, adj, ds_diff, *ds_ord_buf;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	ssize_t buf_len, buf_p;
