@@ -101,13 +101,13 @@ struct event_state {
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
 	struct ewma_state drift[4], drift_scale[2];
-	struct axes dir, drift_last[2], diff_last, *ord_buf;
+	struct axes dir, diff_last, *ord_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
 		double (*slope_buf)[2];
 	#endif
 	struct envs *env_buf;
-	double last[2], slope_last[2], clip_thresh, max, weight;
+	double last[2], slope_last[2], clip_thresh, max[2];
 	double ord_factor, adj, ds_diff, *ds_ord_buf;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
