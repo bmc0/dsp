@@ -621,15 +621,21 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #endif
 
 	e->data = state;
+#if DO_FILTER_BANK_TEST
+	if (e_fir == NULL) {
+		matrix4_mb_test_fb_effect_destroy(e);
+		free(e);
+		return NULL;
+	}
+#else
 	if (e_fir == NULL) {
 		if (e_delay) e_delay->destroy(e_delay);
 		matrix4_mb_effect_destroy(e);
 		free(e);
 		return NULL;
 	}
-	e_fir->next = e;
-#if !(DO_FILTER_BANK_TEST)
 	e->next = e_delay;
 #endif
+	e_fir->next = e;
 	return e_fir;
 }
