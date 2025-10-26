@@ -113,6 +113,7 @@ static void set_fb_stop_default(struct matrix4_config *config)
 
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, struct matrix4_config *config)
 {
+	const int is_mb = (strcmp(argv[0], "matrix4_mb") == 0);
 	char *opt_str = NULL;
 	config->do_dir_boost = 1;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
@@ -158,6 +159,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "filter_type=")) {
 				char *opt_arg = isolate(opt, '=');
+				if (!is_mb) goto mb_only;
 				if (*opt_arg == '\0') goto needs_arg;
 				char *opt_subarg = isolate(opt_arg, ':');
 				if (strcmp(opt_arg, "butterworth") == 0)
@@ -211,6 +213,8 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				needs_arg:
 				LOG_FMT(LL_ERROR, "%s: error: option requires argument: %s", argv[0], opt);
 				goto fail;
+				mb_only:
+				LOG_FMT(LL_ERROR, "%s: warning: ignoring option: %s", argv[0], opt);
 			}
 			opt = next_opt;
 		}
