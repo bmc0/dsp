@@ -78,6 +78,7 @@ struct matrix4_band {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 	} m_interp;
+	double norm_mult, surr_mult, shape_mult;
 	double ev_thresh_max, ev_thresh_min;
 	struct ewma_state ev_thresh;
 };
@@ -89,7 +90,7 @@ struct matrix4_mb_state {
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
 	struct filter_bank_frame *fb_buf[2];
-	sample_t norm_mult, surr_mult;
+	double base_surr_mult;
 	struct event_config evc;
 	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
 	ssize_t len, p, fb_buf_len, fb_buf_p;
@@ -273,10 +274,12 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 		const double s1 = ibuf[i*e->istream.channels + state->c1];
 		filter_bank_run(&state->fb[0], s0);
 		filter_bank_run(&state->fb[1], s1);
-		double out_l = 0.0, out_r = 0.0;
+		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
 		for (int k = 0; k < N_BANDS; ++k) {
-			out_l += state->fb[0].s[k];
-			out_r += state->fb[1].s[k];
+			struct matrix4_band *band = &state->band[k];
+			out_l += state->fb[0].s[k]*band->norm_mult;
+			out_r += state->fb[1].s[k]*band->norm_mult;
+			out_s += state->fb[0].s[k]*band->norm_mult*band->surr_mult*band->shape_mult;
 		}
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (k == state->c0)
@@ -286,8 +289,11 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 			else
 				obuf[i*e->ostream.channels + k] = ibuf[i*e->istream.channels + k];
 		}
-		for (int k = 0; k < N_BANDS; ++k)
-			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k];
+		for (int k = 0; k < N_BANDS; ++k) {
+			struct matrix4_band *band = &state->band[k];
+			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k]*band->norm_mult*band->surr_mult*band->shape_mult;
+		}
+		obuf[i*e->ostream.channels + e->istream.channels + N_BANDS] = out_s;
 	}
 	return obuf;
 }
@@ -305,15 +311,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 
 	for (ssize_t i = 0; i < *frames; ++i) {
-		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
+		double cur_fade_mult = 1.0;
 		if (state->fade_p > 0) {
-			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
-			norm_mult = CALC_NORM_MULT(surr_mult);
+			cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
 			--state->fade_p;
-		}
-		else if (state->disable) {
-			norm_mult = 1.0;
-			surr_mult = 0.0;
 		}
 
 		int n_angles = 0;
@@ -365,7 +366,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 						const double d_cs = fabs(angles[j].cs - ev->diff_last.cs);
 						const double d_max = MAXIMUM(d_lr, d_cs);
 						if (d_max < M_PI/16) {
-							const double x = 1.0 - d_max/(M_PI/16);
+							const double x = 1.0 - d_max*(16/M_PI);
 							ev_thresh_fact += x*x*(3.0-2.0*x);
 						}
 					}
@@ -378,6 +379,29 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ewma_get_last(&band->ev_thresh)*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
+				double shape_mult = band->shape_mult;
+				double norm_mult = band->norm_mult, surr_mult = band->surr_mult;
+				if (band->ax.cs < 0.0) {
+					if (band->ax.cs > -M_PI_4/2) {
+						const double x = band->ax.cs*(-2/M_PI_4);
+						const double w = x*x*(3.0-2.0*x);
+						shape_mult = w + shape_mult*(1.0-w);
+						surr_mult = state->base_surr_mult*w + band->surr_mult*(1.0-w);
+					}
+					else {
+						shape_mult = 1.0;
+						surr_mult = state->base_surr_mult;
+					}
+					norm_mult = CALC_NORM_MULT(surr_mult);
+				}
+				if (state->fade_p > 0) {
+					surr_mult *= cur_fade_mult;
+					norm_mult = CALC_NORM_MULT(surr_mult);
+				}
+				else if (state->disable) {
+					surr_mult = 0.0;
+					norm_mult = 1.0;
+				}
 				struct matrix_coefs m = {0};
 				state->calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
 
@@ -386,10 +410,10 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				cs_interp_insert(&band->m_interp.rl, m.rl);
 				cs_interp_insert(&band->m_interp.rr, m.rr);
 
-				cs_interp_insert(&band->m_interp.lsl, m.lsl);
-				cs_interp_insert(&band->m_interp.lsr, m.lsr);
-				cs_interp_insert(&band->m_interp.rsl, m.rsl);
-				cs_interp_insert(&band->m_interp.rsr, m.rsr);
+				cs_interp_insert(&band->m_interp.lsl, m.lsl*shape_mult);
+				cs_interp_insert(&band->m_interp.lsr, m.lsr*shape_mult);
+				cs_interp_insert(&band->m_interp.rsl, m.rsl*shape_mult);
+				cs_interp_insert(&band->m_interp.rsr, m.rsr*shape_mult);
 			}
 
 			out_l += s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
@@ -543,7 +567,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->istream.fs = e->ostream.fs = istream->fs;
 #if DO_FILTER_BANK_TEST
 	e->istream.channels = istream->channels;
-	e->ostream.channels = istream->channels + N_BANDS;
+	e->ostream.channels = istream->channels + N_BANDS + 1;
 	e->run = matrix4_mb_test_fb_effect_run;
 	e->destroy = matrix4_mb_test_fb_effect_destroy;
 #else
@@ -583,13 +607,31 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #endif
 	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
 	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
-	state->surr_mult = config.surr_mult;
-	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 #endif
 	filter_bank_init(&state->fb[0], istream->fs, config.fb_type, config.fb_stop);
 	state->fb[1] = state->fb[0];
+
+	const double shelf_mult2 = config.shelf_mult*config.shelf_mult;
+	const double shelf_f02 = config.shelf_f0*config.shelf_f0;
+	const double lowpass_f02 = config.lowpass_f0*config.lowpass_f0;
+	for (int k = 0; k < N_BANDS; ++k) {
+		struct matrix4_band *band = &state->band[k];
+		const double f0 = (k == 0) ? fb_bp[0] : fb_freqs[k-1];
+		const double f1 = (k == N_BANDS-1) ? fb_bp[1] : fb_freqs[k];
+		const double shelf_norm_f02 = f0*f1/shelf_f02;
+		band->surr_mult = config.surr_mult*sqrt((1.0+shelf_mult2*shelf_norm_f02)/(1.0+shelf_norm_f02));
+		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
+		if (lowpass_f02 > 0.0) {
+			const double lowpass_norm_f02 = f0*f1/lowpass_f02;
+			band->shape_mult = sqrt(1.0/(1.0+lowpass_norm_f02));
+		}
+		else band->shape_mult = 1.0;
+		/* LOG_FMT(LL_VERBOSE, "%s: band %d: norm_mult=%.4g surr_mult=%.4g shape_mult=%.4g",
+				argv[0], k, band->norm_mult, band->surr_mult, band->shape_mult); */
+	}
+	state->base_surr_mult = config.surr_mult;
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));

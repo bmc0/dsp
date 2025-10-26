@@ -47,6 +47,10 @@
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
 
+#define SHELF_MULT_DEFAULT    1.0
+#define SHELF_F0_DEFAULT    500.0
+#define LOWPASS_F0_DEFAULT    0.0
+
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
 /* fade parameters when toggling effect via signal() */
@@ -131,7 +135,7 @@ enum filter_bank_type {
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
-	double surr_mult, fb_stop[2], db_band_weight[2];
+	double surr_mult, shelf_mult, shelf_f0, lowpass_f0, fb_stop[2], db_band_weight[2];
 	ssize_t surr_delay_frames;
 	char show_status, enable_signal, do_dir_boost;
 	enum filter_bank_type fb_type;

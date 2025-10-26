@@ -116,6 +116,9 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	const int is_mb = (strcmp(argv[0], "matrix4_mb") == 0);
 	char *opt_str = NULL;
 	config->do_dir_boost = 1;
+	config->shelf_mult = SHELF_MULT_DEFAULT;
+	config->shelf_f0 = SHELF_F0_DEFAULT;
+	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->calc_matrix_coefs = calc_matrix_coefs_v2;
@@ -147,6 +150,33 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "no_dir_boost")) {
 				config->do_dir_boost = 0;
+			}
+			else if (is_opt(opt, "shelf=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (!is_mb) goto mb_only;
+				if (*opt_arg == '\0') goto needs_arg;
+				char *opt_subarg = isolate(opt_arg, ':');
+				double shelf_gain = strtod(opt_arg, &endptr);
+				CHECK_ENDPTR(opt_arg, endptr, "shelf: gain_dB", goto fail);
+				if (shelf_gain > 0.0)
+					LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", argv[0]);
+				config->shelf_mult = pow(10.0, shelf_gain / 20.0);
+				if (*opt_subarg != '\0') {
+					config->shelf_f0 = parse_freq(opt_subarg, &endptr);
+					CHECK_ENDPTR(opt_subarg, endptr, "shelf: f0", goto fail);
+					CHECK_RANGE(config->shelf_f0 >= 100.0 && config->shelf_f0 <= 6000.0, "shelf: f0", goto fail);
+				}
+			}
+			else if (is_opt(opt, "lowpass=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (!is_mb) goto mb_only;
+				if (*opt_arg == '\0') goto needs_arg;
+				if (strcmp(opt_arg, "none") == 0) config->lowpass_f0 = 0.0;
+				else {
+					config->lowpass_f0 = parse_freq(opt_arg, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto fail);
+					CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto fail);
+				}
 			}
 			else if (is_opt(opt, "signal=")) {
 				HANDLE_BOOLEAN_ARG(config->enable_signal);

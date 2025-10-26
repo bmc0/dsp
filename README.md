@@ -245,7 +245,7 @@ Example:
 		sounds encoded to -45° in the C/S axis and restores full lateral
 		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
 		four outputs. `v3` adds strong steering (20dB) of sounds encoded to the
-		left and right surround positions (L/R=±22.5° CS=-22.5°). The default
+		left and right surround positions (L/R=±22.5° C/S=-22.5°). The default
 		is `v2` as it seems work best for most music recordings.
 	* `dir_boost[=true|false]`  
 		If `true` (the default), keep total power approximately constant for
@@ -253,6 +253,17 @@ Example:
 		uncorrelated component is constant.
 	* `no_dir_boost`  
 		Alias for `dir_boost=false`.
+	* `shelf=gain_dB[:f0[k]]` (`matrix4_mb` only)  
+		Dynamic shelving of frequencies above `f0` in surround outputs. Active
+		when C/S is positive and gradually removed as C/S goes from 0° to
+		-22.5°. The default `gain_dB` is zero (no shelving). Setting this to -3
+		or so with a `surround_level` around 0 to -3 tends to work well. The
+		default `f0` is 500Hz.
+	* `lowpass=f0[k]|none` (`matrix4_mb` only)  
+		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
+		in surround outputs. Active when C/S is positive and gradually removed
+		as C/S goes from 0° to -22.5°. The default setting is `none`, which
+		results in no high-frequency rolloff.
 	* `signal[=true|false]`  
 		Toggle the effect when `effect.signal()` is called.
 	* `surround_delay=delay[s|m|S]`  
