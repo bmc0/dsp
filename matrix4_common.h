@@ -126,6 +126,12 @@ struct event_config {
 	double ord_factor_c;
 };
 
+enum status_type {
+	STATUS_TYPE_NONE = 0,
+	STATUS_TYPE_BARS,
+	STATUS_TYPE_TEXT,
+};
+
 enum filter_bank_type {
 	FILTER_BANK_TYPE_BUTTERWORTH = 0,
 	FILTER_BANK_TYPE_CHEBYSHEV1,
@@ -137,7 +143,8 @@ struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1;
 	double surr_mult, shelf_mult, shelf_f0, lowpass_f0, fb_stop[2], db_band_weight[2];
 	ssize_t surr_delay_frames;
-	char show_status, enable_signal, do_dir_boost;
+	char enable_signal, do_dir_boost;
+	enum status_type status_type;
 	enum filter_bank_type fb_type;
 	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
 };
@@ -157,6 +164,14 @@ int get_args_and_channels(const struct effect_info *, const struct stream_info *
 int parse_effect_opts(const char *const *, const struct stream_info *, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void event_state_cleanup(struct event_state *);
+
+#ifndef LADSPA_FRONTEND
+struct steering_bar {
+	char s[32];
+	int e;
+};
+void draw_steering_bar(double, int, struct steering_bar *);
+#endif
 
 /* private functions */
 void event_state_init_priv(struct event_state *, double, double);

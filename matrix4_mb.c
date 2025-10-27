@@ -84,11 +84,15 @@ struct matrix4_band {
 	double norm_mult, surr_mult, shape_mult;
 	double ev_thresh_max, ev_thresh_min;
 	struct ewma_state ev_thresh;
+#ifndef LADSPA_FRONTEND
+	struct steering_bar lr_bar, cs_bar;
+#endif
 };
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, show_status, do_dir_boost;
+	char has_output, is_draining, disable, do_dir_boost;
+	enum status_type status_type;
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
@@ -463,14 +467,26 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	}
 	#ifndef LADSPA_FRONTEND
 		/* TODO: Implement a proper way for effects to show status lines. */
-		if (state->show_status) {
+		if (state->status_type) {
 			dsp_log_acquire();
-			for (int i = 0; i < N_BANDS; ++i) {
-				struct matrix4_band *band = &state->band[i];
-				dsp_log_printf("\n%s%s: band %d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; thresh: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
-					e->name, (state->disable) ? " [off]" : "", i,
-					TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
-					band->ev.adj, ewma_get_last(&band->ev_thresh), band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
+			if (state->status_type == STATUS_TYPE_TEXT) {
+				for (int i = 0; i < N_BANDS; ++i) {
+					struct matrix4_band *band = &state->band[i];
+					dsp_log_printf("\n%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; thresh: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
+						e->name, (state->disable) ? " [off]" : "", i,
+						TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
+						band->ev.adj, ewma_get_last(&band->ev_thresh), band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
+				}
+			}
+			else {
+				for (int i = 0; i < N_BANDS; ++i) {
+					struct matrix4_band *band = &state->band[i];
+					draw_steering_bar(band->ax.lr, band->ev.hold, &band->lr_bar);
+					draw_steering_bar(band->ax.cs, band->ev.hold, &band->cs_bar);
+					dsp_log_printf("\n%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd\033[K\r",
+						e->name, (state->disable) ? " [off]" : "", i,
+						band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count);
+				}
 			}
 			dsp_log_printf("\033[%dA", N_BANDS);
 			dsp_log_release();
@@ -505,7 +521,7 @@ void matrix4_mb_effect_signal(struct effect *e)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->disable = !state->disable;
 	state->fade_p = state->fade_frames - state->fade_p;
-	if (!state->show_status)
+	if (!state->status_type)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
@@ -541,7 +557,7 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	free(state->fb_buf[1]);
 	free(state->bufs);
 	#ifndef LADSPA_FRONTEND
-		if (state->show_status) {
+		if (state->status_type) {
 			dsp_log_acquire();
 			for (int i = 0; i < N_BANDS; ++i) dsp_log_printf("\033[K\n");
 			dsp_log_printf("\033[K\r\033[%dA", N_BANDS);
@@ -587,7 +603,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 #if !(DO_FILTER_BANK_TEST)
-	state->show_status = config.show_status;
+	state->status_type = config.status_type;
 	state->do_dir_boost = config.do_dir_boost;
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;

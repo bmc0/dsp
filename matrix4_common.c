@@ -17,6 +17,7 @@
 */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
 #define DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
@@ -129,7 +130,17 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			next_opt = isolate(opt, ',');
 			if (*opt == '\0') /* do nothing */;
 			else if (is_opt(opt, "show_status=")) {
-				HANDLE_BOOLEAN_ARG(config->show_status);
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0' || strcmp(opt_arg, "bars") == 0)
+					config->status_type = STATUS_TYPE_BARS;
+				else if (strcmp(opt_arg, "text") == 0)
+					config->status_type = STATUS_TYPE_TEXT;
+				else if (strcmp(opt_arg, "none") == 0)
+					config->status_type = STATUS_TYPE_NONE;
+				else {
+					LOG_FMT(LL_ERROR, "%s: error: unrecognized argument: %s", argv[0], opt_arg);
+					goto fail;
+				}
 			}
 			else if (is_opt(opt, "matrix=")) {
 				char *opt_arg = isolate(opt, '=');
@@ -886,6 +897,31 @@ void calc_matrix_coefs_v3(const struct axes *ax, int do_dir_boost, double norm_m
 	m->rsl *= pdc_s;
 	m->rsr *= pdc_s;
 }
+
+#ifndef LADSPA_FRONTEND
+void draw_steering_bar(double a, int is_event, struct steering_bar *bar)
+{
+	memset(bar->s, ' ', 31);
+	int i = lrint(a*(-15/M_PI_4))+15;
+	if (i > 30) i = 30;
+	else if (i < 0) i = 0;
+	#if 0
+		snprintf(&bar->s[32-6], 6, "%4ld%%", lrint(a/M_PI_4*100.0));
+	#else
+		bar->s[31] = '\0';
+	#endif
+	char cursor_c = '*', fill_c = '-';
+	if (is_event) {
+		cursor_c = '#';
+		fill_c = '=';
+		bar->e = i+1;
+	}
+	if (bar->e) bar->s[bar->e-1] = '\'';
+	bar->s[i] = cursor_c;
+	if (i > 15) memset(&bar->s[15], fill_c, i-15);
+	else if (i < 15) memset(&bar->s[i+1], fill_c, 15-i);
+}
+#endif
 
 struct matrix4_delay_state {
 	sample_t *buf;

@@ -236,7 +236,7 @@ Example:
 
 	Options are given as a comma-separated list. Recognized options are:
 
-	* `show_status[=true|false]`  
+	* `show_status[=bars|text|none]`  
 		Show a status line (slightly broken currently, but still useful for
 		debugging).
 	* `matrix=v1|v2|v3`  

@@ -28,7 +28,8 @@
 
 struct matrix4_state {
 	int c0, c1;
-	char has_output, is_draining, disable, show_status, do_dir_boost;
+	char has_output, is_draining, disable, do_dir_boost;
+	enum status_type status_type;
 	sample_t **bufs;
 	struct biquad_state in_hp[2], in_lp[2];
 	struct smooth_state sm;
@@ -38,6 +39,9 @@ struct matrix4_state {
 	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
 	sample_t norm_mult, surr_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
+#ifndef LADSPA_FRONTEND
+	struct steering_bar lr_bar, cs_bar;
+#endif
 };
 
 sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -111,11 +115,20 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	}
 	#ifndef LADSPA_FRONTEND
 		/* TODO: Implement a proper way for effects to show status lines. */
-		if (state->show_status) {
+		if (state->status_type) {
 			dsp_log_acquire();
-			dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
-				e->name, (state->disable) ? " [off]" : "", TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-				state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
+			if (state->status_type == STATUS_TYPE_TEXT) {
+				dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
+					e->name, (state->disable) ? " [off]" : "", TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
+					state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
+			}
+			else {
+				draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
+				draw_steering_bar(state->ax.cs, state->ev.hold, &state->cs_bar);
+				dsp_log_printf("\n%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd\033[K\r\033[A",
+					e->name, (state->disable) ? " [off]" : "",
+					state->lr_bar.s, state->cs_bar.s, state->ev.ord_count, state->ev.diff_count, state->ev.ignore_count);
+			}
 			dsp_log_release();
 		}
 	#endif
@@ -145,7 +158,7 @@ void matrix4_effect_signal(struct effect *e)
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	state->disable = !state->disable;
 	state->fade_p = state->fade_frames - state->fade_p;
-	if (!state->show_status)
+	if (!state->status_type)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
@@ -181,7 +194,7 @@ void matrix4_effect_destroy(struct effect *e)
 	free(state->bufs);
 	event_state_cleanup(&state->ev);
 	#ifndef LADSPA_FRONTEND
-		if (state->show_status) {
+		if (state->status_type) {
 			dsp_log_acquire();
 			dsp_log_printf("\033[K\n\033[K\r\033[A");
 			dsp_log_release();
@@ -215,7 +228,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state = calloc(1, sizeof(struct matrix4_state));
 	state->c0 = config.c0;
 	state->c1 = config.c1;
-	state->show_status = config.show_status;
+	state->status_type = config.status_type;
 	state->do_dir_boost = config.do_dir_boost;
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
