@@ -30,26 +30,25 @@
 #define EVENT_THRESH_MAX  3.6
 #define EVENT_THRESH_MIN  1.4
 #define NORM_ACCOM_FACTOR 0.6
-#define N_BANDS            11
+#define N_BANDS            13
 
 #include "matrix4_common.h"
 
-#if N_BANDS == 6
-static const double fb_freqs[]   = { 300, 685.65, 1352.5, 2505.8, 4500 };
-static const int    fb_ap_idx[]  = { 3, 4, 1, 0, 1, 4 };
-static const double fb_bp[2]     = { 120, 8000 };  /* Q=0.7071 */
-#elif N_BANDS == 10
-static const double fb_freqs[]   = { 249, 439.14, 704.95, 1076.5, 1596, 2322.1, 3337.2, 4756.3, 6740 };
-static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 3, 2, 1, 0, 2, 3, 0, 3, 7, 8, 5, 8 };
-static const double fb_bp[2]     = { 120, 9500 };  /* Q=0.7071 */
-#elif N_BANDS == 11
+#if N_BANDS == 11
 static const double fb_freqs[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
 static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 9, 3, 2, 1, 0, 2, 3, 0, 3, 8, 9, 6, 5, 6, 9 };
 static const double fb_bp[2]     = { 85, 10000 };  /* Q=0.7071 */
+#define BAND_WEIGHT_IDX_MULT 1.0
 #elif N_BANDS == 12
-static const double fb_freqs[]   = { 159, 305.57, 507.52, 785.8, 1169.2, 1697.6, 2425.6, 3428.8, 4811, 6715.6, 9340 };
+static const double fb_freqs[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200, 10038 };
 static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
-static const double fb_bp[2]     = { 80, 13000 };  /* Q=0.7071 */
+static const double fb_bp[2]     = { 80, 14200 };  /* Q=0.7071 */
+#define BAND_WEIGHT_IDX_MULT 1.0
+#elif N_BANDS == 13
+static const double fb_freqs[]   = { 170, 316.39, 516.52, 790.1, 1164.1, 1675.4, 2374.3, 3329.8, 4636.1, 6421.7, 8862.9, 12200 };
+static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 11, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 11, 7, 6, 7, 11, 9 };
+static const double fb_bp[2]     = { 78, 17000 };  /* Q=0.7071 */
+#define BAND_WEIGHT_IDX_MULT 0.95
 #else
 #error "unsupported number of bands"
 #endif
@@ -58,6 +57,10 @@ static const double fb_bp[2]     = { 80, 13000 };  /* Q=0.7071 */
 #define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
 
 #define DO_FILTER_BANK_TEST 0
+
+#ifndef BAND_WEIGHT_IDX_MULT
+	#define BAND_WEIGHT_IDX_MULT (11.0/N_BANDS)
+#endif
 
 struct filter_bank_frame {
 	sample_t s[N_BANDS];
@@ -119,62 +122,13 @@ static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank
 	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
 		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
 	biquad_init_using_type(&fb->hp, BIQUAD_HIGHPASS, fs, fb_bp[0], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
-	biquad_init_using_type(&fb->lp, BIQUAD_LOWPASS, fs, fb_bp[1], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
+	if (fb_bp[1] < fs*0.4) biquad_init_using_type(&fb->lp, BIQUAD_LOWPASS, fs, fb_bp[1], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
+	else biquad_init(&fb->lp, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
 }
 
 static void filter_bank_run(struct filter_bank *fb, sample_t s)
 {
-#if N_BANDS == 6
-	cap5_run(&fb->f[2], s, &fb->s[2], &fb->s[3]);  /* split at xover 2 (1352.5Hz) */
-	fb->s[2] = ap2_run(&fb->ap[0], fb->s[2]);  /* xover 3 ap */
-	fb->s[2] = ap2_run(&fb->ap[1], fb->s[2]);  /* xover 4 ap */
-	fb->s[3] = ap2_run(&fb->ap[2], fb->s[3]);  /* xover 1 ap */
-	fb->s[3] = ap2_run(&fb->ap[3], fb->s[3]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (300Hz) */
-	fb->s[0] = ap2_run(&fb->ap[4], fb->s[0]);  /* xover 1 ap */
-
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (685.65Hz) */
-
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (2505.8Hz) */
-	fb->s[3] = ap2_run(&fb->ap[5], fb->s[3]);  /* xover 4 ap */
-
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (4500Hz) */
-#elif N_BANDS == 10
-	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1596Hz) */
-	fb->s[4] = ap2_run(&fb->ap[0], fb->s[4]);  /* xover 5 ap */
-	fb->s[4] = ap2_run(&fb->ap[1], fb->s[4]);  /* xover 6 ap */
-	fb->s[4] = ap2_run(&fb->ap[2], fb->s[4]);  /* xover 7 ap */
-	fb->s[4] = ap2_run(&fb->ap[3], fb->s[4]);  /* xover 8 ap */
-	fb->s[5] = ap2_run(&fb->ap[4], fb->s[5]);  /* xover 3 ap */
-	fb->s[5] = ap2_run(&fb->ap[5], fb->s[5]);  /* xover 2 ap */
-	fb->s[5] = ap2_run(&fb->ap[6], fb->s[5]);  /* xover 1 ap */
-	fb->s[5] = ap2_run(&fb->ap[7], fb->s[5]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[1], fb->s[4], &fb->s[1], &fb->s[2]);  /* split at xover 1 (439.14Hz) */
-	fb->s[1] = ap2_run(&fb->ap[8], fb->s[1]);  /* xover 2 ap */
-	fb->s[1] = ap2_run(&fb->ap[9], fb->s[1]);  /* xover 3 ap */
-	fb->s[2] = ap2_run(&fb->ap[10], fb->s[2]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[0], fb->s[1], &fb->s[0], &fb->s[1]);  /* split at xover 0 (249Hz) */
-
-	cap5_run(&fb->f[2], fb->s[2], &fb->s[2], &fb->s[3]);  /* split at xover 2 (704.95Hz) */
-	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 3 ap */
-
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (1076.5Hz) */
-
-	cap5_run(&fb->f[6], fb->s[5], &fb->s[6], &fb->s[7]);  /* split at xover 6 (3337.2Hz) */
-	fb->s[6] = ap2_run(&fb->ap[12], fb->s[6]);  /* xover 7 ap */
-	fb->s[6] = ap2_run(&fb->ap[13], fb->s[6]);  /* xover 8 ap */
-	fb->s[7] = ap2_run(&fb->ap[14], fb->s[7]);  /* xover 5 ap */
-
-	cap5_run(&fb->f[5], fb->s[6], &fb->s[5], &fb->s[6]);  /* split at xover 5 (2322.1Hz) */
-
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (4756.3Hz) */
-	fb->s[7] = ap2_run(&fb->ap[15], fb->s[7]);  /* xover 8 ap */
-
-	cap5_run(&fb->f[8], fb->s[8], &fb->s[8], &fb->s[9]);  /* split at xover 8 (6740Hz) */
-#elif N_BANDS == 11
+#if N_BANDS == 11
 	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1244.5Hz) */
 	fb->s[4] = ap2_run(&fb->ap[0], fb->s[4]);  /* xover 5 ap */
 	fb->s[4] = ap2_run(&fb->ap[1], fb->s[4]);  /* xover 6 ap */
@@ -214,7 +168,7 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 
 	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (7200Hz) */
 #elif N_BANDS == 12
-	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1697.6Hz) */
+	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1807.4Hz) */
 	fb->s[5] = ap2_run(&fb->ap[0], fb->s[5]);  /* xover 6 ap */
 	fb->s[5] = ap2_run(&fb->ap[1], fb->s[5]);  /* xover 7 ap */
 	fb->s[5] = ap2_run(&fb->ap[2], fb->s[5]);  /* xover 8 ap */
@@ -226,37 +180,86 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 	fb->s[6] = ap2_run(&fb->ap[8], fb->s[6]);  /* xover 1 ap */
 	fb->s[6] = ap2_run(&fb->ap[9], fb->s[6]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (507.52Hz) */
+	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (542.52Hz) */
 	fb->s[2] = ap2_run(&fb->ap[10], fb->s[2]);  /* xover 3 ap */
 	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 4 ap */
 	fb->s[3] = ap2_run(&fb->ap[12], fb->s[3]);  /* xover 1 ap */
 	fb->s[3] = ap2_run(&fb->ap[13], fb->s[3]);  /* xover 0 ap */
 
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (159Hz) */
+	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (175Hz) */
 	fb->s[0] = ap2_run(&fb->ap[14], fb->s[0]);  /* xover 1 ap */
 
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (305.57Hz) */
+	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (329.29Hz) */
 
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (785.8Hz) */
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (837.21Hz) */
 	fb->s[3] = ap2_run(&fb->ap[15], fb->s[3]);  /* xover 4 ap */
 
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1169.2Hz) */
+	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1244.5Hz) */
 
-	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (4811Hz) */
+	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (5146.4Hz) */
 	fb->s[8] = ap2_run(&fb->ap[16], fb->s[8]);  /* xover 9 ap */
 	fb->s[8] = ap2_run(&fb->ap[17], fb->s[8]);  /* xover 10 ap */
 	fb->s[9] = ap2_run(&fb->ap[18], fb->s[9]);  /* xover 7 ap */
 	fb->s[9] = ap2_run(&fb->ap[19], fb->s[9]);  /* xover 6 ap */
 
-	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2425.6Hz) */
+	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2585.3Hz) */
 	fb->s[6] = ap2_run(&fb->ap[20], fb->s[6]);  /* xover 7 ap */
 
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3428.8Hz) */
+	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3660.5Hz) */
 
-	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (6715.6Hz) */
+	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (7200Hz) */
 	fb->s[9] = ap2_run(&fb->ap[21], fb->s[9]);  /* xover 10 ap */
 
-	cap5_run(&fb->f[10], fb->s[10], &fb->s[10], &fb->s[11]);  /* split at xover 10 (9340Hz) */
+	cap5_run(&fb->f[10], fb->s[10], &fb->s[10], &fb->s[11]);  /* split at xover 10 (10038Hz) */
+#elif N_BANDS == 13
+	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1675.4Hz) */
+	fb->s[5] = ap2_run(&fb->ap[0], fb->s[5]);  /* xover 6 ap */
+	fb->s[5] = ap2_run(&fb->ap[1], fb->s[5]);  /* xover 7 ap */
+	fb->s[5] = ap2_run(&fb->ap[2], fb->s[5]);  /* xover 8 ap */
+	fb->s[5] = ap2_run(&fb->ap[3], fb->s[5]);  /* xover 9 ap */
+	fb->s[5] = ap2_run(&fb->ap[4], fb->s[5]);  /* xover 10 ap */
+	fb->s[5] = ap2_run(&fb->ap[5], fb->s[5]);  /* xover 11 ap */
+	fb->s[6] = ap2_run(&fb->ap[6], fb->s[6]);  /* xover 4 ap */
+	fb->s[6] = ap2_run(&fb->ap[7], fb->s[6]);  /* xover 3 ap */
+	fb->s[6] = ap2_run(&fb->ap[8], fb->s[6]);  /* xover 2 ap */
+	fb->s[6] = ap2_run(&fb->ap[9], fb->s[6]);  /* xover 1 ap */
+	fb->s[6] = ap2_run(&fb->ap[10], fb->s[6]);  /* xover 0 ap */
+
+	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (516.52Hz) */
+	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 3 ap */
+	fb->s[2] = ap2_run(&fb->ap[12], fb->s[2]);  /* xover 4 ap */
+	fb->s[3] = ap2_run(&fb->ap[13], fb->s[3]);  /* xover 1 ap */
+	fb->s[3] = ap2_run(&fb->ap[14], fb->s[3]);  /* xover 0 ap */
+
+	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (170Hz) */
+	fb->s[0] = ap2_run(&fb->ap[15], fb->s[0]);  /* xover 1 ap */
+
+	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (316.39Hz) */
+
+	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (790.1Hz) */
+	fb->s[3] = ap2_run(&fb->ap[16], fb->s[3]);  /* xover 4 ap */
+
+	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1164.1Hz) */
+
+	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (4636.1Hz) */
+	fb->s[8] = ap2_run(&fb->ap[17], fb->s[8]);  /* xover 9 ap */
+	fb->s[8] = ap2_run(&fb->ap[18], fb->s[8]);  /* xover 10 ap */
+	fb->s[8] = ap2_run(&fb->ap[19], fb->s[8]);  /* xover 11 ap */
+	fb->s[9] = ap2_run(&fb->ap[20], fb->s[9]);  /* xover 7 ap */
+	fb->s[9] = ap2_run(&fb->ap[21], fb->s[9]);  /* xover 6 ap */
+
+	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2374.3Hz) */
+	fb->s[6] = ap2_run(&fb->ap[22], fb->s[6]);  /* xover 7 ap */
+
+	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3329.8Hz) */
+
+	cap5_run(&fb->f[10], fb->s[9], &fb->s[10], &fb->s[11]);  /* split at xover 10 (8862.9Hz) */
+	fb->s[10] = ap2_run(&fb->ap[23], fb->s[10]);  /* xover 11 ap */
+	fb->s[11] = ap2_run(&fb->ap[24], fb->s[11]);  /* xover 9 ap */
+
+	cap5_run(&fb->f[9], fb->s[10], &fb->s[9], &fb->s[10]);  /* split at xover 9 (6421.7Hz) */
+
+	cap5_run(&fb->f[11], fb->s[11], &fb->s[11], &fb->s[12]);  /* split at xover 11 (12200Hz) */
 #endif
 
 	fb->s_bp[0] = biquad(&fb->hp, fb->s[0]);
@@ -593,7 +596,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		struct matrix4_band *band = &state->band[k];
 		smooth_state_init(&band->sm, istream);
 		event_state_init(&band->ev, istream);
-		const double x = MAXIMUM(k-1, 0)*0.15*(11.0/N_BANDS);
+		const double x = MAXIMUM(k-1, 0)*0.15*BAND_WEIGHT_IDX_MULT;
 		const double ev_thresh_mult = 1.0-(x/(x+1.0))*1.46*0.6;
 		band->ev_thresh_max = EVENT_THRESH_MAX * ev_thresh_mult;
 		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
