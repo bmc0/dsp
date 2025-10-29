@@ -35,23 +35,26 @@
 #include "matrix4_common.h"
 
 #if N_BANDS == 11
-static const double fb_freqs[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
-static const int    fb_ap_idx[]  = { 5, 6, 7, 8, 9, 3, 2, 1, 0, 2, 3, 0, 3, 8, 9, 6, 5, 6, 9 };
-static const double fb_bp[2]     = { 85, 10000 };  /* Q=0.7071 */
+static const double fb_fdiv[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
+static const double fb_fc[]     = { 114.68, 245.92, 427.29, 677.97, 1024.4, 1503.2, 2165, 3079.5, 4343.5, 6090.3, 8504.6 };
+static const int    fb_ap_idx[] = { 5, 6, 7, 8, 9, 3, 2, 1, 0, 2, 3, 0, 3, 8, 9, 6, 5, 6, 9 };
 #define BAND_WEIGHT_IDX_MULT 1.0
 #elif N_BANDS == 12
-static const double fb_freqs[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200, 10038 };
-static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
-static const double fb_bp[2]     = { 80, 14200 };  /* Q=0.7071 */
+static const double fb_fdiv[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200, 10038 };
+static const double fb_fc[]     = { 114.68, 245.92, 427.29, 677.97, 1024.4, 1503.2, 2165, 3079.5, 4343.5, 6090.3, 8504.6, 11841 };
+static const int    fb_ap_idx[] = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
 #define BAND_WEIGHT_IDX_MULT 1.0
 #elif N_BANDS == 13
-static const double fb_freqs[]   = { 170, 316.39, 516.52, 790.1, 1164.1, 1675.4, 2374.3, 3329.8, 4636.1, 6421.7, 8862.9, 12200 };
-static const int    fb_ap_idx[]  = { 6, 7, 8, 9, 10, 11, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 11, 7, 6, 7, 11, 9 };
-static const double fb_bp[2]     = { 78, 17000 };  /* Q=0.7071 */
+static const double fb_fdiv[]   = { 170, 316.39, 516.52, 790.1, 1164.1, 1675.4, 2374.3, 3329.8, 4636.1, 6421.7, 8862.9, 12200 };
+static const double fb_fc[]     = { 112.28, 237.49, 408.65, 642.64, 962.52, 1399.8, 1997.6, 2814.8, 3932, 5459.3, 7547.1, 10401, 14303 };
+static const int    fb_ap_idx[] = { 6, 7, 8, 9, 10, 11, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 11, 7, 6, 7, 11, 9 };
 #define BAND_WEIGHT_IDX_MULT 0.95
 #else
 #error "unsupported number of bands"
 #endif
+
+static const double fshape_lf[] = { 10, M_SQRT1_2, 180, 0.4 };
+static const double fshape_hf[] = { 0.46, 0.5, 14000, 0.5 };  /* note: [0] is multiplied by fs */
 
 #define PHASE_LIN_MAX_LEN 30.0  /* maximum filter length in milliseconds */
 #define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
@@ -62,15 +65,18 @@ static const double fb_bp[2]     = { 78, 17000 };  /* Q=0.7071 */
 	#define BAND_WEIGHT_IDX_MULT (11.0/N_BANDS)
 #endif
 
+struct fshape_state {
+	struct biquad_state lf, hf;
+};
+
 struct filter_bank_frame {
 	sample_t s[N_BANDS];
 };
 
 struct filter_bank {
-	struct cap5_state f[LENGTH(fb_freqs)];
+	struct cap5_state f[LENGTH(fb_fdiv)];
 	struct ap2_state ap[LENGTH(fb_ap_idx)];
-	struct biquad_state hp, lp;  /* applied to lowest and highest band of s_bp, respectively */
-	sample_t s[N_BANDS], s_bp[N_BANDS];
+	sample_t s[N_BANDS];
 };
 
 struct matrix4_band {
@@ -93,6 +99,7 @@ struct matrix4_mb_state {
 	int s, c0, c1;
 	char has_output, is_draining, disable, do_dir_boost;
 	enum status_type status_type;
+	struct fshape_state fshape[2], inv_fshape[4];
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
@@ -103,6 +110,25 @@ struct matrix4_mb_state {
 	ssize_t len, p, fb_buf_len, fb_buf_p;
 	ssize_t drain_frames, fade_frames, fade_p;
 };
+
+static void fshape_filter_init(struct biquad_state *b, double fs, const double p[4], int is_hf, int is_inv)
+{
+	const int type = (is_hf) ? BIQUAD_LOWPASS_TRANSFORM : BIQUAD_HIGHPASS_TRANSFORM;
+	const double f0 = (is_hf) ? fs*p[0] : p[0];
+	if (is_inv) biquad_init_using_type(b, type, fs, p[2], p[3], f0, p[1], BIQUAD_WIDTH_Q);
+	else biquad_init_using_type(b, type, fs, f0, p[1], p[2], p[3], BIQUAD_WIDTH_Q);
+}
+
+static void fshape_init(struct fshape_state *state, double fs, const double lfp[4], const double hfp[4], int is_inv)
+{
+	fshape_filter_init(&state->lf, fs, lfp, 0, is_inv);
+	fshape_filter_init(&state->hf, fs, hfp, 1, is_inv);
+}
+
+static inline sample_t fshape_run(struct fshape_state *state, sample_t s)
+{
+	return biquad(&state->hf, biquad(&state->lf, s));
+}
 
 static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank_type fb_type, double fb_stop[2])
 {
@@ -121,13 +147,10 @@ static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank
 		cap5_elliptic_ap(fb_stop[0], fb_stop[1], ap);
 		break;
 	}
-	for (int i = 0; i < LENGTH(fb_freqs); ++i)
-		cap5_init(&fb->f[i], fs, fb_freqs[i], ap);
+	for (int i = 0; i < LENGTH(fb_fdiv); ++i)
+		cap5_init(&fb->f[i], fs, fb_fdiv[i], ap);
 	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
 		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
-	biquad_init_using_type(&fb->hp, BIQUAD_HIGHPASS, fs, fb_bp[0], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
-	if (fb_bp[1] < fs*0.4) biquad_init_using_type(&fb->lp, BIQUAD_LOWPASS, fs, fb_bp[1], 0.7071, 0, 0, BIQUAD_WIDTH_Q);
-	else biquad_init(&fb->lp, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
 }
 
 static void filter_bank_run(struct filter_bank *fb, sample_t s)
@@ -265,11 +288,6 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 
 	cap5_run(&fb->f[11], fb->s[11], &fb->s[11], &fb->s[12]);  /* split at xover 11 (12200Hz) */
 #endif
-
-	fb->s_bp[0] = biquad(&fb->hp, fb->s[0]);
-	for (int i = 1; i < N_BANDS-1; ++i)
-		fb->s_bp[i] = fb->s[i];
-	fb->s_bp[N_BANDS-1] = biquad(&fb->lp, fb->s[N_BANDS-1]);
 }
 
 #if DO_FILTER_BANK_TEST
@@ -277,8 +295,8 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
-		const double s0 = ibuf[i*e->istream.channels + state->c0];
-		const double s1 = ibuf[i*e->istream.channels + state->c1];
+		const double s0 = fshape_run(&state->fshape[0], ibuf[i*e->istream.channels + state->c0]);
+		const double s1 = fshape_run(&state->fshape[1], ibuf[i*e->istream.channels + state->c1]);
 		filter_bank_run(&state->fb[0], s0);
 		filter_bank_run(&state->fb[1], s1);
 		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
@@ -288,6 +306,9 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 			out_r += state->fb[1].s[k]*band->norm_mult;
 			out_s += state->fb[0].s[k]*band->norm_mult*band->surr_mult*band->shape_mult;
 		}
+		out_l = fshape_run(&state->inv_fshape[0], out_l);
+		out_r = fshape_run(&state->inv_fshape[1], out_r);
+		out_s = fshape_run(&state->inv_fshape[2], out_s);
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (k == state->c0)
 				obuf[i*e->ostream.channels + k] = out_l;
@@ -327,8 +348,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		int n_angles = 0;
 		struct axes angles[N_BANDS];
 		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0;
-		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
-		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
+		const sample_t s0 = fshape_run(&state->fshape[0], ibuf[i*e->istream.channels + state->c0]);
+		const sample_t s1 = fshape_run(&state->fshape[1], ibuf[i*e->istream.channels + state->c1]);
 		filter_bank_run(&state->fb[0], s0);
 		filter_bank_run(&state->fb[1], s1);
 		#if DOWNSAMPLE_FACTOR > 1
@@ -349,13 +370,13 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
 
-			const sample_t s0_bp = state->fb[0].s_bp[k];
-			const sample_t s1_bp = state->fb[1].s_bp[k];
+			const sample_t s0_fb = state->fb[0].s[k];
+			const sample_t s1_fb = state->fb[1].s[k];
 			const sample_t s0_d_fb = state->fb_buf[0][state->fb_buf_p].s[k];
 			const sample_t s1_d_fb = state->fb_buf[1][state->fb_buf_p].s[k];
 
 			struct envs env, pwr_env;
-			calc_input_envs(&band->sm, s0_bp, s1_bp, &env, &pwr_env);
+			calc_input_envs(&band->sm, s0_fb, s1_fb, &env, &pwr_env);
 
 			#if DOWNSAMPLE_FACTOR > 1
 			if (state->s == 0) {
@@ -432,6 +453,11 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			state->fb_buf[0][state->fb_buf_p].s[k] = state->fb[0].s[k];
 			state->fb_buf[1][state->fb_buf_p].s[k] = state->fb[1].s[k];
 		}
+
+		out_l = fshape_run(&state->inv_fshape[0], out_l);
+		out_r = fshape_run(&state->inv_fshape[1], out_r);
+		out_ls = fshape_run(&state->inv_fshape[2], out_ls);
+		out_rs = fshape_run(&state->inv_fshape[3], out_rs);
 
 		if (state->has_output) {
 			for (int k = 0; k < e->istream.channels; ++k) {
@@ -629,6 +655,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 #endif
+	fshape_init(&state->fshape[0], istream->fs, fshape_lf, fshape_hf, 0);
+	state->fshape[1] = state->fshape[0];
+	fshape_init(&state->inv_fshape[0], istream->fs, fshape_lf, fshape_hf, 1);
+	state->inv_fshape[1] = state->inv_fshape[0];
+	state->inv_fshape[2] = state->inv_fshape[0];
+	state->inv_fshape[3] = state->inv_fshape[0];
+
 	filter_bank_init(&state->fb[0], istream->fs, config.fb_type, config.fb_stop);
 	state->fb[1] = state->fb[0];
 
@@ -637,13 +670,12 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	const double lowpass_f02 = config.lowpass_f0*config.lowpass_f0;
 	for (int k = 0; k < N_BANDS; ++k) {
 		struct matrix4_band *band = &state->band[k];
-		const double f0 = (k == 0) ? fb_bp[0] : fb_freqs[k-1];
-		const double f1 = (k == N_BANDS-1) ? fb_bp[1] : fb_freqs[k];
-		const double shelf_norm_f02 = f0*f1/shelf_f02;
+		const double fc2 = fb_fc[k]*fb_fc[k];
+		const double shelf_norm_f02 = fc2/shelf_f02;
 		band->surr_mult = config.surr_mult*sqrt((1.0+shelf_mult2*shelf_norm_f02)/(1.0+shelf_norm_f02));
 		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
 		if (lowpass_f02 > 0.0) {
-			const double lowpass_norm_f02 = f0*f1/lowpass_f02;
+			const double lowpass_norm_f02 = fc2/lowpass_f02;
 			band->shape_mult = sqrt(1.0/(1.0+lowpass_norm_f02));
 		}
 		else band->shape_mult = 1.0;
