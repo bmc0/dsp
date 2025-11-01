@@ -26,13 +26,13 @@
 #include "util.h"
 #include "fir.h"
 
-#define DOWNSAMPLE_FACTOR   8
+#define DOWNSAMPLE_FACTOR  32
 #define EVENT_THRESH_MAX  3.6
 #define EVENT_THRESH_MIN  1.4
 #define NORM_ACCOM_FACTOR 0.6
-#define N_BANDS            13
-
 #include "matrix4_common.h"
+
+#define N_BANDS 13
 
 #if N_BANDS == 11
 static const double fb_fdiv[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
