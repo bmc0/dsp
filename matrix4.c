@@ -24,10 +24,11 @@
 #include "biquad.h"
 #include "util.h"
 
+#define DOWNSAMPLE_FACTOR 32
 #include "matrix4_common.h"
 
 struct matrix4_state {
-	int c0, c1;
+	int s, c0, c1;
 	char has_output, is_draining, disable, do_dir_boost;
 	enum status_type status_type;
 	sample_t **bufs;
@@ -36,6 +37,10 @@ struct matrix4_state {
 	struct event_state ev;
 	struct event_config evc;
 	struct axes ax, ax_ev;
+	struct {
+		struct cs_interp_state ll, lr, rl, rr;
+		struct cs_interp_state lsl, lsr, rsl, rsr;
+	} m_interp;
 	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
 	sample_t norm_mult, surr_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
@@ -69,18 +74,35 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		struct envs env, pwr_env;
 		calc_input_envs(&state->sm, s0_bp, s1_bp, &env, &pwr_env);
 
-		process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
-		norm_axes(&state->ax);
+		#if DOWNSAMPLE_FACTOR > 1
+		state->s = (state->s + 1 >= DOWNSAMPLE_FACTOR) ? 0 : state->s + 1;
+		if (state->s == 0) {
+		#else
+		if (1) {
+		#endif
+			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
+			norm_axes(&state->ax);
 
-		struct matrix_coefs m = {0};
-		state->calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
+			struct matrix_coefs m = {0};
+			state->calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
+
+			cs_interp_insert(&state->m_interp.ll, m.ll);
+			cs_interp_insert(&state->m_interp.lr, m.lr);
+			cs_interp_insert(&state->m_interp.rl, m.rl);
+			cs_interp_insert(&state->m_interp.rr, m.rr);
+
+			cs_interp_insert(&state->m_interp.lsl, m.lsl);
+			cs_interp_insert(&state->m_interp.lsr, m.lsr);
+			cs_interp_insert(&state->m_interp.rsl, m.rsl);
+			cs_interp_insert(&state->m_interp.rsr, m.rsr);
+		}
 
 		const sample_t s0_d = state->bufs[state->c0][state->p];
 		const sample_t s1_d = state->bufs[state->c1][state->p];
-		const sample_t out_l = s0_d*m.ll + s1_d*m.lr;
-		const sample_t out_r = s0_d*m.rl + s1_d*m.rr;
-		const sample_t out_ls = s0_d*m.lsl + s1_d*m.lsr;
-		const sample_t out_rs = s0_d*m.rsl + s1_d*m.rsr;
+		const sample_t out_l = s0_d*cs_interp(&state->m_interp.ll, state->s) + s1_d*cs_interp(&state->m_interp.lr, state->s);
+		const sample_t out_r = s0_d*cs_interp(&state->m_interp.rl, state->s) + s1_d*cs_interp(&state->m_interp.rr, state->s);
+		const sample_t out_ls = s0_d*cs_interp(&state->m_interp.lsl, state->s) + s1_d*cs_interp(&state->m_interp.lsr, state->s);
+		const sample_t out_rs = s0_d*cs_interp(&state->m_interp.rsl, state->s) + s1_d*cs_interp(&state->m_interp.rsr, state->s);
 
 		if (state->has_output) {
 			for (k = 0; k < e->istream.channels; ++k) {
@@ -241,6 +263,9 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	event_state_init(&state->ev, istream);
 
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
+#if DOWNSAMPLE_FACTOR > 1
+	state->len += CS_INTERP_DELAY_FRAMES;
+#endif
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
