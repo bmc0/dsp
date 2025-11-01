@@ -65,10 +65,10 @@
 	#define NORM_ACCOM_FACTOR 0.9
 #endif
 
-/* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = polyphase FIR (blackman window) */
+/* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = cubic Hermite; 5 = polyphase FIR (Blackman window) */
 #ifndef CS_INTERP_TYPE
 #if DOWNSAMPLE_FACTOR == 4 || DOWNSAMPLE_FACTOR == 2
-	#define CS_INTERP_TYPE 4
+	#define CS_INTERP_TYPE 5
 #else
 	#define CS_INTERP_TYPE 2
 #endif
@@ -276,9 +276,9 @@ static void cs_interp_insert(struct cs_interp_state *s, double x)
 	memmove(y, y+1, sizeof(double)*3);
 	y[3] = x;
 	const double a = y[2]-y[0];
-	c[0] = 1.0/2.0*y[1] + 1.0/4.0*(y[0]+y[2]);
-	c[1] = 1.0/2.0*a;
-	c[2] = 1.0/4.0*(y[3]-y[1]-a);
+	c[0] = (1.0/2.0)*y[1] + (1.0/4.0)*(y[0]+y[2]);
+	c[1] = (1.0/2.0)*a;
+	c[2] = (1.0/4.0)*(y[3]-y[1]-a);
 }
 
 static inline double cs_interp(const struct cs_interp_state *s, int x)
@@ -301,10 +301,10 @@ static void cs_interp_insert(struct cs_interp_state *s, double x)
 	memmove(y, y+1, sizeof(double)*3);
 	y[3] = x;
 	const double a = y[0]+y[2];
-	c[0] = 1.0/6.0*a + 2.0/3.0*y[1];
-	c[1] = 1.0/2.0*(y[2]-y[0]);
-	c[2] = 1.0/2.0*a - y[1];
-	c[3] = 1.0/2.0*(y[1]-y[2]) + 1.0/6.0*(y[3]-y[0]);
+	c[0] = (1.0/6.0)*a + (2.0/3.0)*y[1];
+	c[1] = (1.0/2.0)*(y[2]-y[0]);
+	c[2] = (1.0/2.0)*a - y[1];
+	c[3] = (1.0/2.0)*(y[1]-y[2]) + (1.0/6.0)*(y[3]-y[0]);
 }
 
 static inline double cs_interp(const struct cs_interp_state *s, int x)
@@ -313,7 +313,32 @@ static inline double cs_interp(const struct cs_interp_state *s, int x)
 	return ((c[3]*t+c[2])*t+c[1])*t+c[0];
 }
 #elif CS_INTERP_TYPE == 4
-/* polyphase FIR (blackman window) */
+/* cubic Hermite */
+#define CS_INTERP_PEEK(s) ((s)->y[2])
+#define CS_INTERP_DELAY_FRAMES (3*DOWNSAMPLE_FACTOR)
+struct cs_interp_state {
+	double c[4];
+	double y[4];
+};
+
+static void cs_interp_insert(struct cs_interp_state *s, double x)
+{
+	double *y = s->y, *c = s->c;
+	memmove(y, y+1, sizeof(double)*3);
+	y[3] = x;
+	c[0] = y[1];
+	c[1] = (1.0/2.0)*(y[2]-y[0]);
+	c[2] = y[0] - (5.0/2.0)*y[1] + 2.0*y[2] - (1.0/2.0)*y[3];
+	c[3] = (1.0/2.0)*(y[3]-y[0]) + (3.0/2.0)*(y[1]-y[2]);
+}
+
+static inline double cs_interp(const struct cs_interp_state *s, int x)
+{
+	const double *c = s->c, t = x * (1.0/DOWNSAMPLE_FACTOR);
+	return ((c[3]*t+c[2])*t+c[1])*t+c[0];
+}
+#elif CS_INTERP_TYPE == 5
+/* polyphase FIR (Blackman window) */
 #define CS_INTERP_PEEK(s) ((s)->y[DOWNSAMPLE_FACTOR-1])
 #if DOWNSAMPLE_FACTOR == 2
 #define CS_INTERP_DELAY_FRAMES (4*DOWNSAMPLE_FACTOR-1)
