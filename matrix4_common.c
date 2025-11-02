@@ -443,8 +443,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			ev->sample = 0;
 			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.01)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
-			if (((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD))
-					|| (ev->hold && ev->max[1] < ev->max[0])) {
+			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
