@@ -56,8 +56,8 @@ static const int    fb_ap_idx[] = { 6, 7, 8, 9, 10, 11, 4, 3, 2, 1, 0, 3, 4, 1, 
 static const double fshape_lf[] = { 10, M_SQRT1_2, 180, 0.4 };
 static const double fshape_hf[] = { 0.46, 0.5, 14000, 0.5 };  /* note: [0] is multiplied by fs */
 
-#define PHASE_LIN_MAX_LEN 30.0  /* maximum filter length in milliseconds */
-#define PHASE_LIN_THRESH  1e-5  /* truncation threshold */
+#define PHASE_LIN_MAX_LEN      50.0  /* maximum filter length in milliseconds */
+#define PHASE_LIN_TRUNC_THRESH 1e-6  /* truncation threshold */
 
 #define DO_FILTER_BANK_TEST 0
 
@@ -693,7 +693,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	}
 	int zx = 0;                      /* last zero crossing index */
 	double integ = fabs(filter[0]);  /* unsigned integral since last zero crossing */
-	for (int k = 1; integ < PHASE_LIN_THRESH; ++k) {
+	const double trunc_thresh = PHASE_LIN_TRUNC_THRESH*PHASE_LIN_TRUNC_THRESH*istream->fs;
+	for (int k = 1; integ < trunc_thresh && k < phase_lin_frames; ++k) {
 		if (signbit(filter[k]) != signbit(filter[k-1])) {
 			zx = k;
 			integ = 0.0;
