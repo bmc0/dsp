@@ -187,22 +187,22 @@ struct codec * init_codec(const struct codec_params *p_in)
 			LOG_FMT(LL_ERROR, "error: bad type: %s", p.type);
 			return NULL;
 		}
+		if (!(info->modes & p.mode)) {
+			LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (p.mode == CODEC_MODE_READ) ? 'r' : 'w');
+			return NULL;
+		}
 		p.type = info->type;
-		if (info->modes & p.mode)
-			return info->init(&p);
-		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (p.mode == CODEC_MODE_READ) ? 'r' : 'w');
-		return NULL;
+		return info->init(&p);
 	}
-	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
-		p.type = info->type;
-		if (info->modes & p.mode)
-			return info->init(&p);
-		LOG_FMT(LL_ERROR, "%s: error: mode '%c' not supported", info->type, (p.mode == CODEC_MODE_READ) ? 'r' : 'w');
-		return NULL;
-	}
-	c = NULL;
 	if ((old_loglevel = dsp_globals.loglevel) == LL_NORMAL)
 		dsp_globals.loglevel = LL_ERROR;
+	if (ext != NULL && (info = get_codec_info_by_ext(ext)) != NULL) {
+		if (info->modes & p.mode) {
+			p.type = info->type;
+			if ((c = info->init(&p)) != NULL)
+				goto done;
+		}
+	}
 	if (p.mode == CODEC_MODE_WRITE) {
 		if (LENGTH(fallback_output_codecs) == 0)
 			LOG_S(LL_ERROR, "error: no fallback output(s) available and no output given");
@@ -211,20 +211,19 @@ struct codec * init_codec(const struct codec_params *p_in)
 			if (info != NULL && (info->modes & p.mode)) {
 				p.type = info->type;
 				if ((c = info->init(&p)) != NULL)
-					break;
+					goto done;
 			}
 		}
 	}
-	else {
-		for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
-			info = get_codec_info_by_type(fallback_input_codecs[i]);
-			if (info != NULL && (info->modes & p.mode)) {
-				p.type = info->type;
-				if ((c = info->init(&p)) != NULL)
-					break;
-			}
+	for (i = 0; i < LENGTH(fallback_input_codecs); ++i) {
+		info = get_codec_info_by_type(fallback_input_codecs[i]);
+		if (info != NULL && (info->modes & p.mode)) {
+			p.type = info->type;
+			if ((c = info->init(&p)) != NULL)
+				goto done;
 		}
 	}
+	done:
 	dsp_globals.loglevel = old_loglevel;
 	return c;
 }
