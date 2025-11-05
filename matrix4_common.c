@@ -24,9 +24,9 @@
 #include "matrix4_common.h"
 #include "dsp.h"
 
-void calc_matrix_coefs_v1(const struct axes *, int, double, double, struct matrix_coefs *);
-void calc_matrix_coefs_v2(const struct axes *, int, double, double, struct matrix_coefs *);
-void calc_matrix_coefs_v3(const struct axes *, int, double, double, struct matrix_coefs *);
+void calc_matrix_coefs_v1(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v2(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v3(const struct axes *, int, double, double, struct matrix_coefs *, double *);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -164,7 +164,6 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "shelf=")) {
 				char *opt_arg = isolate(opt, '=');
-				if (!is_mb) goto mb_only;
 				if (*opt_arg == '\0') goto needs_arg;
 				char *opt_subarg = isolate(opt_arg, ':');
 				double shelf_gain = strtod(opt_arg, &endptr);
@@ -180,7 +179,6 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "lowpass=")) {
 				char *opt_arg = isolate(opt, '=');
-				if (!is_mb) goto mb_only;
 				if (*opt_arg == '\0') goto needs_arg;
 				if (strcmp(opt_arg, "none") == 0) config->lowpass_f0 = 0.0;
 				else {
@@ -521,7 +519,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m)
+void calc_matrix_coefs_v1(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -565,7 +563,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, int do_dir_boost, double norm_m
 	m->rsl /= pu_sr;
 	m->rsr /= pu_sr;
 
-	if (do_dir_boost) {
+	if (do_dir_boost || r_shelf_mult) {
 		/* input phasors for given lr, cs */
 		const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
 		double sin_theta, cos_theta;
@@ -591,10 +589,17 @@ void calc_matrix_coefs_v1(const struct axes *ax, int do_dir_boost, double norm_m
 
 		/* directional power correction and normalization */
 		const double pdc_f = (pd_s < 1.0) ? sqrt(1.0-square(surr_gain)*pd_s) : norm_mult;
-
 		m->ll = pdc_f;
+
+		if (r_shelf_mult) {
+			const double surr_gain_hf2 = square(*r_shelf_mult);
+			const double pdc_f_hf = sqrt(1.0-surr_gain_hf2*MINIMUM(pd_s, 1.0));
+			*r_shelf_mult = pdc_f_hf/pdc_f;
+			if (!do_dir_boost) m->ll = sqrt(1.0-surr_gain_hf2)*pdc_f/pdc_f_hf;
+		}
 	}
 	else m->ll = norm_mult;
+
 	m->rr = m->ll;
 	m->rl = m->lr = 0.0;
 	m->lsl *= surr_gain;
@@ -608,7 +613,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, int do_dir_boost, double norm_m
  * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m)
+void calc_matrix_coefs_v2(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -710,9 +715,16 @@ void calc_matrix_coefs_v2(const struct axes *ax, int do_dir_boost, double norm_m
 	const double pdc_s = M_SQRT2*surr_gain/sqrt(pd_f_mod*pdc_f_mod + pd_s);
 
 	double pdc_f;
-	if (do_dir_boost) {
+	if (do_dir_boost || r_shelf_mult) {
 		const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
 		pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
+		if (r_shelf_mult) {
+			const double surr_gain_hf2 = square(*r_shelf_mult);
+			const double pd_s_mod_scaled_hf = surr_gain_hf2*pd_s_mod;
+			const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
+			*r_shelf_mult = pdc_f_hf/pdc_f;
+			if (!do_dir_boost) pdc_f = sqrt(1.0-surr_gain_hf2)*pdc_f/pdc_f_hf;
+		}
 	}
 	else pdc_f = norm_mult;
 
@@ -730,7 +742,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, int do_dir_boost, double norm_m
  * Like v2, but with nearly full steering of left-/right-surround-encoded
  * sounds (~20dB cancellation in front outs).
 */
-void calc_matrix_coefs_v3(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m)
+void calc_matrix_coefs_v3(const struct axes *ax, int do_dir_boost, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -879,9 +891,16 @@ void calc_matrix_coefs_v3(const struct axes *ax, int do_dir_boost, double norm_m
 	const double pdc_s = M_SQRT2*surr_gain/sqrt(pd_f_mod*pdc_f_mod + pd_s);
 
 	double pdc_f;
-	if (do_dir_boost) {
+	if (do_dir_boost || r_shelf_mult) {
 		const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
 		pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
+		if (r_shelf_mult) {
+			const double surr_gain_hf2 = square(*r_shelf_mult);
+			const double pd_s_mod_scaled_hf = surr_gain_hf2*pd_s_mod;
+			const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
+			*r_shelf_mult = pdc_f_hf/pdc_f;
+			if (!do_dir_boost) pdc_f = sqrt(1.0-surr_gain_hf2)*pdc_f/pdc_f_hf;
+		}
 	}
 	else pdc_f = norm_mult;
 

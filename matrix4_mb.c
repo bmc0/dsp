@@ -106,7 +106,7 @@ struct matrix4_mb_state {
 	struct filter_bank_frame *fb_buf[2];
 	double base_surr_mult;
 	struct event_config evc;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
+	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
 	ssize_t len, p, fb_buf_len, fb_buf_p;
 	ssize_t drain_frames, fade_frames, fade_p;
 };
@@ -426,7 +426,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					norm_mult = 1.0;
 				}
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
+				state->calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);

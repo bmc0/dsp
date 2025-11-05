@@ -146,7 +146,7 @@ struct matrix4_config {
 	char enable_signal, do_dir_boost;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
+	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))

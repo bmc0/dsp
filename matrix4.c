@@ -27,12 +27,18 @@
 #define DOWNSAMPLE_FACTOR 32
 #include "matrix4_common.h"
 
+struct dyn_shelf_state {
+	sample_t c2, norm, sin_w0, cos_w0_p1;
+	sample_t m0;
+};
+
 struct matrix4_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_dir_boost;
+	char has_output, is_draining, disable, do_dir_boost, do_shape;
 	enum status_type status_type;
 	sample_t **bufs;
 	struct biquad_state in_hp[2], in_lp[2];
+	struct dyn_shelf_state surr_shelf[2], surr_lp[2], front_shelf[2];
 	struct smooth_state sm;
 	struct event_state ev;
 	struct event_config evc;
@@ -40,14 +46,36 @@ struct matrix4_state {
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
+		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
 	} m_interp;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *);
-	sample_t norm_mult, surr_mult;
+	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+	sample_t norm_mult, surr_mult, shelf_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
 #endif
 };
+
+static void dyn_shelf_init(struct dyn_shelf_state *state, double fs, double f0)
+{
+	const double w0 = 2*M_PI*f0 / fs;
+	state->sin_w0 = sin(w0);
+	state->cos_w0_p1 = cos(w0) + 1.0;
+	state->norm = 1.0 / (state->sin_w0 + state->cos_w0_p1);
+	state->c2 = (state->sin_w0 - state->cos_w0_p1) * state->norm;
+	state->m0 = 0.0;
+}
+
+static sample_t dyn_shelf_run(struct dyn_shelf_state *state, sample_t s, sample_t g)
+{
+	const sample_t sn = s * state->norm;
+	const sample_t gcp1 = g * state->cos_w0_p1;
+	const sample_t c0s = (state->sin_w0 + gcp1) * sn;
+	const sample_t c1s = (state->sin_w0 - gcp1) * sn;
+	const sample_t r = c0s + state->m0;
+	state->m0 = c1s - (state->c2 * r);
+	return r;
+}
 
 sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -83,8 +111,14 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
 			norm_axes(&state->ax);
 
+			const double w = smoothstep(state->ax.cs*(-2/M_PI_4));
+			const double shelf_mult = w + (1.0-w)*state->shelf_mult;
+			const double norm_mult_hf = CALC_NORM_MULT(surr_mult*shelf_mult);
+			const double surr_gain_hf = norm_mult_hf*surr_mult*shelf_mult;
+
 			struct matrix_coefs m = {0};
-			state->calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m);
+			double front_shelf_mult = surr_gain_hf;
+			state->calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m, &front_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -95,14 +129,34 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			cs_interp_insert(&state->m_interp.lsr, m.lsr);
 			cs_interp_insert(&state->m_interp.rsl, m.rsl);
 			cs_interp_insert(&state->m_interp.rsr, m.rsr);
+
+			cs_interp_insert(&state->m_interp.g_surr_shelf, shelf_mult*norm_mult_hf/norm_mult);
+			cs_interp_insert(&state->m_interp.g_surr_lp, w);
+			cs_interp_insert(&state->m_interp.g_front_shelf, front_shelf_mult);
 		}
 
 		const sample_t s0_d = state->bufs[state->c0][state->p];
 		const sample_t s1_d = state->bufs[state->c1][state->p];
-		const sample_t out_l = s0_d*cs_interp(&state->m_interp.ll, state->s) + s1_d*cs_interp(&state->m_interp.lr, state->s);
-		const sample_t out_r = s0_d*cs_interp(&state->m_interp.rl, state->s) + s1_d*cs_interp(&state->m_interp.rr, state->s);
-		const sample_t out_ls = s0_d*cs_interp(&state->m_interp.lsl, state->s) + s1_d*cs_interp(&state->m_interp.lsr, state->s);
-		const sample_t out_rs = s0_d*cs_interp(&state->m_interp.rsl, state->s) + s1_d*cs_interp(&state->m_interp.rsr, state->s);
+		sample_t out_l = s0_d*cs_interp(&state->m_interp.ll, state->s) + s1_d*cs_interp(&state->m_interp.lr, state->s);
+		sample_t out_r = s0_d*cs_interp(&state->m_interp.rl, state->s) + s1_d*cs_interp(&state->m_interp.rr, state->s);
+		sample_t out_ls = s0_d*cs_interp(&state->m_interp.lsl, state->s) + s1_d*cs_interp(&state->m_interp.lsr, state->s);
+		sample_t out_rs = s0_d*cs_interp(&state->m_interp.rsl, state->s) + s1_d*cs_interp(&state->m_interp.rsr, state->s);
+
+		if (state->shelf_mult != 1.0) {
+			const sample_t g_surr_shelf = cs_interp(&state->m_interp.g_surr_shelf, state->s);
+			const sample_t g_front_shelf = cs_interp(&state->m_interp.g_front_shelf, state->s);
+
+			out_l = dyn_shelf_run(&state->front_shelf[0], out_l, g_front_shelf);
+			out_r = dyn_shelf_run(&state->front_shelf[1], out_r, g_front_shelf);
+			out_ls = dyn_shelf_run(&state->surr_shelf[0], out_ls, g_surr_shelf);
+			out_rs = dyn_shelf_run(&state->surr_shelf[1], out_rs, g_surr_shelf);
+		}
+		if (state->do_shape) {
+			const sample_t g_surr_lp = cs_interp(&state->m_interp.g_surr_lp, state->s);
+
+			out_ls = dyn_shelf_run(&state->surr_lp[0], out_ls, g_surr_lp);
+			out_rs = dyn_shelf_run(&state->surr_lp[1], out_rs, g_surr_lp);
+		}
 
 		if (state->has_output) {
 			for (k = 0; k < e->istream.channels; ++k) {
@@ -252,12 +306,16 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
 	state->do_dir_boost = config.do_dir_boost;
+	state->do_shape = (config.lowpass_f0 > 0.0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
 
 	for (int i = 0; i < 2; ++i) {
 		biquad_init_using_type(&state->in_hp[i], BIQUAD_HIGHPASS, istream->fs,  500.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
 		biquad_init_using_type(&state->in_lp[i], BIQUAD_LOWPASS,  istream->fs, 5000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
+		dyn_shelf_init(&state->surr_shelf[i],  istream->fs, config.shelf_f0);
+		dyn_shelf_init(&state->surr_lp[i],     istream->fs, config.lowpass_f0);
+		dyn_shelf_init(&state->front_shelf[i], istream->fs, config.shelf_f0);
 	}
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream);
@@ -271,6 +329,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
 	state->surr_mult = config.surr_mult;
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
+	state->shelf_mult = config.shelf_mult;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 

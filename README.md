@@ -253,13 +253,13 @@ Example:
 		uncorrelated component is constant.
 	* `no_dir_boost`  
 		Alias for `dir_boost=false`.
-	* `shelf=gain_dB[:f0[k]]` (`matrix4_mb` only)  
+	* `shelf=gain_dB[:f0[k]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
 		-22.5°. The default `gain_dB` is zero (no shelving). Setting this to -3
 		or so with a `surround_level` around 0 to -3 tends to work well. The
 		default `f0` is 500Hz.
-	* `lowpass=f0[k]|none` (`matrix4_mb` only)  
+	* `lowpass=f0[k]|none`  
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed
 		as C/S goes from 0° to -22.5°. The default setting is `none`, which
