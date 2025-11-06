@@ -464,8 +464,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					++ev->diff_count;
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
-				const double x = (ev->max[1] - thresh) / (thresh*DIFF_WEIGHT_SCALE);
-				ev->ds_diff = 1.0 + ((x >= 1.0) ? 1.0 : x*x*(3.0-2.0*x))*DIFF_SENS_WEIGHT;
+				ev->ds_diff = 1.0 + smoothstep((ev->max[1]-thresh)/(thresh*DIFF_WEIGHT_SCALE))*DIFF_SENS_WEIGHT;
 				ewma_set(&ev->drift_scale[1], ev->ds_diff*0.25);
 				/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; max: %6.3f; lr: %+06.2f°; cs: %+06.2f°",
 					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff", ev->max[1],
@@ -509,7 +508,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
 	if (l_mask_norm_sm > ds_ord_thresh || r_mask_norm_sm > ds_ord_thresh) {
 		const double x = (MAXIMUM(l_mask_norm_sm, r_mask_norm_sm) - ds_ord_thresh) / (thresh*1.5 - ds_ord_thresh);
-		ev->ds_ord_buf[ev->buf_p] = ((x >= 1.0) ? 1.0 : x*x*(3.0-2.0*x))*ORD_SENS_WEIGHT + 1.0;
+		ev->ds_ord_buf[ev->buf_p] = smoothstep(x)*ORD_SENS_WEIGHT + 1.0;
 	}
 	else ev->ds_ord_buf[ev->buf_p] = 1.0;
 	++ev->t;
@@ -710,16 +709,15 @@ void calc_matrix_coefs_v2(const struct axes *ax, int do_dir_boost, double norm_m
 	const double pdc_f_mod = 2.0-pd_s_mod;
 	const double pdc_s = M_SQRT2*surr_gain/sqrt(pd_f_mod*pdc_f_mod + pd_s);
 
+	double pdc_f;
 	if (do_dir_boost) {
 		const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
-		const double pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
-		m->ll *= pdc_f;
-		m->lr *= pdc_f;
+		pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
 	}
-	else {
-		m->ll *= norm_mult;
-		m->lr *= norm_mult;
-	}
+	else pdc_f = norm_mult;
+
+	m->ll *= pdc_f;
+	m->lr *= pdc_f;
 	m->rr = m->ll;
 	m->rl = m->lr;
 	m->lsl *= pdc_s;

@@ -392,11 +392,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					for (int j = 0; j < n_angles; ++j) {
 						const double d_lr = fabs(angles[j].lr - ev->diff_last.lr);
 						const double d_cs = fabs(angles[j].cs - ev->diff_last.cs);
-						const double d_max = MAXIMUM(d_lr, d_cs);
-						if (d_max < M_PI/16) {
-							const double x = 1.0 - d_max*(16/M_PI);
-							ev_thresh_fact += x*x*(3.0-2.0*x);
-						}
+						ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI));
 					}
 					ev_thresh_fact -= 1.0;
 				}
@@ -411,8 +407,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				double norm_mult = band->norm_mult, surr_mult = band->surr_mult;
 				if (band->ax.cs < 0.0) {
 					if (band->ax.cs > -M_PI_4/2) {
-						const double x = band->ax.cs*(-2/M_PI_4);
-						const double w = x*x*(3.0-2.0*x);
+						const double w = smoothstep_nc(band->ax.cs*(-2/M_PI_4));
 						shape_mult = w + shape_mult*(1.0-w);
 						surr_mult = state->base_surr_mult*w + band->surr_mult*(1.0-w);
 					}
