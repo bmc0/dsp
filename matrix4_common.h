@@ -180,6 +180,18 @@ void process_events_priv(struct event_state *, const struct event_config *, cons
 
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
+static inline double smoothstep_nc(double x)
+{
+	return x*x*(3.0-2.0*x);
+}
+
+static inline double smoothstep(double x)
+{
+	if (x >= 1.0) return 1.0;
+	if (x <= 0.0) return 0.0;
+	return smoothstep_nc(x);
+}
+
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 static void event_state_init(struct event_state *ev, const struct stream_info *istream)
 {
