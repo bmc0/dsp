@@ -97,7 +97,7 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_dir_boost;
+	char has_output, is_draining, disable;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[4];
 	struct filter_bank fb[2];
@@ -106,7 +106,7 @@ struct matrix4_mb_state {
 	struct filter_bank_frame *fb_buf[2];
 	double base_surr_mult;
 	struct event_config evc;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+	calc_matrix_coefs_func calc_matrix_coefs;
 	ssize_t len, p, fb_buf_len, fb_buf_p;
 	ssize_t drain_frames, fade_frames, fade_p;
 };
@@ -406,15 +406,9 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				double shape_mult = band->shape_mult;
 				double norm_mult = band->norm_mult, surr_mult = band->surr_mult;
 				if (band->ax.cs < 0.0) {
-					if (band->ax.cs > -M_PI_4/2) {
-						const double w = smoothstep_nc(band->ax.cs*(-2/M_PI_4));
-						shape_mult = w + shape_mult*(1.0-w);
-						surr_mult = state->base_surr_mult*w + band->surr_mult*(1.0-w);
-					}
-					else {
-						shape_mult = 1.0;
-						surr_mult = state->base_surr_mult;
-					}
+					const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
+					shape_mult = w + shape_mult*(1.0-w);
+					surr_mult = state->base_surr_mult*w + band->surr_mult*(1.0-w);
 					norm_mult = CALC_NORM_MULT(surr_mult);
 				}
 				if (state->fade_p > 0) {
@@ -426,7 +420,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					norm_mult = 1.0;
 				}
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, state->do_dir_boost, norm_mult, surr_mult, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, norm_mult, surr_mult, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -625,7 +619,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->c1 = config.c1;
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
-	state->do_dir_boost = config.do_dir_boost;
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 
@@ -666,12 +659,12 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	for (int k = 0; k < N_BANDS; ++k) {
 		struct matrix4_band *band = &state->band[k];
 		const double fc2 = fb_fc[k]*fb_fc[k];
-		const double shelf_norm_f02 = fc2/shelf_f02;
-		band->surr_mult = config.surr_mult*sqrt((1.0+shelf_mult2*shelf_norm_f02)/(1.0+shelf_norm_f02));
+		const double shelf_norm_f2 = fc2/shelf_f02;
+		band->surr_mult = config.surr_mult*sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
 		if (lowpass_f02 > 0.0) {
-			const double lowpass_norm_f02 = fc2/lowpass_f02;
-			band->shape_mult = sqrt(1.0/(1.0+lowpass_norm_f02));
+			const double lowpass_norm_f2 = fc2/lowpass_f02;
+			band->shape_mult = sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
 		else band->shape_mult = 1.0;
 		/* LOG_FMT(LL_VERBOSE, "%s: band %d: norm_mult=%.4g surr_mult=%.4g shape_mult=%.4g",

@@ -139,14 +139,15 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
+typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, struct matrix_coefs *, double *);
+
 struct matrix4_config {
-	int n_channels, opt_str_idx, c0, c1;
+	int n_channels, opt_str_idx, c0, c1, enable_signal;
 	double surr_mult, shelf_mult, shelf_f0, lowpass_f0, fb_stop[2], db_band_weight[2];
 	ssize_t surr_delay_frames;
-	char enable_signal, do_dir_boost;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+	calc_matrix_coefs_func calc_matrix_coefs;
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))

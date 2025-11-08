@@ -241,14 +241,6 @@ four outputs. \fIv3\fR adds strong steering (20dB) of sounds encoded to the
 left and right surround positions (L/R=±22.5° C/S=\-22.5°). The default
 is \fIv2\fR as it seems work best for most music recordings.
 .TP
-dir_boost[=\fItrue\fR|\fIfalse\fR]
-If \fItrue\fR (the default), keep total power approximately constant for
-directionally-encoded sounds. If \fIfalse\fR, the total power of the
-uncorrelated component is constant.
-.TP
-no_dir_boost
-Alias for `dir_boost=none'.
-.TP
 shelf=\fIgain_dB\fR[:\fIf0\fR[\fBk\fR]]
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to

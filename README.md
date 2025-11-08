@@ -247,12 +247,6 @@ Example:
 		four outputs. `v3` adds strong steering (20dB) of sounds encoded to the
 		left and right surround positions (L/R=±22.5° C/S=-22.5°). The default
 		is `v2` as it seems work best for most music recordings.
-	* `dir_boost[=true|false]`  
-		If `true` (the default), keep total power approximately constant for
-		directionally-encoded sounds. If `false`, the total power of the
-		uncorrelated component is constant.
-	* `no_dir_boost`  
-		Alias for `dir_boost=false`.
 	* `shelf=gain_dB[:f0[k]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to

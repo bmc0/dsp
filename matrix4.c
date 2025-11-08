@@ -34,7 +34,7 @@ struct dyn_shelf_state {
 
 struct matrix4_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_dir_boost, do_shape;
+	char has_output, is_draining, disable, do_shape;
 	enum status_type status_type;
 	sample_t **bufs;
 	struct biquad_state in_hp[2], in_lp[2];
@@ -48,7 +48,7 @@ struct matrix4_state {
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
 	} m_interp;
-	void (*calc_matrix_coefs)(const struct axes *, int, double, double, struct matrix_coefs *, double *);
+	calc_matrix_coefs_func calc_matrix_coefs;
 	sample_t norm_mult, surr_mult, shelf_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 #ifndef LADSPA_FRONTEND
@@ -118,7 +118,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			struct matrix_coefs m = {0};
 			double front_shelf_mult = surr_gain_hf;
-			state->calc_matrix_coefs(&state->ax, state->do_dir_boost, norm_mult, surr_mult, &m, &front_shelf_mult);
+			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, &m, &front_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -305,7 +305,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
-	state->do_dir_boost = config.do_dir_boost;
 	state->do_shape = (config.lowpass_f0 > 0.0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
