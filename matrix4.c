@@ -49,7 +49,7 @@ struct matrix4_state {
 		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
 	} m_interp;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double norm_mult, surr_mult, shelf_mult, shelf_pwrcmp;
+	double norm_mult, surr_mult, shelf_mult, shelf_pwrcmp, lowpass_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
@@ -115,6 +115,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
 			const double shape_mult_shelf = (shelf_mult_tot-1.0)*(1.0-state->shelf_pwrcmp) + 1.0;
+			const double shape_mult_lp = w + (1.0-w)*state->lowpass_mult;
 			const double norm_mult_hf = CALC_NORM_MULT(surr_mult*shelf_mult);
 			const double surr_gain_hf = norm_mult_hf*surr_mult*shelf_mult;
 
@@ -133,7 +134,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			cs_interp_insert(&state->m_interp.rsr, m.rsr);
 
 			cs_interp_insert(&state->m_interp.g_surr_shelf, shape_mult_shelf*shelf_mult*norm_mult_hf/norm_mult);
-			cs_interp_insert(&state->m_interp.g_surr_lp, w);
+			cs_interp_insert(&state->m_interp.g_surr_lp, shape_mult_lp);
 			cs_interp_insert(&state->m_interp.g_front_shelf, front_shelf_mult);
 		}
 
@@ -332,6 +333,10 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
 	state->shelf_mult = config.shelf_mult;
 	state->shelf_pwrcmp = config.shelf_pwrcmp;
+	if (state->do_lowpass) {
+		const double lp_f = (istream->fs+config.lowpass_f0)/2.0;
+		state->lowpass_mult = sqrt(1.0/(1.0+(lp_f*lp_f/(config.lowpass_f0*config.lowpass_f0))));
+	}
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 
