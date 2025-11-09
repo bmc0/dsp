@@ -118,6 +118,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	char *opt_str = NULL;
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
+	config->shelf_pwrcmp = SHELF_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
@@ -159,6 +160,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;
 				char *opt_subarg = isolate(opt_arg, ':');
+				char *opt_subarg1 = isolate(opt_subarg, ':');
 				double shelf_gain = strtod(opt_arg, &endptr);
 				CHECK_ENDPTR(opt_arg, endptr, "shelf: gain_dB", goto fail);
 				if (shelf_gain > 0.0)
@@ -168,6 +170,11 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					config->shelf_f0 = parse_freq(opt_subarg, &endptr);
 					CHECK_ENDPTR(opt_subarg, endptr, "shelf: f0", goto fail);
 					CHECK_RANGE(config->shelf_f0 >= 100.0 && config->shelf_f0 <= 6000.0, "shelf: f0", goto fail);
+				}
+				if (*opt_subarg1 != '\0') {
+					config->shelf_pwrcmp = strtod(opt_subarg1, &endptr);
+					CHECK_ENDPTR(opt_subarg, endptr, "shelf: pwrcmp", goto fail);
+					CHECK_RANGE(config->shelf_pwrcmp >= 0.0 && config->shelf_pwrcmp <= 1.0, "shelf: pwrcmp", goto fail);
 				}
 			}
 			else if (is_opt(opt, "lowpass=")) {

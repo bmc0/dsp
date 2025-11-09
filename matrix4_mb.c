@@ -660,13 +660,14 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		struct matrix4_band *band = &state->band[k];
 		const double fc2 = fb_fc[k]*fb_fc[k];
 		const double shelf_norm_f2 = fc2/shelf_f02;
-		band->surr_mult = config.surr_mult*sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
+		const double shelf_mag = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
+		band->surr_mult = config.surr_mult*((shelf_mag-1.0)*config.shelf_pwrcmp + 1.0);
 		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
+		band->shape_mult = (shelf_mag-1.0)*(1.0-config.shelf_pwrcmp) + 1.0;
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
-			band->shape_mult = sqrt(1.0/(1.0+lowpass_norm_f2));
+			band->shape_mult *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
-		else band->shape_mult = 1.0;
 		/* LOG_FMT(LL_VERBOSE, "%s: band %d: norm_mult=%.4g surr_mult=%.4g shape_mult=%.4g",
 				argv[0], k, band->norm_mult, band->surr_mult, band->shape_mult); */
 	}

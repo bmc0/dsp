@@ -241,12 +241,13 @@ four outputs. \fIv3\fR adds strong steering (20dB) of sounds encoded to the
 left and right surround positions (L/R=±22.5° C/S=\-22.5°). The default
 is \fIv2\fR as it seems work best for most music recordings.
 .TP
-shelf=\fIgain_dB\fR[:\fIf0\fR[\fBk\fR]]
+shelf=\fIgain_dB\fR[:\fIf0\fR[\fBk\fR][:\fIpwrcmp\fR]]
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to
 \-22.5°. The default \fIgain_dB\fR is zero (no shelving). Setting this to \-3
 or so with a \fIsurround_level\fR around 0 to \-3 tends to work well. The
-default \fIf0\fR is 500Hz.
+default \fIf0\fR is 500Hz. \fIpwrcmp\fR is the high-frequency power
+compensation factor. The default value is 1 (full compensation).
 .TP
 lowpass=\fIf0\fR[\fBk\fR]|\fInone\fR
 Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR
