@@ -24,9 +24,9 @@
 #include "matrix4_common.h"
 #include "dsp.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, struct matrix_coefs *, double *);
-void calc_matrix_coefs_v2(const struct axes *, double, double, struct matrix_coefs *, double *);
-void calc_matrix_coefs_v3(const struct axes *, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v1(const struct axes *, double, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v2(const struct axes *, double, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v3(const struct axes *, double, double, double, struct matrix_coefs *, double *);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -519,7 +519,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -612,7 +612,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
  * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -668,7 +668,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 		m_mod.rsr = m->rsr;
 	}
 	else {
-		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*MINIMUM(surr_mult, 1.0);
+		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*MINIMUM(surr_mult_lf, 1.0);
 		m->ll = 1.0 - front_gc_2;
 		m->lr = front_gc_2;
 		const double pu_fl = pwr_sum(m->ll, m->lr);
@@ -736,7 +736,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
  * Like v2, but with nearly full steering of left-/right-surround-encoded
  * sounds (~20dB cancellation in front outs).
 */
-void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_mult, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -812,11 +812,11 @@ void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_m
 			m_mod.rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
 			m_mod.rr -= gl*gl * sin(front_cs) * front_lr_mult;
 		}
-		const double clamped_surr_mult = MINIMUM(surr_mult, 1.0);
-		m->ll = 1.0 + m_mod.ll*clamped_surr_mult;
-		m->lr = m_mod.lr*clamped_surr_mult;
-		m->rl = m_mod.rl*clamped_surr_mult;
-		m->rr = 1.0 + m_mod.rr*clamped_surr_mult;
+		const double clamped_surr_mult_lf = MINIMUM(surr_mult_lf, 1.0);
+		m->ll = 1.0 + m_mod.ll*clamped_surr_mult_lf;
+		m->lr = m_mod.lr*clamped_surr_mult_lf;
+		m->rl = m_mod.rl*clamped_surr_mult_lf;
+		m->rr = 1.0 + m_mod.rr*clamped_surr_mult_lf;
 		const double pu_fl = pwr_sum(m->ll, m->lr);
 		m->ll /= pu_fl;
 		m->lr /= pu_fl;

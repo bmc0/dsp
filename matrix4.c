@@ -121,7 +121,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			struct matrix_coefs m = {0};
 			double front_shelf_mult = surr_gain_hf;
-			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, &m, &front_shelf_mult);
+			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, surr_mult, &m, &front_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);

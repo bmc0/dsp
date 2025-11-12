@@ -405,6 +405,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 				double shape_mult = band->shape_mult;
 				double norm_mult = band->norm_mult, surr_mult = band->surr_mult;
+				double base_surr_mult = state->base_surr_mult;
 				if (band->ax.cs < 0.0) {
 					const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 					shape_mult = w + shape_mult*(1.0-w);
@@ -413,14 +414,15 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				}
 				if (state->fade_p > 0) {
 					surr_mult *= cur_fade_mult;
+					base_surr_mult *= cur_fade_mult;
 					norm_mult = CALC_NORM_MULT(surr_mult);
 				}
 				else if (state->disable) {
-					surr_mult = 0.0;
+					base_surr_mult = surr_mult = 0.0;
 					norm_mult = 1.0;
 				}
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, norm_mult, surr_mult, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, norm_mult, surr_mult, base_surr_mult, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
