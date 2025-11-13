@@ -244,9 +244,8 @@ Example:
 		remove anything from the front outputs. `v2` adds full steering of
 		sounds encoded to -45° in the C/S axis and restores full lateral
 		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
-		four outputs. `v3` adds strong steering (20dB) of sounds encoded to the
-		left and right surround positions (L/R=±22.5° C/S=-22.5°). The default
-		is `v2` as it seems work best for most music recordings.
+		four outputs. `v3` adds full steering of sounds encoded to the left and
+		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v2`.
 	* `shelf=gain_dB[:f0[k][:pwrcmp]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to

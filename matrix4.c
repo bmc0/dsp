@@ -116,12 +116,10 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
 			const double shape_mult_shelf = (shelf_mult_tot-1.0)*(1.0-state->shelf_pwrcmp) + 1.0;
 			const double shape_mult_lp = w + (1.0-w)*state->lowpass_mult;
-			const double norm_mult_hf = CALC_NORM_MULT(surr_mult*shelf_mult);
-			const double surr_gain_hf = norm_mult_hf*surr_mult*shelf_mult;
 
 			struct matrix_coefs m = {0};
-			double front_shelf_mult = surr_gain_hf;
-			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, surr_mult, &m, &front_shelf_mult);
+			double r_shelf_mult[2] = {surr_mult*shelf_mult, 0.0};
+			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, surr_mult, &m, r_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -133,9 +131,9 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			cs_interp_insert(&state->m_interp.rsl, m.rsl);
 			cs_interp_insert(&state->m_interp.rsr, m.rsr);
 
-			cs_interp_insert(&state->m_interp.g_surr_shelf, shape_mult_shelf*shelf_mult*norm_mult_hf/norm_mult);
+			cs_interp_insert(&state->m_interp.g_surr_shelf, shape_mult_shelf*r_shelf_mult[1]);
 			cs_interp_insert(&state->m_interp.g_surr_lp, shape_mult_lp);
-			cs_interp_insert(&state->m_interp.g_front_shelf, front_shelf_mult);
+			cs_interp_insert(&state->m_interp.g_front_shelf, r_shelf_mult[0]);
 		}
 
 		const sample_t s0_d = state->bufs[state->c0][state->p];

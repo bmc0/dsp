@@ -140,7 +140,7 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
-typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, double, struct matrix_coefs *, double *);
+typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal;

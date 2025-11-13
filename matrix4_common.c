@@ -24,9 +24,12 @@
 #include "matrix4_common.h"
 #include "dsp.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, double, struct matrix_coefs *, double *);
-void calc_matrix_coefs_v2(const struct axes *, double, double, double, struct matrix_coefs *, double *);
-void calc_matrix_coefs_v3(const struct axes *, double, double, double, struct matrix_coefs *, double *);
+void calc_matrix_coefs_v1(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v2(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v3(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
+
+void calc_matrix_coefs_v2_old(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v3_old(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -151,6 +154,10 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					config->calc_matrix_coefs = calc_matrix_coefs_v2;
 				else if (strcmp(opt_arg, "v3") == 0)
 					config->calc_matrix_coefs = calc_matrix_coefs_v3;
+				else if (strcmp(opt_arg, "v2_old") == 0)
+					config->calc_matrix_coefs = calc_matrix_coefs_v2_old;
+				else if (strcmp(opt_arg, "v3_old") == 0)
+					config->calc_matrix_coefs = calc_matrix_coefs_v3_old;
 				else {
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
 					goto fail;
@@ -519,7 +526,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -588,14 +595,16 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 	/* directional power correction and normalization */
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double surr_gain2 = surr_mult2*adj_norm_mult2;
-	const double pdc_f = sqrt(1.0-surr_gain2*MINIMUM(pd_s, 1.0));
-	const double pdc_s = sqrt(surr_gain2);
+	const double surr_pwr = surr_mult2*adj_norm_mult2;
+	const double pdc_f = sqrt(1.0-surr_pwr*MINIMUM(pd_s, 1.0));
+	const double pdc_s = sqrt(surr_pwr);
 
 	if (r_shelf_mult) {
-		const double surr_gain_hf2 = square(*r_shelf_mult);
-		const double pdc_f_hf = sqrt(1.0-surr_gain_hf2*MINIMUM(pd_s, 1.0));
-		*r_shelf_mult = pdc_f_hf/pdc_f;
+		const double surr_mult_hf2 = square(r_shelf_mult[0]);
+		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
+		r_shelf_mult[0] = sqrt(1.0-surr_pwr_hf*MINIMUM(pd_s, 1.0))/pdc_f;
+		r_shelf_mult[1] = sqrt(surr_pwr_hf)/pdc_s;
 	}
 
 	m->ll = pdc_f;
@@ -608,11 +617,310 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 }
 
 /*
+ * Note: A factor of 0.75 results in approximately equal power
+ * error for both directional and uncorrelated inputs.
+*/
+/* #define SURR_PDC_FACTOR 0.75 */
+
+/*
  * Full steering of rear-encoded sounds and full left/right separation from
  * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
+{
+	const double lr = ax->lr, cs = ax->cs;
+	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
+
+	/* initial surround elements */
+	m->rsr = m->lsl = 1.0;
+	m->rsl = m->lsr = 0.0;
+	const double gl = 1.0+tan(abs_lr-M_PI_4);
+	if (lr > 0.0) {
+		m->lsl -= gl*gl;
+		m->lsr -= gl;
+	}
+	else if (lr < 0.0) {
+		m->rsl -= gl;
+		m->rsr -= gl*gl;
+	}
+	if (cs > 0.0) {
+		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
+		m->lsl -= gc_2;
+		m->lsr -= gc_2;
+		m->rsl -= gc_2;
+		m->rsr -= gc_2;
+	}
+	else if (cs < 0.0) {
+		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
+		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
+		m->lsl -= gc_2;
+		m->lsr += gc_2;
+		m->rsl += gc_2;
+		m->rsr -= gc_2;
+	}
+
+	/* power correction for uncorrelated input */
+	const double pu_sl = pwr_sum(m->lsl, m->lsr);
+	m->lsl /= pu_sl;
+	m->lsr /= pu_sl;
+	const double pu_sr = pwr_sum(m->rsl, m->rsr);
+	m->rsl /= pu_sr;
+	m->rsr /= pu_sr;
+
+	if (cs >= 0.0) {
+		m->ll = 1.0;
+		m->lr = 0.0;
+	}
+	else {
+		/* initial front elements */
+		const double cf_sm2 = square(MINIMUM(surr_mult_lf, 1.0));
+		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
+		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*cf;
+		m->ll = 1.0 - front_gc_2;
+		m->lr = front_gc_2;
+
+		/* power correction for uncorrelated input */
+		const double pu_fl = pwr_sum(m->ll, m->lr);
+		m->ll /= pu_fl;
+		m->lr /= pu_fl;
+	}
+
+	/* input phasors for given lr, cs */
+	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
+	double sin_theta, cos_theta;
+	if (abs_lr+abs_cs < M_PI_4) {
+		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
+		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
+		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
+		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
+	}
+	else {
+		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
+		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
+	}
+	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
+	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
+
+	/* level for directional input */
+	const double gd_fl2 = square(m->ll*l_real + m->lr*r_real) + square(m->ll*l_imag + m->lr*r_imag);
+	const double gd_fr2 = square(m->lr*l_real + m->ll*r_real) + square(m->lr*l_imag + m->ll*r_imag);
+	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
+	const double gd_sr2 = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
+
+	/* power for directional input */
+	const double pd_f = gd_fl2 + gd_fr2;
+	const double pd_s = gd_sl2 + gd_sr2;
+
+	/* weighted directional power */
+	double pd_f_wf = pd_f, pd_s_wf = pd_s;
+	double pd_f_ws = 1.0, pd_s_ws = 1.0;
+	if (cs < 0.0) {
+		if (abs_cs < abs_lr) {
+			const double lr2 = square(lr), cs2 = square(cs);
+			const double wf = (lr2+cs2 > DBL_MIN) ? square((lr2-cs2)/(lr2+cs2)) : 0.0;
+			pd_f_wf = (pd_f-1.0)*wf+1.0;
+			pd_s_wf = (pd_s-1.0)*wf+1.0;
+			pd_f_ws = (pd_f-1.0)*(1.0-wf)+1.0;
+			pd_s_ws = (pd_s-1.0)*(1.0-wf)+1.0;
+		}
+		else {
+			pd_s_wf = pd_f_wf = 1.0;
+			pd_f_ws = pd_f;
+			pd_s_ws = pd_s;
+		}
+	}
+#ifdef SURR_PDC_FACTOR
+	pd_s_ws = (pd_s_ws-1.0)*SURR_PDC_FACTOR+1.0;
+#endif
+
+	/* directional power correction and normalization */
+	const double surr_mult2 = square(surr_mult);
+	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
+	const double pdc_f = sqrt((1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf);
+	const double pdc_s = sqrt(fabs((1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws));
+
+	if (r_shelf_mult) {
+		const double surr_mult_hf2 = square(r_shelf_mult[0]);
+		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+		r_shelf_mult[0] = sqrt((1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf)/pdc_f;
+		r_shelf_mult[1] = sqrt(fabs((1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws))/pdc_s;
+	}
+
+	m->ll *= pdc_f;
+	m->lr *= pdc_f;
+	m->rr = m->ll;
+	m->rl = m->lr;
+	m->lsl *= pdc_s;
+	m->lsr *= pdc_s;
+	m->rsl *= pdc_s;
+	m->rsr *= pdc_s;
+}
+
+/*
+ * Like v2, but with full steering of left-/right-surround-encoded
+ * sounds.
+*/
+void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
+{
+	const double lr = ax->lr, cs = ax->cs;
+	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
+
+	/* initial surround elements */
+	m->rsr = m->lsl = 1.0;
+	m->rsl = m->lsr = 0.0;
+	const double gl = 1.0+tan(abs_lr-M_PI_4);
+	if (lr > 0.0) {
+		m->lsl -= gl*gl;
+		m->lsr -= gl;
+	}
+	else if (lr < 0.0) {
+		m->rsl -= gl;
+		m->rsr -= gl*gl;
+	}
+	if (cs > 0.0) {
+		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
+		m->lsl -= gc_2;
+		m->lsr -= gc_2;
+		m->rsl -= gc_2;
+		m->rsr -= gc_2;
+	}
+	else if (cs < 0.0) {
+		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
+		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
+		m->lsl -= gc_2;
+		m->lsr += gc_2;
+		m->rsl += gc_2;
+		m->rsr -= gc_2;
+	}
+
+	/* power correction for uncorrelated input */
+	const double pu_sl = pwr_sum(m->lsl, m->lsr);
+	m->lsl /= pu_sl;
+	m->lsr /= pu_sl;
+	const double pu_sr = pwr_sum(m->rsl, m->rsr);
+	m->rsl /= pu_sr;
+	m->rsr /= pu_sr;
+
+	if (cs >= 0.0) {
+		m->rr = m->ll = 1.0;
+		m->rl = m->lr = 0.0;
+	}
+	else {
+		/* initial front elements */
+		const double front_gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
+		const double front_cs = (cs > -M_PI_4/2) ? 4.0*abs_cs : M_PI_2;
+		const double front_lr_mult = (abs_lr <= M_PI_4/2) ? 1.0 : 1.0+cos(4.0*abs_lr);
+		m->rr = m->ll = -front_gc_2;
+		m->rl = m->lr = front_gc_2;
+		if (lr > 0.0) {
+			m->ll -= gl*gl * sin(front_cs) * front_lr_mult;
+			m->lr += gl * (1.0-cos(front_cs)) * front_lr_mult;
+		}
+		else if (lr < 0.0) {
+			m->rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
+			m->rr -= gl*gl * sin(front_cs) * front_lr_mult;
+		}
+		const double cf_sm2 = square(MINIMUM(surr_mult_lf, 1.0));
+		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
+		m->ll = 1.0 + m->ll*cf;
+		m->lr = m->lr*cf;
+		m->rl = m->rl*cf;
+		m->rr = 1.0 + m->rr*cf;
+
+		/* power correction for uncorrelated input */
+		const double pu_fl = pwr_sum(m->ll, m->lr);
+		m->ll /= pu_fl;
+		m->lr /= pu_fl;
+		const double pu_fr = pwr_sum(m->rl, m->rr);
+		m->rl /= pu_fr;
+		m->rr /= pu_fr;
+	}
+
+	/* input phasors for given lr, cs */
+	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
+#if 0
+	/* straightforward calculation */
+	const double phase = (abs_lr+abs_cs>=M_PI_4)?(cs<0.0)?-M_PI_4:M_PI_4:0.5*asin(sin(2.0*cs)/cos(2.0*lr));
+	const double l_real = sin_lr*cos(M_PI_4-phase), l_imag = sin_lr*sin(M_PI_4-phase);
+	const double r_real = cos_lr*cos(phase-M_PI_4), r_imag = cos_lr*sin(phase-M_PI_4);
+#else
+	/* faster calculation */
+	double sin_theta, cos_theta;
+	if (abs_lr+abs_cs < M_PI_4) {
+		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
+		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
+		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
+		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
+	}
+	else {
+		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
+		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
+	}
+	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
+	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
+#endif
+
+	/* level for directional input */
+	const double gd_fl2 = square(m->ll*l_real + m->lr*r_real) + square(m->ll*l_imag + m->lr*r_imag);
+	const double gd_fr2 = square(m->rl*l_real + m->rr*r_real) + square(m->rl*l_imag + m->rr*r_imag);
+	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
+	const double gd_sr2 = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
+
+	/* power for directional input */
+	const double pd_f = gd_fl2 + gd_fr2;
+	const double pd_s = gd_sl2 + gd_sr2;
+
+	/* weighted directional power */
+	double pd_f_wf = pd_f, pd_s_wf = pd_s;
+	double pd_f_ws = 1.0, pd_s_ws = 1.0;
+	if (cs < 0.0) {
+		if (abs_cs < abs_lr) {
+			const double lr2 = square(lr), cs2 = square(cs);
+			const double wf = (lr2+cs2 > DBL_MIN) ? square((lr2-cs2)/(lr2+cs2)) : 0.0;
+			pd_f_wf = (pd_f-1.0)*wf+1.0;
+			pd_s_wf = (pd_s-1.0)*wf+1.0;
+			pd_f_ws = (pd_f-1.0)*(1.0-wf)+1.0;
+			pd_s_ws = (pd_s-1.0)*(1.0-wf)+1.0;
+		}
+		else {
+			pd_s_wf = pd_f_wf = 1.0;
+			pd_f_ws = pd_f;
+			pd_s_ws = pd_s;
+		}
+	}
+#ifdef SURR_PDC_FACTOR
+	pd_s_ws = (pd_s_ws-1.0)*SURR_PDC_FACTOR+1.0;
+#endif
+
+	/* directional power correction and normalization */
+	const double surr_mult2 = square(surr_mult);
+	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
+	const double pdc_f = sqrt((1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf);
+	const double pdc_s = sqrt(fabs((1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws));
+
+	if (r_shelf_mult) {
+		const double surr_mult_hf2 = square(r_shelf_mult[0]);
+		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+		r_shelf_mult[0] = sqrt((1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf)/pdc_f;
+		r_shelf_mult[1] = sqrt(fabs((1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws))/pdc_s;
+	}
+
+	m->ll *= pdc_f;
+	m->lr *= pdc_f;
+	m->rl *= pdc_f;
+	m->rr *= pdc_f;
+	m->lsl *= pdc_s;
+	m->lsr *= pdc_s;
+	m->rsl *= pdc_s;
+	m->rsr *= pdc_s;
+}
+
+/*
+ * Previous v2 and v3 matrices.
+*/
+
+void calc_matrix_coefs_v2_old(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -716,10 +1024,13 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 	const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
 	const double pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
 	if (r_shelf_mult) {
-		const double surr_gain_hf2 = square(*r_shelf_mult);
-		const double pd_s_mod_scaled_hf = surr_gain_hf2*pd_s_mod;
+		const double surr_mult_hf2 = square(r_shelf_mult[0]);
+		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
+		const double pd_s_mod_scaled_hf = surr_pwr_hf*pd_s_mod;
 		const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
-		*r_shelf_mult = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
+		r_shelf_mult[0] = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
+		r_shelf_mult[1] = sqrt(surr_pwr_hf)/norm_mult;
 	}
 
 	m->ll *= pdc_f;
@@ -732,11 +1043,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 	m->rsr *= pdc_s;
 }
 
-/*
- * Like v2, but with nearly full steering of left-/right-surround-encoded
- * sounds (~20dB cancellation in front outs).
-*/
-void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double *r_shelf_mult)
+void calc_matrix_coefs_v3_old(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -885,10 +1192,13 @@ void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_m
 	const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
 	const double pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
 	if (r_shelf_mult) {
-		const double surr_gain_hf2 = square(*r_shelf_mult);
-		const double pd_s_mod_scaled_hf = surr_gain_hf2*pd_s_mod;
+		const double surr_mult_hf2 = square(r_shelf_mult[0]);
+		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
+		const double pd_s_mod_scaled_hf = surr_pwr_hf*pd_s_mod;
 		const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
-		*r_shelf_mult = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
+		r_shelf_mult[0] = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
+		r_shelf_mult[1] = sqrt(surr_pwr_hf)/norm_mult;
 	}
 
 	m->ll *= pdc_f;
