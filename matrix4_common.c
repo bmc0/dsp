@@ -523,7 +523,6 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
-	const double surr_gain = norm_mult*surr_mult;
 
 	const double gl = 1.0+tan(abs_lr-M_PI_4);
 	const double gc_2 = (cs > 0.0) ? 0.5+0.5*tan(cs-M_PI_4) : 0.0;
@@ -580,14 +579,18 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
 
 	/* level for directional input */
-	const double gd_sl = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
-	const double gd_sr = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
+	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
+	const double gd_sr2 = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
 
 	/* power for directional input */
-	const double pd_s = gd_sl + gd_sr;
+	const double pd_s = gd_sl2 + gd_sr2;
 
 	/* directional power correction and normalization */
-	const double pdc_f = (pd_s < 1.0) ? sqrt(1.0-square(surr_gain)*pd_s) : norm_mult;
+	const double surr_mult2 = square(surr_mult);
+	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
+	const double surr_gain2 = surr_mult2*adj_norm_mult2;
+	const double pdc_f = sqrt(1.0-surr_gain2*MINIMUM(pd_s, 1.0));
+	const double pdc_s = sqrt(surr_gain2);
 
 	if (r_shelf_mult) {
 		const double surr_gain_hf2 = square(*r_shelf_mult);
@@ -598,10 +601,10 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 	m->ll = pdc_f;
 	m->rr = pdc_f;
 	m->rl = m->lr = 0.0;
-	m->lsl *= surr_gain;
-	m->lsr *= surr_gain;
-	m->rsl *= surr_gain;
-	m->rsr *= surr_gain;
+	m->lsl *= pdc_s;
+	m->lsr *= pdc_s;
+	m->rsl *= pdc_s;
+	m->rsr *= pdc_s;
 }
 
 /*
