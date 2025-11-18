@@ -33,28 +33,44 @@ void calc_matrix_coefs_v3_old(const struct axes *, double, double, double, struc
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
-	double surr_level = -6.0206;
+	double surr_level[2] = {-6.02, -6.02};
 	char *endptr;
 	if (argc > 3) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
 		return 1;
 	}
+	int surr_level_idx = -1;
 	config->opt_str_idx = -1;
-	if (argc == 2) {
-		const double val = strtod(argv[1], &endptr);
-		if (endptr == argv[1] || *endptr != '\0')
-			config->opt_str_idx = 1;
-		else
-			surr_level = val;
-	}
-	else if (argc == 3) {
+	if (argc == 3) {
 		config->opt_str_idx = 1;
-		surr_level = strtod(argv[2], &endptr);
-		CHECK_ENDPTR(argv[2], endptr, "surround_level", return 1);
+		surr_level_idx = 2;
 	}
-	config->surr_mult = pow(10.0, surr_level / 20.0);
-	if (config->surr_mult > 1.0)
-		LOG_FMT(LL_ERROR, "%s: warning: surround_level probably shouldn't be greater than 0dB", argv[0]);
+	else if (argc == 2) {
+		strtod(argv[1], &endptr);
+		if (endptr == argv[1] || (*endptr != '\0' && *endptr != '/'))
+			config->opt_str_idx = 1;
+		else surr_level_idx = 1;
+	}
+	if (surr_level_idx > 0) {
+		const char *arg = argv[surr_level_idx];
+		double v = strtod(arg, &endptr);
+		if (endptr != arg) surr_level[0] = v;
+		if (*endptr == '/') {
+			arg = endptr+1;
+			surr_level[1] = strtod(arg, &endptr);
+			CHECK_ENDPTR(arg, endptr, "surround_level_rear", return 1);
+		}
+		else {
+			CHECK_ENDPTR(arg, endptr, "surround_level", return 1);
+			surr_level[1] = surr_level[0];
+		}
+	}
+	config->surr_mult[0] = pow(10.0, surr_level[0] / 20.0);
+	config->surr_mult[1] = pow(10.0, surr_level[1] / 20.0);
+	if (config->surr_mult[0] > 1.0 || config->surr_mult[1] > 1.0)
+		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", argv[0]);
+	if (config->surr_mult[0] > config->surr_mult[1])
+		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", argv[0]);
 
 	if (istream->fs < 32000) {
 		LOG_FMT(LL_ERROR, "%s: error: sample rate out of range", argv[0]);

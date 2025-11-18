@@ -209,7 +209,7 @@ Example:
 * `crossfeed f0[k] separation`  
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
-* `matrix4 [options] [surround_level]`  
+* `matrix4 [options] [surround_level][/surround_level_rear]`  
 	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
 	primarily for music.
 
@@ -275,7 +275,7 @@ Example:
 		Default values are 25 for `chebyshev1` and `chebyshev2`, and 35:50 for
 		`elliptic`.
 
-* `matrix4_mb [options] [surround_level]`  
+* `matrix4_mb [options] [surround_level][/surround_level_rear]`  
 	Like the `matrix4` effect, but divides the input into 13 individually
 	steered bands in order to improve separation of concurrent sound sources.
 	See the `matrix4` effect description for more information.

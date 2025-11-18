@@ -663,7 +663,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double fc2 = fb_fc[k]*fb_fc[k];
 		const double shelf_norm_f2 = fc2/shelf_f02;
 		const double shelf_mag = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
-		band->surr_mult = config.surr_mult*((shelf_mag-1.0)*config.shelf_pwrcmp + 1.0);
+		band->surr_mult = config.surr_mult[0]*((shelf_mag-1.0)*config.shelf_pwrcmp + 1.0);
 		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
 		band->shape_mult = (shelf_mag-1.0)*(1.0-config.shelf_pwrcmp) + 1.0;
 		if (lowpass_f02 > 0.0) {
@@ -673,7 +673,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		/* LOG_FMT(LL_VERBOSE, "%s: band %d: norm_mult=%.4g surr_mult=%.4g shape_mult=%.4g",
 				argv[0], k, band->norm_mult, band->surr_mult, band->shape_mult); */
 	}
-	state->base_surr_mult = config.surr_mult;
+	state->base_surr_mult = config.surr_mult[1];
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));

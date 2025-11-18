@@ -49,7 +49,7 @@ struct matrix4_state {
 		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
 	} m_interp;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double norm_mult, surr_mult, shelf_mult, shelf_pwrcmp, lowpass_mult;
+	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
@@ -83,16 +83,12 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 
 	for (i = 0; i < *frames; ++i) {
-		double norm_mult = state->norm_mult, surr_mult = state->surr_mult;
+		double cur_fade_mult = 1.0;
 		if (state->fade_p > 0) {
-			surr_mult *= fade_mult(state->fade_p, state->fade_frames, state->disable);
-			norm_mult = CALC_NORM_MULT(surr_mult);
+			cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
 			--state->fade_p;
 		}
-		else if (state->disable) {
-			norm_mult = 1.0;
-			surr_mult = 0.0;
-		}
+		else if (state->disable) cur_fade_mult = 0.0;
 
 		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
 		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
@@ -112,6 +108,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			norm_axes(&state->ax);
 
 			const double w = smoothstep(state->ax.cs*(-2/M_PI_4));
+			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
+			const double norm_mult = CALC_NORM_MULT(surr_mult);
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
 			const double shape_mult_shelf = (shelf_mult_tot-1.0)*(1.0-state->shelf_pwrcmp) + 1.0;
@@ -119,7 +117,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			struct matrix_coefs m = {0};
 			double r_shelf_mult[2] = {surr_mult*shelf_mult, 0.0};
-			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, surr_mult, &m, r_shelf_mult);
+			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, state->surr_mult[1]*cur_fade_mult, &m, r_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -327,8 +325,8 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
-	state->surr_mult = config.surr_mult;
-	state->norm_mult = CALC_NORM_MULT(config.surr_mult);
+	state->surr_mult[0] = config.surr_mult[0];
+	state->surr_mult[1] = config.surr_mult[1];
 	state->shelf_mult = config.shelf_mult;
 	state->shelf_pwrcmp = config.shelf_pwrcmp;
 	if (state->do_lowpass) {

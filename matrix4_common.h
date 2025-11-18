@@ -144,7 +144,7 @@ typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, doub
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal;
-	double surr_mult, shelf_mult, shelf_f0, shelf_pwrcmp, lowpass_f0, fb_stop[2];
+	double surr_mult[2], shelf_mult, shelf_f0, shelf_pwrcmp, lowpass_f0, fb_stop[2];
 	ssize_t surr_delay_frames;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
