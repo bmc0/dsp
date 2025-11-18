@@ -604,7 +604,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
 		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
 		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
 		r_shelf_mult[0] = sqrt(1.0-surr_pwr_hf*MINIMUM(pd_s, 1.0))/pdc_f;
-		r_shelf_mult[1] = sqrt(surr_pwr_hf)/pdc_s;
+		r_shelf_mult[1] = sqrt(surr_pwr_hf)/MAXIMUM(pdc_s, DBL_MIN);
 	}
 
 	m->ll = pdc_f;
@@ -737,14 +737,30 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 	/* directional power correction and normalization */
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double pdc_f = sqrt((1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf);
-	const double pdc_s = sqrt(fabs((1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws));
+	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
+	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
+#ifdef SURR_PDC_FACTOR
+	const double pdc_f = sqrt(pdc_fi2);
+	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0));
+#else
+	const double pdc_all2 = 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2);
+	const double pdc_f = sqrt(pdc_fi2*pdc_all2);
+	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
+#endif
 
 	if (r_shelf_mult) {
 		const double surr_mult_hf2 = square(r_shelf_mult[0]);
 		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		r_shelf_mult[0] = sqrt((1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf)/pdc_f;
-		r_shelf_mult[1] = sqrt(fabs((1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws))/pdc_s;
+		const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
+		const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
+#ifdef SURR_PDC_FACTOR
+		r_shelf_mult[0] = sqrt(pdc_fi_hf2)/pdc_f;
+		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0))/MAXIMUM(pdc_s, DBL_MIN);
+#else
+		const double pdc_all_hf2 = 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2);
+		r_shelf_mult[0] = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
+		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+#endif
 	}
 
 	m->ll *= pdc_f;
@@ -896,14 +912,30 @@ void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_m
 	/* directional power correction and normalization */
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double pdc_f = sqrt((1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf);
-	const double pdc_s = sqrt(fabs((1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws));
+	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
+	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
+#ifdef SURR_PDC_FACTOR
+	const double pdc_f = sqrt(pdc_fi2);
+	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0));
+#else
+	const double pdc_all2 = 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2);
+	const double pdc_f = sqrt(pdc_fi2*pdc_all2);
+	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
+#endif
 
 	if (r_shelf_mult) {
 		const double surr_mult_hf2 = square(r_shelf_mult[0]);
 		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		r_shelf_mult[0] = sqrt((1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf)/pdc_f;
-		r_shelf_mult[1] = sqrt(fabs((1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws))/pdc_s;
+		const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
+		const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
+#ifdef SURR_PDC_FACTOR
+		r_shelf_mult[0] = sqrt(pdc_fi_hf2)/pdc_f;
+		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0))/MAXIMUM(pdc_s, DBL_MIN);
+#else
+		const double pdc_all_hf2 = 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2);
+		r_shelf_mult[0] = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
+		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+#endif
 	}
 
 	m->ll *= pdc_f;
