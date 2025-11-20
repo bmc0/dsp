@@ -109,7 +109,6 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			const double w = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
-			const double norm_mult = CALC_NORM_MULT(surr_mult);
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
 			const double shape_mult_shelf = (shelf_mult_tot-1.0)*(1.0-state->shelf_pwrcmp) + 1.0;
@@ -117,7 +116,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			struct matrix_coefs m = {0};
 			double r_shelf_mult[2] = {surr_mult*shelf_mult, 0.0};
-			state->calc_matrix_coefs(&state->ax, norm_mult, surr_mult, state->surr_mult[1]*cur_fade_mult, &m, r_shelf_mult);
+			state->calc_matrix_coefs(&state->ax, surr_mult, state->surr_mult[1]*cur_fade_mult, &m, r_shelf_mult);
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);

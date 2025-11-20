@@ -87,7 +87,7 @@ struct matrix4_band {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 	} m_interp;
-	double norm_mult, surr_mult, shape_mult;
+	double surr_mult, shape_mult;
 	double ev_thresh_max, ev_thresh_min;
 	struct ewma_state ev_thresh;
 #ifndef LADSPA_FRONTEND
@@ -302,9 +302,10 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			out_l += state->fb[0].s[k]*band->norm_mult;
-			out_r += state->fb[1].s[k]*band->norm_mult;
-			out_s += state->fb[0].s[k]*band->norm_mult*band->surr_mult*band->shape_mult;
+			const double norm_mult = CALC_NORM_MULT(band->surr_mult);
+			out_l += state->fb[0].s[k]*norm_mult;
+			out_r += state->fb[1].s[k]*norm_mult;
+			out_s += state->fb[0].s[k]*norm_mult*band->surr_mult*band->shape_mult;
 		}
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
 		out_r = fshape_run(&state->inv_fshape[1], out_r);
@@ -319,7 +320,8 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 		}
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k]*band->norm_mult*band->surr_mult*band->shape_mult;
+			const double norm_mult = CALC_NORM_MULT(band->surr_mult);
+			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k]*norm_mult*band->surr_mult*band->shape_mult;
 		}
 		obuf[i*e->ostream.channels + e->istream.channels + N_BANDS] = out_s;
 	}
@@ -344,6 +346,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
 			--state->fade_p;
 		}
+		else if (state->disable) cur_fade_mult = 0.0;
 
 		int n_angles = 0;
 		struct axes angles[N_BANDS];
@@ -403,26 +406,12 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ewma_get_last(&band->ev_thresh)*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
-				double shape_mult = band->shape_mult;
-				double norm_mult = band->norm_mult, surr_mult = band->surr_mult;
-				double base_surr_mult = state->base_surr_mult;
-				if (band->ax.cs < 0.0) {
-					const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
-					shape_mult = w + shape_mult*(1.0-w);
-					surr_mult = state->base_surr_mult*w + band->surr_mult*(1.0-w);
-					norm_mult = CALC_NORM_MULT(surr_mult);
-				}
-				if (state->fade_p > 0) {
-					surr_mult *= cur_fade_mult;
-					base_surr_mult *= cur_fade_mult;
-					norm_mult = CALC_NORM_MULT(surr_mult);
-				}
-				else if (state->disable) {
-					base_surr_mult = surr_mult = 0.0;
-					norm_mult = 1.0;
-				}
+				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
+				const double surr_mult = (w*state->base_surr_mult + (1.0-w)*band->surr_mult)*cur_fade_mult;
+				const double shape_mult = w + band->shape_mult*(1.0-w);
+
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, norm_mult, surr_mult, base_surr_mult, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, surr_mult, state->base_surr_mult*cur_fade_mult, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -664,14 +653,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double shelf_norm_f2 = fc2/shelf_f02;
 		const double shelf_mag = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		band->surr_mult = config.surr_mult[0]*((shelf_mag-1.0)*config.shelf_pwrcmp + 1.0);
-		band->norm_mult = CALC_NORM_MULT(band->surr_mult);
 		band->shape_mult = (shelf_mag-1.0)*(1.0-config.shelf_pwrcmp) + 1.0;
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
 			band->shape_mult *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
-		/* LOG_FMT(LL_VERBOSE, "%s: band %d: norm_mult=%.4g surr_mult=%.4g shape_mult=%.4g",
-				argv[0], k, band->norm_mult, band->surr_mult, band->shape_mult); */
+		/* LOG_FMT(LL_VERBOSE, "%s: band %d: surr_mult=%.4g shape_mult=%.4g",
+				argv[0], k, band->surr_mult, band->shape_mult); */
 	}
 	state->base_surr_mult = config.surr_mult[1];
 

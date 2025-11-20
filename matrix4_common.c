@@ -24,12 +24,9 @@
 #include "matrix4_common.h"
 #include "dsp.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
-void calc_matrix_coefs_v2(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
-void calc_matrix_coefs_v3(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
-
-void calc_matrix_coefs_v2_old(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
-void calc_matrix_coefs_v3_old(const struct axes *, double, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v1(const struct axes *, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v2(const struct axes *, double, double, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v3(const struct axes *, double, double, struct matrix_coefs *, double [2]);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -170,10 +167,6 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					config->calc_matrix_coefs = calc_matrix_coefs_v2;
 				else if (strcmp(opt_arg, "v3") == 0)
 					config->calc_matrix_coefs = calc_matrix_coefs_v3;
-				else if (strcmp(opt_arg, "v2_old") == 0)
-					config->calc_matrix_coefs = calc_matrix_coefs_v2_old;
-				else if (strcmp(opt_arg, "v3_old") == 0)
-					config->calc_matrix_coefs = calc_matrix_coefs_v3_old;
 				else {
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
 					goto fail;
@@ -542,7 +535,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_max, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -643,7 +636,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, double norm_mult, double surr_m
  * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_mult_max, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -690,7 +683,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 	}
 	else {
 		/* initial front elements */
-		const double cf_sm2 = square(MINIMUM(surr_mult_lf, 1.0));
+		const double cf_sm2 = square(MINIMUM(surr_mult_max, 1.0));
 		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
 		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*cf;
 		m->ll = 1.0 - front_gc_2;
@@ -790,10 +783,9 @@ void calc_matrix_coefs_v2(const struct axes *ax, double norm_mult, double surr_m
 }
 
 /*
- * Like v2, but with full steering of left-/right-surround-encoded
- * sounds.
+ * Like v2, but with full steering of left-/right-surround-encoded sounds.
 */
-void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_mult_max, struct matrix_coefs *m, double r_shelf_mult[2])
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -853,7 +845,7 @@ void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_m
 			m->rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
 			m->rr -= gl*gl * sin(front_cs) * front_lr_mult;
 		}
-		const double cf_sm2 = square(MINIMUM(surr_mult_lf, 1.0));
+		const double cf_sm2 = square(MINIMUM(surr_mult_max, 1.0));
 		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
 		m->ll = 1.0 + m->ll*cf;
 		m->lr = m->lr*cf;
@@ -952,301 +944,6 @@ void calc_matrix_coefs_v3(const struct axes *ax, double norm_mult, double surr_m
 		r_shelf_mult[0] = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
 		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
 #endif
-	}
-
-	m->ll *= pdc_f;
-	m->lr *= pdc_f;
-	m->rl *= pdc_f;
-	m->rr *= pdc_f;
-	m->lsl *= pdc_s;
-	m->lsr *= pdc_s;
-	m->rsl *= pdc_s;
-	m->rsr *= pdc_s;
-}
-
-/*
- * Previous v2 and v3 matrices.
-*/
-
-void calc_matrix_coefs_v2_old(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
-{
-	const double lr = ax->lr, cs = ax->cs;
-	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
-	const double surr_gain = norm_mult*surr_mult;
-	/* modified matrix for computing front boost */
-	struct {
-		double lsl, lsr, rsl, rsr;
-	} m_mod = {1.0, 0.0, 0.0, 1.0};
-
-	/* initial surround elements */
-	const double gl = 1.0+tan(abs_lr-M_PI_4);
-	if (lr > 0.0) {
-		m_mod.lsl -= gl*gl;
-		m_mod.lsr -= gl;
-	}
-	else if (lr < 0.0) {
-		m_mod.rsl -= gl;
-		m_mod.rsr -= gl*gl;
-	}
-	if (cs > 0.0) {
-		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
-		m_mod.lsl -= gc_2;
-		m_mod.lsr -= gc_2;
-		m_mod.rsl -= gc_2;
-		m_mod.rsr -= gc_2;
-	}
-	m->lsl = m_mod.lsl;
-	m->lsr = m_mod.lsr;
-	m->rsl = m_mod.rsl;
-	m->rsr = m_mod.rsr;
-	if (cs < 0.0) {
-		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
-		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr += gc_2;
-		m->rsl += gc_2;
-		m->rsr -= gc_2;
-	}
-
-	/* power correction for uncorrelated input */
-	const double pu_sl = pwr_sum(m->lsl, m->lsr);
-	m->lsl /= pu_sl;
-	m->lsr /= pu_sl;
-	const double pu_sr = pwr_sum(m->rsl, m->rsr);
-	m->rsl /= pu_sr;
-	m->rsr /= pu_sr;
-	if (cs >= 0.0) {
-		m->ll = 1.0;
-		m->lr = 0.0;
-		m_mod.lsl = m->lsl;
-		m_mod.lsr = m->lsr;
-		m_mod.rsl = m->rsl;
-		m_mod.rsr = m->rsr;
-	}
-	else {
-		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*MINIMUM(surr_mult_lf, 1.0);
-		m->ll = 1.0 - front_gc_2;
-		m->lr = front_gc_2;
-		const double pu_fl = pwr_sum(m->ll, m->lr);
-		m->ll /= pu_fl;
-		m->lr /= pu_fl;
-		const double pu_sl_mod = pwr_sum(m_mod.lsl, m_mod.lsr);
-		m_mod.lsl /= pu_sl_mod;
-		m_mod.lsr /= pu_sl_mod;
-		const double pu_sr_mod = pwr_sum(m_mod.rsl, m_mod.rsr);
-		m_mod.rsl /= pu_sr_mod;
-		m_mod.rsr /= pu_sr_mod;
-	}
-
-	/* input phasors for given lr, cs */
-	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
-	double sin_theta, cos_theta;
-	if (abs_lr+abs_cs < M_PI_4) {
-		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
-		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
-		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
-		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
-	}
-	else {
-		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
-		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
-	}
-	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
-	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
-
-	/* level for directional input */
-	const double gd_sl = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
-	const double gd_sr = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
-	const double gd_sl_mod = square(m_mod.lsl*l_real + m_mod.lsr*r_real) + square(m_mod.lsl*l_imag + m_mod.lsr*r_imag);
-	const double gd_sr_mod = square(m_mod.rsl*l_real + m_mod.rsr*r_real) + square(m_mod.rsl*l_imag + m_mod.rsr*r_imag);
-
-	/* power for directional input */
-	const double pd_s = gd_sl + gd_sr;
-	const double pd_f_mod = (cs < 0.0) ? square(cos(2.0*cs)) : 1.0;
-	const double pd_s_mod = gd_sl_mod + gd_sr_mod;
-
-	/* directional power correction and normalization */
-	const double pdc_f_mod = 2.0-pd_s_mod;
-	const double pdc_s = M_SQRT2*surr_gain/sqrt(pd_f_mod*pdc_f_mod + pd_s);
-
-	const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
-	const double pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
-	if (r_shelf_mult) {
-		const double surr_mult_hf2 = square(r_shelf_mult[0]);
-		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
-		const double pd_s_mod_scaled_hf = surr_pwr_hf*pd_s_mod;
-		const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
-		r_shelf_mult[0] = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
-		r_shelf_mult[1] = sqrt(surr_pwr_hf)/norm_mult;
-	}
-
-	m->ll *= pdc_f;
-	m->lr *= pdc_f;
-	m->rr = m->ll;
-	m->rl = m->lr;
-	m->lsl *= pdc_s;
-	m->lsr *= pdc_s;
-	m->rsl *= pdc_s;
-	m->rsr *= pdc_s;
-}
-
-void calc_matrix_coefs_v3_old(const struct axes *ax, double norm_mult, double surr_mult, double surr_mult_lf, struct matrix_coefs *m, double r_shelf_mult[2])
-{
-	const double lr = ax->lr, cs = ax->cs;
-	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
-	const double surr_gain = norm_mult*surr_mult;
-	/* modified matrix for computing boosts */
-	struct matrix_coefs m_mod = {0};
-
-	/* initial surround elements */
-	const double gl = 1.0+tan(abs_lr-M_PI_4);
-	m_mod.rsr = m_mod.lsl = 1.0;
-	if (lr > 0.0) {
-		m_mod.lsl -= gl*gl;
-		m_mod.lsr -= gl;
-	}
-	else if (lr < 0.0) {
-		m_mod.rsl -= gl;
-		m_mod.rsr -= gl*gl;
-	}
-	if (cs > 0.0) {
-		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
-		m_mod.lsl -= gc_2;
-		m_mod.lsr -= gc_2;
-		m_mod.rsl -= gc_2;
-		m_mod.rsr -= gc_2;
-	}
-	m->lsl = m_mod.lsl;
-	m->lsr = m_mod.lsr;
-	m->rsl = m_mod.rsl;
-	m->rsr = m_mod.rsr;
-	if (cs < 0.0) {
-		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
-		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr += gc_2;
-		m->rsl += gc_2;
-		m->rsr -= gc_2;
-	}
-
-	/* power correction for uncorrelated input */
-	const double pu_sl = pwr_sum(m->lsl, m->lsr);
-	m->lsl /= pu_sl;
-	m->lsr /= pu_sl;
-	const double pu_sr = pwr_sum(m->rsl, m->rsr);
-	m->rsl /= pu_sr;
-	m->rsr /= pu_sr;
-	if (cs >= 0.0) {
-		m->rr = m->ll = 1.0;
-		m->rl = m->lr = 0.0;
-		m_mod.lsl = m->lsl;
-		m_mod.lsr = m->lsr;
-		m_mod.rsl = m->rsl;
-		m_mod.rsr = m->rsr;
-	}
-	else {
-		const double pu_sl_mod = pwr_sum(m_mod.lsl, m_mod.lsr);
-		m_mod.lsl /= pu_sl_mod;
-		m_mod.lsr /= pu_sl_mod;
-		const double pu_sr_mod = pwr_sum(m_mod.rsl, m_mod.rsr);
-		m_mod.rsl /= pu_sr_mod;
-		m_mod.rsr /= pu_sr_mod;
-
-		/* front elements */
-		const double front_gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
-		m_mod.rr = m_mod.ll = -front_gc_2;
-		m_mod.rl = m_mod.lr = front_gc_2;
-		const double front_cs = (cs > -M_PI_4/2) ? 3.0*abs_cs : abs_cs+M_PI_4;
-		const double front_lr_mult = (abs_lr <= M_PI_4/2) ? 1.0 : 1.0+cos(4.0*abs_lr);
-		if (lr > 0.0) {
-			m_mod.ll -= gl*gl * sin(front_cs) * front_lr_mult;
-			m_mod.lr += gl * (1.0-cos(front_cs)) * front_lr_mult;
-		}
-		else if (lr < 0.0) {
-			m_mod.rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
-			m_mod.rr -= gl*gl * sin(front_cs) * front_lr_mult;
-		}
-		const double clamped_surr_mult_lf = MINIMUM(surr_mult_lf, 1.0);
-		m->ll = 1.0 + m_mod.ll*clamped_surr_mult_lf;
-		m->lr = m_mod.lr*clamped_surr_mult_lf;
-		m->rl = m_mod.rl*clamped_surr_mult_lf;
-		m->rr = 1.0 + m_mod.rr*clamped_surr_mult_lf;
-		const double pu_fl = pwr_sum(m->ll, m->lr);
-		m->ll /= pu_fl;
-		m->lr /= pu_fl;
-		const double pu_fr = pwr_sum(m->rl, m->rr);
-		m->rl /= pu_fr;
-		m->rr /= pu_fr;
-
-		m_mod.ll = 1.0 + m_mod.ll;
-		m_mod.rr = 1.0 + m_mod.rr;
-		const double pu_fl_mod = pwr_sum(m_mod.ll, m_mod.lr);
-		m_mod.ll /= pu_fl_mod;
-		m_mod.lr /= pu_fl_mod;
-		const double pu_fr_mod = pwr_sum(m_mod.rl, m_mod.rr);
-		m_mod.rl /= pu_fr_mod;
-		m_mod.rr /= pu_fr_mod;
-	}
-
-	/* input phasors for given lr, cs */
-	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
-#if 0
-	/* straightforward calculation */
-	const double phase = (abs_lr+abs_cs>=M_PI_4)?(cs<0.0)?-M_PI_4:M_PI_4:0.5*asin(sin(2.0*cs)/cos(2.0*lr));
-	const double l_real = sin_lr*cos(M_PI_4-phase), l_imag = sin_lr*sin(M_PI_4-phase);
-	const double r_real = cos_lr*cos(phase-M_PI_4), r_imag = cos_lr*sin(phase-M_PI_4);
-#else
-	/* faster calculation */
-	double sin_theta, cos_theta;
-	if (abs_lr+abs_cs < M_PI_4) {
-		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
-		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
-		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
-		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
-	}
-	else {
-		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
-		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
-	}
-	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
-	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
-#endif
-
-	/* level for directional input */
-	const double gd_sl = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
-	const double gd_sr = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
-	const double gd_sl_mod = square(m_mod.lsl*l_real + m_mod.lsr*r_real) + square(m_mod.lsl*l_imag + m_mod.lsr*r_imag);
-	const double gd_sr_mod = square(m_mod.rsl*l_real + m_mod.rsr*r_real) + square(m_mod.rsl*l_imag + m_mod.rsr*r_imag);
-
-	/* power for directional input */
-	const double pd_s = gd_sl + gd_sr;
-	const double pd_s_mod = gd_sl_mod + gd_sr_mod;
-
-	double pd_f_mod = 1.0;
-	if (cs < 0.0) {
-		/* level for directional input */
-		const double gd_fl_mod = square(m_mod.ll*l_real + m_mod.lr*r_real) + square(m_mod.ll*l_imag + m_mod.lr*r_imag);
-		const double gd_fr_mod = square(m_mod.rl*l_real + m_mod.rr*r_real) + square(m_mod.rl*l_imag + m_mod.rr*r_imag);
-
-		/* power for directional input */
-		pd_f_mod = gd_fl_mod + gd_fr_mod;
-	}
-
-	/* directional power correction and normalization */
-	const double pdc_f_mod = 2.0-pd_s_mod;
-	const double pdc_s = M_SQRT2*surr_gain/sqrt(pd_f_mod*pdc_f_mod + pd_s);
-
-	const double pd_s_mod_scaled = square(surr_gain)*pd_s_mod;
-	const double pdc_f = (pd_s_mod_scaled < 1.0) ? sqrt(1.0-pd_s_mod_scaled) : 0.0;
-	if (r_shelf_mult) {
-		const double surr_mult_hf2 = square(r_shelf_mult[0]);
-		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
-		const double pd_s_mod_scaled_hf = surr_pwr_hf*pd_s_mod;
-		const double pdc_f_hf = (pd_s_mod_scaled_hf < 1.0) ? sqrt(1.0-pd_s_mod_scaled_hf) : 0.0;
-		r_shelf_mult[0] = pdc_f_hf/MAXIMUM(pdc_f, 0.1);
-		r_shelf_mult[1] = sqrt(surr_pwr_hf)/norm_mult;
 	}
 
 	m->ll *= pdc_f;
