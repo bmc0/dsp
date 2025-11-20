@@ -285,7 +285,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 
 	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
 		return NULL;
-	if (parse_effect_opts(argv, istream, &config))
+	if (parse_effect_opts(argv, istream, 0, &config))
 		return NULL;
 
 	e = calloc(1, sizeof(struct effect));

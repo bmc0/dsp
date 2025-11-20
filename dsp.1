@@ -204,26 +204,21 @@ crossfeed.
 .TP
 \fBmatrix4\fR [\fIoptions\fR] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]
 2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
-primarily for music.
+primarily for music. The intended speaker configuration is fronts at ±30°
+and surrounds between ±60° and ±120°. The front outputs replace the
+original input channels and the surround outputs are appended to the end of
+the channel list.
 .sp 0.5
-The intended speaker configuration is fronts at ±30° and surrounds between
-±60° and ±120°. The surround speakers must be calibrated correctly in
-level and frequency response for best results. The surrounds should be
-delayed by about 10\-25ms (acoustically) relative to the fronts. No
-frequency contouring is done internally, so applying low pass and/or
-shelving filters to the surround outputs is recommended:
-.EX
-	matrix4 surround_delay=15m -6 :2,3 lowpass_1 10k :
-.EE
-The settings shown above (\-6dB surround level, 15ms delay, and 10kHz
-rolloff) are a good starting point, but may be adjusted to taste. The
-default \fIsurround_level\fR is \-6dB. Applying the \fBdecorrelate\fR effect to the
-surround outputs (optionally with the \fB\-m\fR option) seems to further improve
-the spatial impression (note: adjust `surround_delay' to compensate for
-the \fBdecorrelate\fR effect's group delay).
-.sp 0.5
-The front outputs replace the original input channels and the surround
-outputs are appended to the end of the channel list.
+For best results, the surround speakers must be calibrated to match the
+front speakers in both level and spectral balance. \fBmatrix4\fR is designed to
+preserve the total power of the original 2-channel input and incorrect
+calibration will compromise this property. After calibration, surround
+levels may be adjusted using the \fIsurround_level\fR and \fIsurround_level_rear\fR
+parameters. \fIsurround_level\fR sets the level for neutral and forward
+steering. As steering moves from neutral to half rear, \fIsurround_level_rear\fR
+gradually takes effect. This allows fine-tuning of the overall front/rear
+balance while still allowing full level from the surrounds when needed. The
+default levels are \-3dB and 0dB, respectively.
 .sp 0.5
 Options are given as a comma-separated list. Recognized options are:
 .RS
@@ -238,27 +233,27 @@ remove anything from the front outputs. \fIv2\fR adds full steering of
 sounds encoded to \-45° in the C/S axis and restores full lateral
 separation of sounds encoded from 0° to \-22.5° in the C/S axis in all
 four outputs. \fIv3\fR adds full steering of sounds encoded to the left and
-right surround positions (L/R=±22.5° C/S=\-22.5°). The default is \fIv2\fR.
+right surround positions (L/R=±22.5° C/S=\-22.5°). The default is \fIv3\fR.
 .TP
-shelf=\fIgain_dB\fR[:\fIf0\fR[\fBk\fR][:\fIpwrcmp\fR]]
+shelf=\fIgain\fR[:\fIf0\fR[\fBk\fR][:\fIpwrcmp\fR]]
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to
-\-22.5°. The default \fIgain_dB\fR is zero (no shelving). Setting this to \-3
-or so with a \fIsurround_level\fR around 0 to \-3 tends to work well. The
-default \fIf0\fR is 500Hz. \fIpwrcmp\fR is the high-frequency power
-compensation factor. The default value is 1 (full compensation).
+\-22.5°. \fIpwrcmp\fR is the high-frequency power compensation factor. The
+default values for \fIgain\fR and \fIf0\fR are \-3dB and 500Hz, respectively.
+\fIpwrcmp\fR defaults to 0.3 for \fBmatrix4\fR and 0.8 for \fBmatrix4_mb\fR.
 .TP
 lowpass=\fIf0\fR[\fBk\fR]|\fInone\fR
 Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR
 in surround outputs. Active when C/S is positive and gradually removed
-as C/S goes from 0° to \-22.5°. The default setting is `none', which
-results in no high-frequency rolloff.
+as C/S goes from 0° to \-22.5°. The default is 6kHz.
 .TP
 signal[=\fItrue\fR|\fIfalse\fR]
 Toggle the effect when `effect.signal()' is called.
 .TP
 surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
-Surround output delay. Default is zero.
+Surround output delay. Generally, this should be set so that the
+surrounds are delayed 10\-25 milliseconds relative to the fronts
+(measured acoustically). The default is value 15 milliseconds.
 .TP
 filter_type=\fIfilter\fR[:\fIstop_dB\fR[:\fIstop_dB\fR]] (\fBmatrix4_mb\fR only)
 Type of filter used for low pass sections of the filter bank. \fIfilter\fR
@@ -273,6 +268,18 @@ highpass. If only one parameter is given, it applies to both stopbands.
 Default values are 25 for \fIchebyshev1\fR and \fIchebyshev2\fR, and 35:50 for
 \fIelliptic\fR.
 .RE
+.TP
+\ 
+Applying decorrelation filters to the surround outputs can further improve
+spatial impression over simple delay. Example:
+.EX
+	matrix4 surround_delay=5m -3/0
+	:2,3 decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+.EE
+Note that \fIsurround_delay\fR is set to only 5ms because the decorrelation
+filters add approximately 10ms of delay at high frequencies. The group
+delay falls below 80Hz, so an additional \fIallpass\fR filter is added to
+compensate.
 .TP
 \fBmatrix4_mb\fR [\fIoptions\fR] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]
 Like the \fBmatrix4\fR effect, but divides the input into 13 individually

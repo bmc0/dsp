@@ -47,10 +47,15 @@
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
 
-#define SHELF_MULT_DEFAULT    1.0
-#define SHELF_F0_DEFAULT    500.0
-#define SHELF_PWRCMP_DEFAULT  1.0
-#define LOWPASS_F0_DEFAULT    0.0
+#define MATRIX_ID_DEFAULT          v3
+#define SURR_MULT_DEFAULT          0.7071
+#define SURR_MULT_REAR_DEFAULT     1.0
+#define SURR_DELAY_DEFAULT        15.0
+#define SHELF_MULT_DEFAULT         0.7071
+#define SHELF_F0_DEFAULT         500.0
+#define SHELF_PWRCMP_DEFAULT       0.3
+#define SHELF_PWRCMP_MB_DEFAULT    0.8
+#define LOWPASS_F0_DEFAULT      6000.0
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
@@ -163,7 +168,7 @@ struct matrix4_config {
 #define CBUF_PREV(x, len) (((x)>0)?(x)-1:(len)-1)
 
 int get_args_and_channels(const struct effect_info *, const struct stream_info *, const char *, int, const char *const *, struct matrix4_config *);
-int parse_effect_opts(const char *const *, const struct stream_info *, struct matrix4_config *);
+int parse_effect_opts(const char *const *, const struct stream_info *, const int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void event_state_cleanup(struct event_state *);
 

@@ -211,28 +211,21 @@ Example:
 	crossfeed.
 * `matrix4 [options] [surround_level][/surround_level_rear]`  
 	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
-	primarily for music.
+	primarily for music. The intended speaker configuration is fronts at ±30°
+	and surrounds between ±60° and ±120°. The front outputs replace the
+	original input channels and the surround outputs are appended to the end of
+	the channel list.
 
-	The intended speaker configuration is fronts at ±30° and surrounds between
-	±60° and ±120°. The surround speakers must be calibrated correctly in
-	level and frequency response for best results. The surrounds should be
-	delayed by about 10-25ms (acoustically) relative to the fronts. No
-	frequency contouring is done internally, so applying low pass and/or
-	shelving filters to the surround outputs is recommended:
-
-	```
-	matrix4 surround_delay=15m -6 :2,3 lowpass_1 10k :
-	```
-
-	The settings shown above (-6dB surround level, 15ms delay, and 10kHz
-	rolloff) are a good starting point, but may be adjusted to taste. The
-	default `surround_level` is -6dB. Applying the `decorrelate` effect to the
-	surround outputs (optionally with the `-m` option) seems to further improve
-	the spatial impression (note: adjust `surround_delay` to compensate for
-	the `decorrelate` effect's group delay).
-
-	The front outputs replace the original input channels and the surround
-	outputs are appended to the end of the channel list.
+	For best results, the surround speakers must be calibrated to match the
+	front speakers in both level and spectral balance. `matrix4` is designed to
+	preserve the total power of the original 2-channel input and incorrect
+	calibration will compromise this property. After calibration, surround
+	levels may be adjusted using the `surround_level` and `surround_level_rear`
+	parameters. `surround_level` sets the level for neutral and forward
+	steering. As steering moves from neutral to half rear, `surround_level_rear`
+	gradually takes effect. This allows fine-tuning of the overall front/rear
+	balance while still allowing full level from the surrounds when needed. The
+	default levels are -3dB and 0dB, respectively.
 
 	Options are given as a comma-separated list. Recognized options are:
 
@@ -245,23 +238,23 @@ Example:
 		sounds encoded to -45° in the C/S axis and restores full lateral
 		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
 		four outputs. `v3` adds full steering of sounds encoded to the left and
-		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v2`.
-	* `shelf=gain_dB[:f0[k][:pwrcmp]]`  
+		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v3`.
+	* `shelf=gain[:f0[k][:pwrcmp]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
-		-22.5°. The default `gain_dB` is zero (no shelving). Setting this to -3
-		or so with a `surround_level` around 0 to -3 tends to work well. The
-		default `f0` is 500Hz. `pwrcmp` is the high-frequency power
-		compensation factor. The default value is 1 (full compensation).
+		-22.5°. `pwrcmp` is the high-frequency power compensation factor. The
+		default values for `gain` and `f0` are -3dB and 500Hz, respectively.
+		`pwrcmp` defaults to 0.3 for `matrix4` and 0.8 for `matrix4_mb`.
 	* `lowpass=f0[k]|none`  
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed
-		as C/S goes from 0° to -22.5°. The default setting is `none`, which
-		results in no high-frequency rolloff.
+		as C/S goes from 0° to -22.5°. The default is 6kHz.
 	* `signal[=true|false]`  
 		Toggle the effect when `effect.signal()` is called.
 	* `surround_delay=delay[s|m|S]`  
-		Surround output delay. Default is zero.
+		Surround output delay. Generally, this should be set so that the
+		surrounds are delayed 10-25 milliseconds relative to the fronts
+		(measured acoustically). The default is value 15 milliseconds.
 	* `filter_type=filter[:stop_dB[:stop_dB]]` (`matrix4_mb` only)  
 		Type of filter used for low pass sections of the filter bank. `filter`
 		may be `butterworth`, `chebyshev1`, `chebyshev2`, or `elliptic`
@@ -274,6 +267,19 @@ Example:
 		highpass. If only one parameter is given, it applies to both stopbands.
 		Default values are 25 for `chebyshev1` and `chebyshev2`, and 35:50 for
 		`elliptic`.
+
+	Applying decorrelation filters to the surround outputs can further improve
+	spatial impression over simple delay. Example:
+
+	```
+	matrix4 surround_delay=5m -3/0
+	:2,3 decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	```
+
+	Note that `surround_delay` is set to only 5ms because the decorrelation
+	filters add approximately 10ms of delay at high frequencies. The group
+	delay falls below 80Hz, so an additional `allpass` filter is added to
+	compensate.
 
 * `matrix4_mb [options] [surround_level][/surround_level_rear]`  
 	Like the `matrix4` effect, but divides the input into 13 individually

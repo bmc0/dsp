@@ -30,7 +30,7 @@ void calc_matrix_coefs_v3(const struct axes *, double, double, struct matrix_coe
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
-	double surr_level[2] = {-6.02, -6.02};
+	double surr_level[2] = {NAN, NAN};
 	char *endptr;
 	if (argc > 3) {
 		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
@@ -59,11 +59,12 @@ int get_args_and_channels(const struct effect_info *ei, const struct stream_info
 		}
 		else {
 			CHECK_ENDPTR(arg, endptr, "surround_level", return 1);
-			surr_level[1] = surr_level[0];
+			if (!isnan(surr_level[0]))
+				surr_level[1] = MINIMUM(surr_level[0]+6.02, 0.0);
 		}
 	}
-	config->surr_mult[0] = pow(10.0, surr_level[0] / 20.0);
-	config->surr_mult[1] = pow(10.0, surr_level[1] / 20.0);
+	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
+	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);
 	if (config->surr_mult[0] > 1.0 || config->surr_mult[1] > 1.0)
 		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", argv[0]);
 	if (config->surr_mult[0] > config->surr_mult[1])
@@ -127,18 +128,20 @@ static void set_fb_stop_default(struct matrix4_config *config)
 			goto fail; \
 		} \
 	} while (0)
+#define CONCAT(a, b) a ## b
+#define GET_MATRIX_FUNC(id) CONCAT(calc_matrix_coefs_, id)
 
-int parse_effect_opts(const char *const *argv, const struct stream_info *istream, struct matrix4_config *config)
+int parse_effect_opts(const char *const *argv, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
 {
-	const int is_mb = (strcmp(argv[0], "matrix4_mb") == 0);
 	char *opt_str = NULL;
+	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
-	config->shelf_pwrcmp = SHELF_PWRCMP_DEFAULT;
+	config->shelf_pwrcmp = (is_mb) ? SHELF_PWRCMP_MB_DEFAULT : SHELF_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
-	config->calc_matrix_coefs = calc_matrix_coefs_v2;
+	config->calc_matrix_coefs = GET_MATRIX_FUNC(MATRIX_ID_DEFAULT);
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
 		char *opt = opt_str, *next_opt, *endptr;
@@ -178,7 +181,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				char *opt_subarg = isolate(opt_arg, ':');
 				char *opt_subarg1 = isolate(opt_subarg, ':');
 				double shelf_gain = strtod(opt_arg, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, "shelf: gain_dB", goto fail);
+				CHECK_ENDPTR(opt_arg, endptr, "shelf: gain", goto fail);
 				if (shelf_gain > 0.0)
 					LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", argv[0]);
 				config->shelf_mult = pow(10.0, shelf_gain / 20.0);
