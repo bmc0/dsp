@@ -111,7 +111,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
-			const double shape_mult_shelf = (shelf_mult_tot-1.0)*(1.0-state->shelf_pwrcmp) + 1.0;
+			const double shape_mult_shelf = shelf_mult_tot/shelf_mult;
 			const double shape_mult_lp = w + (1.0-w)*state->lowpass_mult;
 
 			struct matrix_coefs m = {0};
