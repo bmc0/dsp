@@ -30,6 +30,7 @@
 #define EVENT_THRESH_MAX  3.6
 #define EVENT_THRESH_MIN  1.4
 #define NORM_ACCOM_FACTOR 0.6
+#define DIFF_OVERSHOOT    1.01
 #include "matrix4_common.h"
 
 #define N_BANDS 13

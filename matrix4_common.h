@@ -70,6 +70,9 @@
 #ifndef NORM_ACCOM_FACTOR
 	#define NORM_ACCOM_FACTOR 0.9
 #endif
+#ifndef DIFF_OVERSHOOT
+	#define DIFF_OVERSHOOT 1.001
+#endif
 
 /* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = cubic Hermite; 5 = polyphase FIR (Blackman window) */
 #ifndef CS_INTERP_TYPE
@@ -129,7 +132,7 @@ struct event_state {
 
 struct event_config {
 	ssize_t sample_frames, max_hold_frames, min_hold_frames;
-	double ord_factor_c;
+	double ord_factor_c, diff_lim;
 };
 
 enum status_type {
@@ -182,7 +185,7 @@ void draw_steering_bar(double, int, struct steering_bar *);
 
 /* private functions */
 void event_state_init_priv(struct event_state *, double, double);
-void event_config_init_priv(struct event_config *, double);
+void event_config_init_priv(struct event_config *, double, double);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *);
 
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
@@ -207,7 +210,7 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream)
 {
-	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs));
+	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), DIFF_OVERSHOOT);
 }
 
 static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev)

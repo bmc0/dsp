@@ -336,12 +336,13 @@ void event_state_cleanup(struct event_state *ev)
 	#endif
 }
 
-void event_config_init_priv(struct event_config *evc, double fs)
+void event_config_init_priv(struct event_config *evc, double fs, double diff_overshoot)
 {
 	evc->sample_frames = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	evc->max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, fs);
 	evc->min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, fs);
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
+	evc->diff_lim = M_PI_4*diff_overshoot;
 }
 
 static inline double drift_err_scale(const struct axes *ax0, const struct axes *ax1, double sens_err)
@@ -458,7 +459,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		if (r_event > ev->max[1]) ev->max[1] = r_event;
 		if (ev->t - ev->t_sample >= evc->sample_frames) {
 			ev->sample = 0;
-			if (fabs(diff_lr_avg)+fabs(diff_cs_avg) > M_PI_4*1.01)
+			if (fabs(diff_lr_avg)+fabs(diff_cs_avg) > evc->diff_lim)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
 			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
