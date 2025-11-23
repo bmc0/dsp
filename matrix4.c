@@ -43,6 +43,7 @@ struct matrix4_state {
 	struct event_state ev;
 	struct event_config evc;
 	struct axes ax, ax_ev;
+	struct ewma_state bg_cs;
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
@@ -107,7 +108,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
 			norm_axes(&state->ax);
 
-			const double w = smoothstep(state->ax.cs*(-2/M_PI_4));
+			const double w = ewma_run_set_min(&state->bg_cs, smoothstep(state->ax.cs*(-2/M_PI_4))+1.0)-1.0;
 			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
 			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
@@ -314,6 +315,8 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		dyn_shelf_init(&state->surr_lp[i],     istream->fs, config.lowpass_f0);
 		dyn_shelf_init(&state->front_shelf[i], istream->fs, config.shelf_f0);
 	}
+	ewma_init(&state->bg_cs, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
+	ewma_set(&state->bg_cs, 1.0);
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream);
 

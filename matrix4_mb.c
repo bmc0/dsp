@@ -87,9 +87,9 @@ struct matrix4_band {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 	} m_interp;
-	double surr_mult, shape_mult;
+	struct ewma_state bg_cs, ev_thresh;
 	double ev_thresh_max, ev_thresh_min;
-	struct ewma_state ev_thresh;
+	double surr_mult, shape_mult;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
 #endif
@@ -399,14 +399,13 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					}
 					ev_thresh_fact -= 1.0;
 				}
-				const double ev_thresh = band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact*(1.0/(N_BANDS-1));
-				if (ev_thresh < ewma_get_last(&band->ev_thresh)) ewma_set(&band->ev_thresh, ev_thresh);
-				else ewma_run(&band->ev_thresh, ev_thresh);
+				const double ev_thresh = ewma_run_set_max(&band->ev_thresh,
+					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact*(1.0/(N_BANDS-1)));
 
-				process_events(&band->ev, &state->evc, &env, &pwr_env, ewma_get_last(&band->ev_thresh)*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
+				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
-				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
+				const double w = ewma_run_set_min(&band->bg_cs, smoothstep(band->ax.cs*(-2/M_PI_4))+1.0)-1.0;
 				const double surr_mult = (w*state->base_surr_mult + (1.0-w)*band->surr_mult)*cur_fade_mult;
 				const double shape_mult = w + band->shape_mult*(1.0-w);
 
@@ -623,6 +622,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
+		ewma_init(&band->bg_cs, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
+		ewma_set(&band->bg_cs, 1.0);
 	}
 
 	state->fb_buf_len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);

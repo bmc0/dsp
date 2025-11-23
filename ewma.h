@@ -61,6 +61,13 @@ static inline double ewma_run_set_max(struct ewma_state *state, double s)
 	return s;
 }
 
+static inline double ewma_run_set_min(struct ewma_state *state, double s)
+{
+	if (s <= state->m0) s = ewma_run(state, s);
+	else state->m0 = s;
+	return s;
+}
+
 static inline double ewma_set(struct ewma_state *state, double s)
 {
 	state->m0 = s;
