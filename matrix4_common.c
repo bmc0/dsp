@@ -452,24 +452,30 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	if (ev->sample) {
 		ewma_run(&ev->avg[0], ord.lr);
 		ewma_run(&ev->avg[1], ord.cs);
-		ewma_run(&ev->avg[2], diff.lr);
-		ewma_run(&ev->avg[3], diff.cs);
+		const double diff_lr_avg = ewma_run(&ev->avg[2], diff.lr);
+		const double diff_cs_avg = ewma_run(&ev->avg[3], diff.cs);
 		if (l_event > ev->max[1]) ev->max[1] = l_event;
 		if (r_event > ev->max[1]) ev->max[1] = r_event;
 		if (ev->t - ev->t_sample >= evc->sample_frames) {
 			ev->sample = 0;
-			if (fabs(ewma_get_last(&ev->avg[2]))+fabs(ewma_get_last(&ev->avg[3])) > M_PI_4*1.01)
+			if (fabs(diff_lr_avg)+fabs(diff_cs_avg) > M_PI_4*1.01)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
 			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
-					__func__, TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
+					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
+			}
+			else if (diff_cs_avg < -M_PI_4/12 && ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh)
+						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh))) {
+				++ev->ignore_count;
+				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring short-duration rear event: lr: %+06.2f°; cs: %+06.2f°",
+					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
 			}
 			else {
 				ev->hold = 1;
 				ev->t_hold = ev->t;
-				ev->dir.lr = ewma_get_last(&ev->avg[2]);
-				ev->dir.cs = ewma_get_last(&ev->avg[3]);
+				ev->dir.lr = diff_lr_avg;
+				ev->dir.cs = diff_cs_avg;
 				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
 					ev->dir.lr = ewma_get_last(&ev->avg[0]);
 					ev->dir.cs = ewma_get_last(&ev->avg[1]);
