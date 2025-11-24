@@ -411,7 +411,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				const double shape_mult = w + band->shape_mult*(1.0-w);
 
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, surr_mult, state->base_surr_mult*cur_fade_mult, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, surr_mult, state->base_surr_mult*cur_fade_mult, 1, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
