@@ -352,7 +352,7 @@ static inline double drift_err_scale(const struct axes *ax0, const struct axes *
 	return 1.0 + (lr_err+cs_err)*sens_err;
 }
 
-void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev)
+void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, double rear_ev_mask, struct axes *ax, struct axes *ax_ev)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
@@ -466,8 +466,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
 			}
-			else if (diff_cs_avg < -M_PI_4/12 && ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh)
-						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh))) {
+			else if (diff_cs_avg < -M_PI_4/12 && ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh*rear_ev_mask)
+						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh*rear_ev_mask))) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring short-duration rear event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */

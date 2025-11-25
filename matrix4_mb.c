@@ -26,13 +26,14 @@
 #include "util.h"
 #include "fir.h"
 
-#define DOWNSAMPLE_FACTOR  32
-#define EVENT_THRESH_MAX  3.6
-#define EVENT_THRESH_MIN  1.4
+#define DOWNSAMPLE_FACTOR 32
 #define NORM_ACCOM_FACTOR 0.6
 #define DIFF_OVERSHOOT    1.01
+#define REAR_EVENT_MASK   0.3
 #include "matrix4_common.h"
 
+#define EVENT_THRESH_MAX 3.6
+#define EVENT_THRESH_MIN 1.4
 #define N_BANDS 13
 
 #if N_BANDS == 11

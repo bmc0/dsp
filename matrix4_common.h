@@ -73,6 +73,9 @@
 #ifndef DIFF_OVERSHOOT
 	#define DIFF_OVERSHOOT 1.001
 #endif
+#ifndef REAR_EVENT_MASK
+	#define REAR_EVENT_MASK 1.0
+#endif
 
 /* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = cubic Hermite; 5 = polyphase FIR (Blackman window) */
 #ifndef CS_INTERP_TYPE
@@ -186,7 +189,7 @@ void draw_steering_bar(double, int, struct steering_bar *);
 /* private functions */
 void event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double, double);
-void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *);
+void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, double, struct axes *, struct axes *);
 
 struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
@@ -215,7 +218,7 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 
 static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev)
 {
-	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev);
+	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, REAR_EVENT_MASK, ax, ax_ev);
 }
 
 static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)
