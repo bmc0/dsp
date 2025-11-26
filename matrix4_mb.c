@@ -23,6 +23,7 @@
 #include "matrix4_mb.h"
 #include "biquad.h"
 #include "cap5.h"
+#include "allpass.h"
 #include "util.h"
 #include "fir.h"
 
@@ -89,6 +90,8 @@ struct matrix4_band {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 	} m_interp;
+	struct cs_interp_state pf_ap_c0[2];
+	struct ap1_state pf_ap[2];
 	struct ewma_state bg_cs, ev_thresh;
 	double ev_thresh_max, ev_thresh_min;
 	double surr_mult, shape_mult;
@@ -99,16 +102,17 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable;
+	char has_output, is_draining, disable, do_phase_flip;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[4];
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
 	sample_t **bufs;
 	struct filter_bank_frame *fb_buf[2];
-	double base_surr_mult;
 	struct event_config evc;
+	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
+	double base_surr_mult;
 	ssize_t len, p, fb_buf_len, fb_buf_p;
 	ssize_t drain_frames, fade_frames, fade_p;
 };
@@ -423,13 +427,29 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				cs_interp_insert(&band->m_interp.lsr, m.lsr*shape_mult);
 				cs_interp_insert(&band->m_interp.rsl, m.rsl*shape_mult);
 				cs_interp_insert(&band->m_interp.rsr, m.rsr*shape_mult);
+
+				if (state->do_phase_flip) {
+					const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
+					cs_interp_insert(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
+					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
+				}
 			}
 
 			out_l += s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
 			out_r += s0_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
 
-			out_ls += s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
-			out_rs += s0_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
+			const sample_t ls_tmp = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
+			const sample_t rs_tmp = s0_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
+			if (state->do_phase_flip) {
+				band->pf_ap[0].c0 = cs_interp(&band->pf_ap_c0[0], state->s);
+				band->pf_ap[1].c0 = cs_interp(&band->pf_ap_c0[1], state->s);
+				out_ls += ap1_run(&band->pf_ap[0], ls_tmp);
+				out_rs += ap1_run(&band->pf_ap[1], rs_tmp);
+			}
+			else {
+				out_ls += ls_tmp;
+				out_rs += rs_tmp;
+			}
 
 			state->fb_buf[0][state->fb_buf_p].s[k] = state->fb[0].s[k];
 			state->fb_buf[1][state->fb_buf_p].s[k] = state->fb[1].s[k];
@@ -611,9 +631,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->c1 = config.c1;
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
+	state->do_phase_flip = (config.do_phase_flip != 0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 
+	phase_flip_init_params(&state->pf_params, istream->fs);
 	for (int k = 0; k < N_BANDS; ++k) {
 		struct matrix4_band *band = &state->band[k];
 		smooth_state_init(&band->sm, istream);
@@ -626,6 +648,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
 		ewma_init(&band->bg_cs, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
 		ewma_set(&band->bg_cs, 1.0);
+		const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
+		cs_interp_set(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
+		cs_interp_set(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
+		ap1_reset(&band->pf_ap[0]);
+		ap1_reset(&band->pf_ap[1]);
 	}
 
 	state->fb_buf_len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);

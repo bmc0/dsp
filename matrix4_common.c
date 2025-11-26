@@ -139,6 +139,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->shelf_f0 = SHELF_F0_DEFAULT;
 	config->shelf_pwrcmp = (is_mb) ? SHELF_PWRCMP_MB_DEFAULT : SHELF_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
+	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->calc_matrix_coefs = GET_MATRIX_FUNC(MATRIX_ID_DEFAULT);
@@ -205,6 +206,9 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto fail);
 					CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto fail);
 				}
+			}
+			else if (is_opt(opt, "phase_flip=")) {
+				HANDLE_BOOLEAN_ARG(config->do_phase_flip);
 			}
 			else if (is_opt(opt, "signal=")) {
 				HANDLE_BOOLEAN_ARG(config->enable_signal);
@@ -343,6 +347,12 @@ void event_config_init_priv(struct event_config *evc, double fs, double diff_ove
 	evc->min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, fs);
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
 	evc->diff_lim = M_PI_4*diff_overshoot;
+}
+
+void phase_flip_init_params(struct phase_flip_params *pf, double fs)
+{
+	pf->c[0] = 0.667829372575655;  /* log(1.95) */
+	pf->c[1] = log(0.0005*(44100.0/fs));
 }
 
 static inline double drift_err_scale(const struct axes *ax0, const struct axes *ax1, double sens_err)

@@ -249,6 +249,10 @@ Example:
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed
 		as C/S goes from 0° to -22.5°. The default is 6kHz.
+	* `phase_flip[=true|false]`  
+		Dynamically flip the relative phase of the right surround output under
+		rear steering so that stongly rear-encoded sounds are in phase. The
+		default is `true`.
 	* `signal[=true|false]`  
 		Toggle the effect when `effect.signal()` is called.
 	* `surround_delay=delay[s|m|S]`  

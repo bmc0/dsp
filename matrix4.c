@@ -23,6 +23,7 @@
 #include "matrix4.h"
 #include "biquad.h"
 #include "smf.h"
+#include "allpass.h"
 #include "util.h"
 
 #define DOWNSAMPLE_FACTOR 32
@@ -35,7 +36,7 @@ struct dyn_shelf_state {
 
 struct matrix4_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_lowpass;
+	char has_output, is_draining, disable, do_lowpass, do_phase_flip;
 	enum status_type status_type;
 	sample_t **bufs;
 	struct biquad_state in_hp[2], in_lp[2];
@@ -50,6 +51,9 @@ struct matrix4_state {
 		struct cs_interp_state lsl, lsr, rsl, rsr;
 		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
 	} m_interp;
+	struct cs_interp_state pf_ap_c0[2];
+	struct ap1_state pf_ap[2];
+	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
 	ssize_t len, p, drain_frames, fade_frames, fade_p;
@@ -135,6 +139,12 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			cs_interp_insert(&state->m_interp.g_surr_shelf, shape_mult_shelf*r_shelf_mult[1]);
 			cs_interp_insert(&state->m_interp.g_surr_lp, shape_mult_lp);
 			cs_interp_insert(&state->m_interp.g_front_shelf, r_shelf_mult[0]);
+
+			if (state->do_phase_flip) {
+				const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
+				cs_interp_insert(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
+				cs_interp_insert(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
+			}
 		}
 
 		const sample_t s0_d = state->bufs[state->c0][state->p];
@@ -158,6 +168,12 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			out_ls = dyn_shelf_run(&state->surr_lp[0], out_ls, g_surr_lp);
 			out_rs = dyn_shelf_run(&state->surr_lp[1], out_rs, g_surr_lp);
+		}
+		if (state->do_phase_flip) {
+			state->pf_ap[0].c0 = cs_interp(&state->pf_ap_c0[0], state->s);
+			state->pf_ap[1].c0 = cs_interp(&state->pf_ap_c0[1], state->s);
+			out_ls = ap1_run(&state->pf_ap[0], out_ls);
+			out_rs = ap1_run(&state->pf_ap[1], out_rs);
 		}
 
 		if (state->has_output) {
@@ -308,6 +324,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
 	state->do_lowpass = (config.lowpass_f0 > 0.0);
+	state->do_phase_flip = (config.do_phase_flip != 0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
 
@@ -320,6 +337,12 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	}
 	smf_asym_init(&state->bg_cs, DOWNSAMPLED_FS(istream->fs), SMF_RISE_TIME(ACCOM_TIME*2.0), 0.01, 1e-6);
 	smf_set(&state->bg_cs, 1.0);
+	phase_flip_init_params(&state->pf_params, istream->fs);
+	const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
+	cs_interp_set(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
+	cs_interp_set(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
+	ap1_reset(&state->pf_ap[0]);
+	ap1_reset(&state->pf_ap[1]);
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream);
 

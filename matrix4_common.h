@@ -56,6 +56,7 @@
 #define SHELF_PWRCMP_DEFAULT       0.3
 #define SHELF_PWRCMP_MB_DEFAULT    0.8
 #define LOWPASS_F0_DEFAULT      6000.0
+#define DO_PHASE_FLIP_DEFAULT      1
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 
@@ -154,12 +155,16 @@ enum filter_bank_type {
 typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
 
 struct matrix4_config {
-	int n_channels, opt_str_idx, c0, c1, enable_signal;
+	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip;
 	double surr_mult[2], shelf_mult, shelf_f0, shelf_pwrcmp, lowpass_f0, fb_stop[2];
 	ssize_t surr_delay_frames;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
+};
+
+struct phase_flip_params {
+	double c[2];
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
@@ -176,6 +181,7 @@ struct matrix4_config {
 int get_args_and_channels(const struct effect_info *, const struct stream_info *, const char *, int, const char *const *, struct matrix4_config *);
 int parse_effect_opts(const char *const *, const struct stream_info *, const int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
+void phase_flip_init_params(struct phase_flip_params *, double);
 void event_state_cleanup(struct event_state *);
 
 #ifndef LADSPA_FRONTEND
@@ -261,6 +267,17 @@ static inline void norm_axes(struct axes *ax)
 		ax->lr *= norm;
 		ax->cs *= norm;
 	}
+}
+
+static inline double phase_flip_pos_rs(struct axes *ax)
+{
+	const double cs = ax->cs*(-1/M_PI_4)+0.5;
+	return MAXIMUM(MINIMUM(cs, 1.0), 0.5);
+}
+
+static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, double pos)
+{
+	return exp(pos*(pf->c[1]-pf->c[0])+pf->c[0])-1.0;
 }
 
 #if DOWNSAMPLE_FACTOR > 1
@@ -463,6 +480,10 @@ static inline double cs_interp(const struct cs_interp_state *state, int x)
 #else
 	#error "illegal CS_INTERP_TYPE"
 #endif
+static inline void cs_interp_set(struct cs_interp_state *s, double x)
+{
+	for (int i = 0; i < LENGTH(s->y); ++i) cs_interp_insert(s, x);
+}
 #else
 /* dummy definitions for DOWNSAMPLE_FACTOR=1 */
 struct cs_interp_state {
@@ -470,6 +491,7 @@ struct cs_interp_state {
 };
 #define cs_interp_insert(s, x) do { (s)->m = x; } while(0)
 #define cs_interp(s, x) ((s)->m)
+#define cs_interp_set(s, x) cs_interp_insert(s, x)
 #define CS_INTERP_PEEK(s) ((s)->m)
 #endif
 #endif /* DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS */

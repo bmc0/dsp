@@ -247,6 +247,11 @@ Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR
 in surround outputs. Active when C/S is positive and gradually removed
 as C/S goes from 0° to \-22.5°. The default is 6kHz.
 .TP
+phase_flip[=\fItrue\fR|\fIfalse\fR]
+Dynamically flip the relative phase of the right surround output under
+rear steering so that stongly rear-encoded sounds are in phase. The
+default is `true'.
+.TP
 signal[=\fItrue\fR|\fIfalse\fR]
 Toggle the effect when `effect.signal()' is called.
 .TP
