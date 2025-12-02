@@ -103,6 +103,7 @@ static void read_buf_doublep(void **in, sample_t *out, int channels, ssize_t sta
 
 static int get_new_frame(struct ffmpeg_state *state)
 {
+	char err_str[AV_ERROR_MAX_STRING_SIZE];
 	AVPacket packet;
 	int r;
 	if (state->got_frame)
@@ -125,12 +126,23 @@ static int get_new_frame(struct ffmpeg_state *state)
 				goto skip_packet;
 			}
 			state->last_ts = (packet.pts == AV_NOPTS_VALUE) ? packet.dts : packet.pts;
-			if (avcodec_send_packet(state->cc, &packet) < 0)
-				return 1;  /* FIXME: handle decoding errors more intelligently */
+			if ((r = avcodec_send_packet(state->cc, &packet)) < 0) {
+				av_packet_unref(&packet);
+				if (r == AVERROR_INVALIDDATA) {
+					LOG_FMT(LL_VERBOSE, "%s: warning: skipping invalid data", codec_name);
+					goto skip_packet;
+				}
+				goto print_error;
+			}
 			av_packet_unref(&packet);
 			break;
 		default:
-			return 1;  /* FIXME: handle decoding errors more intelligently */
+			print_error:
+			if (av_strerror(r, err_str, AV_ERROR_MAX_STRING_SIZE) == 0)
+				LOG_FMT(LL_ERROR, "%s: error: %s", codec_name, err_str);
+			else
+				LOG_FMT(LL_ERROR, "%s: unknown error", codec_name);
+			return 1;
 		}
 	}
 	state->got_frame = 1;
