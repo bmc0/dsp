@@ -274,11 +274,12 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	}
 
 	/* Instantiate plugins, connect ports, and activate plugins (if required) */
-	for (int i = 0, iport = 0, oport = 0, cport = 0; i < state->n_handles; ++i) {
+	for (int i = 0, iport = 0, oport = 0; i < state->n_handles; ++i) {
 		if ((state->handles[i] = desc->instantiate(desc, istream->fs)) == NULL) {
 			LOG_FMT(LL_ERROR, "%s: %s: %s: error: instantiate() failed", argv[0], path, argv[2]);
 			goto fail;
 		}
+		int cport = 0;
 		for (unsigned long k = 0; k < desc->PortCount; ++k) {
 			LADSPA_PortDescriptor pd = desc->PortDescriptors[k];
 			if (LADSPA_IS_PORT_INPUT(pd) && LADSPA_IS_PORT_AUDIO(pd))
