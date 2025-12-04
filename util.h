@@ -23,6 +23,8 @@
 #include <string.h>
 #include "dsp.h"
 
+#define STR(x) #x
+#define XSTR(x) STR(x)
 #define LENGTH(x) (sizeof(x) / sizeof((x)[0]))
 #define MAXIMUM(a, b) (((a) > (b)) ? (a) : (b))
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))

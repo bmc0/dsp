@@ -127,7 +127,14 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 		echo "[dsp] disabled ladspa_host.o"
 	fi
 	check_pkg_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE
-	check_pkg_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
+	if [ "$CONFIG_DISABLE_FFMPEG" != "y" ] && check_header libavcodec/avcodec.h \
+			&& check_header libavformat/avformat.h && check_header libavutil/avutil.h; then
+		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ffmpeg.o"
+		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DHAVE_FFMPEG"
+		echo "[dsp] enabled ffmpeg.o"
+	else
+		echo "[dsp] disabled ffmpeg.o"
+	fi
 	check_pkg_dsp fftw3 "$CONFIG_DISABLE_FFTW3" "matrix4_mb.o resample.o fir.o fir_p.o hilbert.o" -DHAVE_FFTW3 && NEED_FIR_UTIL=y
 	if [ "$CONFIG_DISABLE_ZITA_CONVOLVER" != "y" ] && check_header zita-convolver.h && check_lib zita-convolver; then
 		NEED_FIR_UTIL=y
@@ -177,14 +184,8 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	fi
 	[ "$NEED_FIR_UTIL" = "y" ] && LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS fir_util.o"
 	if [ "$INCLUDE_CODECS" = "y" ]; then
-		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sampleconv.o"
-		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE \
-			|| check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG \
-			|| echo "[ladspa_dsp] WARNING: The fir, fir_p, and zita_convolver effects cannot be used without either sndfile or ffmpeg"
-		# Extra codecs
-		#LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS null.o pcm.o"
-		#check_pkg_ladspa_dsp "libavcodec libavformat libavutil" "$CONFIG_DISABLE_FFMPEG" ffmpeg.o -DHAVE_FFMPEG
-		#check_pkg_ladspa_dsp mad "$CONFIG_DISABLE_MAD" mp3.o -DHAVE_MAD
+		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS codec.o sampleconv.o pcm.o"
+		check_pkg_ladspa_dsp sndfile "$CONFIG_DISABLE_SNDFILE" sndfile.o -DHAVE_SNDFILE
 	fi
 else
 	echo "disabled ladspa_dsp"
