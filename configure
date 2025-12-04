@@ -118,9 +118,8 @@ if [ "$CONFIG_DISABLE_DSP" != "y" ]; then
 	INSTALL_TARGETS="$INSTALL_TARGETS install_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_dsp"
 	unset NEED_FIR_UTIL
-	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ladspa.h && check_header ltdl.h && check_lib ltdl; then
+	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ladspa.h; then
 		DSP_OPTIONAL_OBJECTS="$DSP_OPTIONAL_OBJECTS ladspa_host.o"
-		DSP_EXTRA_LIBS="$DSP_EXTRA_LIBS -lltdl"
 		DSP_EXTRA_CFLAGS="$DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
 		echo "[dsp] enabled ladspa_host.o"
 	else
@@ -160,9 +159,8 @@ if [ "$CONFIG_DISABLE_LADSPA_DSP" != "y" ] && check_header ladspa.h; then
 	INSTALL_TARGETS="$INSTALL_TARGETS install_ladspa_dsp"
 	UNINSTALL_TARGETS="$UNINSTALL_TARGETS uninstall_ladspa_dsp"
 	unset INCLUDE_CODECS NEED_FIR_UTIL
-	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ] && check_header ltdl.h && check_lib ltdl; then
+	if [ "$CONFIG_DISABLE_LADSPA_HOST" != "y" ]; then
 		LADSPA_DSP_OPTIONAL_OBJECTS="$LADSPA_DSP_OPTIONAL_OBJECTS ladspa_host.o"
-		LADSPA_DSP_EXTRA_LIBS="$LADSPA_DSP_EXTRA_LIBS -lltdl"
 		LADSPA_DSP_EXTRA_CFLAGS="$LADSPA_DSP_EXTRA_CFLAGS -DENABLE_LADSPA_HOST"
 		echo "[ladspa_dsp] enabled ladspa_host.o"
 	else

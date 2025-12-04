@@ -20,7 +20,6 @@ dsp is an audio processing program with an interactive mode.
 * libmad: For mp3 input support (disabled by default).
 * libpulse-simple: For PulseAudio input/ouput support.
 * LADSPA: For the LADSPA frontend and the `ladspa_host` effect.
-* libltdl (libtool): For the `ladspa_host` effect.
 
 #### Build
 
