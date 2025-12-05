@@ -47,59 +47,25 @@
 #define DO_EFFECTS_CHAIN_OPTIMIZE 1
 
 static const struct effect_info effects[] = {
-	{ "lowpass_1",          "lowpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_LOWPASS_1 },
-	{ "highpass_1",         "highpass_1 f0[k]",                        biquad_effect_init,    BIQUAD_HIGHPASS_1 },
-	{ "allpass_1",          "allpass_1 f0[k]",                         biquad_effect_init,    BIQUAD_ALLPASS_1 },
-	{ "lowshelf_1",         "lowshelf_1 f0[k] gain",                   biquad_effect_init,    BIQUAD_LOWSHELF_1 },
-	{ "highshelf_1",        "highshelf_1 f0[k] gain",                  biquad_effect_init,    BIQUAD_HIGHSHELF_1 },
-	{ "lowpass_1p",         "lowpass_1p f0[k]",                        biquad_effect_init,    BIQUAD_LOWPASS_1P },
-	{ "lowpass",            "lowpass f0[k] width[q|o|h|k]",            biquad_effect_init,    BIQUAD_LOWPASS },
-	{ "highpass",           "highpass f0[k] width[q|o|h|k]",           biquad_effect_init,    BIQUAD_HIGHPASS },
-	{ "bandpass_skirt",     "bandpass_skirt f0[k] width[q|o|h|k]",     biquad_effect_init,    BIQUAD_BANDPASS_SKIRT },
-	{ "bandpass_peak",      "bandpass_peak f0[k] width[q|o|h|k]",      biquad_effect_init,    BIQUAD_BANDPASS_PEAK },
-	{ "notch",              "notch f0[k] width[q|o|h|k]",              biquad_effect_init,    BIQUAD_NOTCH },
-	{ "allpass",            "allpass f0[k] width[q|o|h|k]",            biquad_effect_init,    BIQUAD_ALLPASS },
-	{ "eq",                 "eq f0[k] width[q|o|h|k] gain",            biquad_effect_init,    BIQUAD_PEAK },
-	{ "lowshelf",           "lowshelf f0[k] width[q|s|d|o|h|k] gain",  biquad_effect_init,    BIQUAD_LOWSHELF },
-	{ "highshelf",          "highshelf f0[k] width[q|s|d|o|h|k] gain", biquad_effect_init,    BIQUAD_HIGHSHELF },
-	{ "lowpass_transform",  "lowpass_transform fz[k] width_z[q] fp[k] width_p[q]",  biquad_effect_init, BIQUAD_LOWPASS_TRANSFORM },
-	{ "highpass_transform", "highpass_transform fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM },
-	{ "linkwitz_transform", "linkwitz_transform fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM },
-	{ "deemph",             "deemph",                                  biquad_effect_init,    BIQUAD_DEEMPH },
-	{ "biquad",             "biquad b0 b1 b2 a0 a1 a2",                biquad_effect_init,    BIQUAD_BIQUAD },
-	{ "gain",               "gain gain_dB",                            gain_effect_init,      GAIN_EFFECT_NUMBER_GAIN },
-	{ "mult",               "mult multiplier",                         gain_effect_init,      GAIN_EFFECT_NUMBER_MULT },
-	{ "add",                "add value",                               gain_effect_init,      GAIN_EFFECT_NUMBER_ADD },
-	{ "crossfeed",          "crossfeed f0[k] separation",              crossfeed_effect_init, 0 },
-	{ "matrix4",            "matrix4 [options] [surround_level][/surround_level_rear]",    matrix4_effect_init,    0 },
-#ifdef HAVE_FFTW3
-	{ "matrix4_mb",         "matrix4_mb [options] [surround_level][/surround_level_rear]", matrix4_mb_effect_init, 0 },
-#endif
-	{ "remix",              "remix channel_selector|. ...",            remix_effect_init,     0 },
-	{ "st2ms",              "st2ms",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_ST2MS },
-	{ "ms2st",              "ms2st",                                   st2ms_effect_init,     ST2MS_EFFECT_NUMBER_MS2ST },
-	{ "delay",              "delay [-f [order]] delay[s|m|S]",         delay_effect_init,     0 },
-#ifdef HAVE_FFTW3
-#ifndef SYMMETRIC_IO
-	{ "resample",           "resample [bandwidth] fs[k]",              resample_effect_init,  0 },
-#endif
-	{ "fir",                "fir [input_options] [file:][~/]filter_path|coefs:list[/list...]",                  fir_effect_init,   0 },
-	{ "fir_p",              "fir_p [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]", fir_p_effect_init, 0 },
-#endif
-#ifdef HAVE_ZITA_CONVOLVER
-	{ "zita_convolver",     "zita_convolver [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]", zita_convolver_effect_init, 0 },
-#endif
-#ifdef HAVE_FFTW3
-	{ "hilbert",            "hilbert [-pz] [-a angle] taps",           hilbert_effect_init,   0 },
-#endif
-	{ "decorrelate",        "decorrelate [options] [stages]",          decorrelate_effect_init, 0 },
-	{ "noise",              "noise level[b]",                          noise_effect_init,     0 },
-	{ "dither",             "dither [shape] [[quantize_bits] bits]",   dither_effect_init,    0 },
-#ifdef ENABLE_LADSPA_HOST
-	{ "ladspa_host",        "ladspa_host module_path plugin_label [control ...]", ladspa_host_effect_init, 0 },
-#endif
-	{ "stats",              "stats [ref_level]",                       stats_effect_init,     0 },
-	{ "watch",              "watch [-e] [~/]path",                     watch_effect_init,     0 },
+	BIQUAD_EFFECT_INFO,
+	GAIN_EFFECT_INFO,
+	CROSSFEED_EFFECT_INFO,
+	MATRIX4_EFFECT_INFO,
+	MATRIX4_MB_EFFECT_INFO,
+	REMIX_EFFECT_INFO,
+	ST2MS_EFFECT_INFO,
+	DELAY_EFFECT_INFO,
+	RESAMPLE_EFFECT_INFO,
+	FIR_EFFECT_INFO,
+	FIR_P_EFFECT_INFO,
+	ZITA_CONVOLVER_EFFECT_INFO,
+	HILBERT_EFFECT_INFO,
+	DECORRELATE_EFFECT_INFO,
+	NOISE_EFFECT_INFO,
+	DITHER_EFFECT_INFO,
+	LADSPA_HOST_EFFECT_INFO,
+	STATS_EFFECT_INFO,
+	WATCH_EFFECT_INFO,
 };
 
 const struct effect_info * get_effect_info(const char *name)
@@ -237,6 +203,14 @@ static int build_effects_chain_block(int argc, const char *const *argv, struct e
 				LOG_FMT(LL_VERBOSE, "warning: no such effect: %s", argv[k]);
 			else {
 				LOG_FMT(LL_ERROR, "error: no such effect: %s", argv[k]);
+				goto fail;
+			}
+		}
+		else if (ei->init == NULL) {
+			if (allow_fail)
+				LOG_FMT(LL_VERBOSE, "warning: effect not available: %s", argv[k]);
+			else {
+				LOG_FMT(LL_ERROR, "error: effect not available: %s", argv[k]);
 				goto fail;
 			}
 		}
@@ -617,10 +591,14 @@ void destroy_effects_chain(struct effects_chain *chain)
 
 void print_all_effects(void)
 {
-	int i;
 	fprintf(stdout, "Effects:\n");
-	for (i = 0; i < LENGTH(effects); ++i)
-		fprintf(stdout, "  %s\n", effects[i].usage);
+	for (int i = 0; i < LENGTH(effects); ++i)
+		fprintf(stdout, "  %s %s\n", effects[i].name, (effects[i].init) ? effects[i].usage : "(not available)");
+}
+
+void print_effect_usage(const struct effect_info *ei)
+{
+	LOG_FMT(LL_ERROR, "%s: usage: %s %s", ei->name, ei->name, ei->usage);
 }
 
 void effects_chain_xfade_reset(struct effects_chain_xfade_state *state)

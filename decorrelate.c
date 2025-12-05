@@ -203,7 +203,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	}
 	if (g.ind < argc-1) {
 		print_usage:
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return NULL;
 	}
 	else if (g.ind == argc-1) {

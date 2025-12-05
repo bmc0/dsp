@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2017-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2017-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,9 +19,17 @@
 #ifndef DSP_LADSPA_HOST_H
 #define DSP_LADSPA_HOST_H
 
+#ifdef ENABLE_LADSPA_HOST
 #include "dsp.h"
 #include "effect.h"
 
 struct effect * ladspa_host_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define LADSPA_HOST_EFFECT_INFO \
+	{ "ladspa_host", "module_path plugin_label [control ...]", ladspa_host_effect_init, 0 }
+#else
+#define LADSPA_HOST_EFFECT_INFO \
+	{ "ladspa_host", NULL, NULL, 0 }
+#endif
 
 #endif

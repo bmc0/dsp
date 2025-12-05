@@ -404,7 +404,7 @@ struct effect * biquad_effect_merge(struct effect *dest, struct effect *src)
 #define INIT_COMMON(n_args, b_type) \
 	do { \
 		if (argc != (n_args) + 1) { \
-			LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage); \
+			print_effect_usage(ei); \
 			return NULL; \
 		} \
 		type = b_type; \

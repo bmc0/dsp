@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,9 +19,17 @@
 #ifndef DSP_RESAMPLE_H
 #define DSP_RESAMPLE_H
 
+#if defined(HAVE_FFTW3) && !defined(SYMMETRIC_IO)
 #include "dsp.h"
 #include "effect.h"
 
 struct effect * resample_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define RESAMPLE_EFFECT_INFO \
+	{ "resample", "[bandwidth] fs[k]", resample_effect_init, 0 }
+#else
+#define RESAMPLE_EFFECT_INFO \
+	{ "resample", NULL, NULL, 0 }
+#endif
 
 #endif

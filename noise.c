@@ -82,7 +82,7 @@ struct effect * noise_effect_init(const struct effect_info *ei, const struct str
 	struct noise_state *state;
 
 	if (argc != 2) {
-		LOG_FMT(LL_ERROR, "%s: usage %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return NULL;
 	}
 

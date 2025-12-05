@@ -83,7 +83,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	int i;
 
 	if (argc != 1) {
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return NULL;
 	}
 	const int n_channels = num_bits_set(channel_selector, istream->channels);

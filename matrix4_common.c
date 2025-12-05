@@ -33,7 +33,7 @@ int get_args_and_channels(const struct effect_info *ei, const struct stream_info
 	double surr_level[2] = {NAN, NAN};
 	char *endptr;
 	if (argc > 3) {
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return 1;
 	}
 	int surr_level_idx = -1;

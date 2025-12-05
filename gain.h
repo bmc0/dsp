@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,5 +29,10 @@ enum {
 };
 
 struct effect * gain_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define GAIN_EFFECT_INFO \
+	{ "gain", "gain_dB",    gain_effect_init, GAIN_EFFECT_NUMBER_GAIN }, \
+	{ "mult", "multiplier", gain_effect_init, GAIN_EFFECT_NUMBER_MULT }, \
+	{ "add",  "value",      gain_effect_init, GAIN_EFFECT_NUMBER_ADD }
 
 #endif

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,5 +23,8 @@
 #include "effect.h"
 
 struct effect * crossfeed_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define CROSSFEED_EFFECT_INFO \
+	{ "crossfeed", "f0[k] separation", crossfeed_effect_init, 0 }
 
 #endif

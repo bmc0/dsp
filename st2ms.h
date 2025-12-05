@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2018-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2018-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,5 +28,9 @@ enum {
 };
 
 struct effect * st2ms_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define ST2MS_EFFECT_INFO \
+	{ "st2ms", "", st2ms_effect_init, ST2MS_EFFECT_NUMBER_ST2MS }, \
+	{ "ms2st", "", st2ms_effect_init, ST2MS_EFFECT_NUMBER_MS2ST }
 
 #endif

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2022-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2022-2025 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,9 +19,17 @@
 #ifndef DSP_MATRIX4_MB_H
 #define DSP_MATRIX4_MB_H
 
+#ifdef HAVE_FFTW3
 #include "dsp.h"
 #include "effect.h"
 
 struct effect * matrix4_mb_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define MATRIX4_MB_EFFECT_INFO \
+	{ "matrix4_mb", "[options] [surround_level][/surround_level_rear]", matrix4_mb_effect_init, 0 }
+#else
+#define MATRIX4_MB_EFFECT_INFO \
+	{ "matrix4_mb", NULL, NULL, 0 }
+#endif
 
 #endif

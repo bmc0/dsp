@@ -88,6 +88,7 @@ void plot_effects_chain(struct effects_chain *, int, int, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);
+void print_effect_usage(const struct effect_info *);
 
 struct effects_chain_xfade_state {
 	sample_t *buf;

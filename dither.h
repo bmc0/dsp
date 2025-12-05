@@ -26,4 +26,7 @@ int effect_is_dither(const struct effect *);
 void dither_effect_set_params(struct effect *, int, int);
 struct effect * dither_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
+#define DITHER_EFFECT_INFO \
+	{ "dither", "[shape] [[quantize_bits] bits]", dither_effect_init, 0 }
+
 #endif

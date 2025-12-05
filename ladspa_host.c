@@ -125,7 +125,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	const int dlopen_flags = RTLD_NOW|RTLD_LOCAL;
 
 	if (argc < 3) {
-		LOG_FMT(LL_ERROR, "%s: usage %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return NULL;
 	}
 

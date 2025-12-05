@@ -19,6 +19,7 @@
 #ifndef DSP_ZITA_CONVOLVER_H
 #define DSP_ZITA_CONVOLVER_H
 
+#ifdef HAVE_ZITA_CONVOLVER
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,6 +32,16 @@ struct effect * zita_convolver_effect_init(const struct effect_info *, const str
 
 #ifdef __cplusplus
 }
+#endif
+#define ZITA_CONVOLVER_EFFECT_INFO \
+	{ \
+		"zita_convolver", \
+		"[input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]", \
+		zita_convolver_effect_init, 0 \
+	}
+#else
+#define ZITA_CONVOLVER_EFFECT_INFO \
+	{ "zita_convolver", NULL, NULL, 0 }
 #endif
 
 #endif

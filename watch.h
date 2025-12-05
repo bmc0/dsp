@@ -24,4 +24,7 @@
 
 struct effect * watch_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
+#define WATCH_EFFECT_INFO \
+	{ "watch", "[-e] [~/]path", watch_effect_init, 0 }
+
 #endif

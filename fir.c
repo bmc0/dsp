@@ -399,7 +399,7 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 
 	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL, NULL);
 	if (err || g.ind != argc-1) {
-		LOG_FMT(LL_ERROR, "%s: usage: %s", argv[0], ei->usage);
+		print_effect_usage(ei);
 		return NULL;
 	}
 	c_params.path = argv[g.ind];

@@ -19,10 +19,18 @@
 #ifndef DSP_FIR_H
 #define DSP_FIR_H
 
+#ifdef HAVE_FFTW3
 #include "dsp.h"
 #include "effect.h"
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int);
 struct effect * fir_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
+
+#define FIR_EFFECT_INFO \
+	{ "fir", "[input_options] [file:][~/]filter_path|coefs:list[/list...]", fir_effect_init, 0 }
+#else
+#define FIR_EFFECT_INFO \
+	{ "fir", NULL, NULL, 0 }
+#endif
 
 #endif
