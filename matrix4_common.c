@@ -308,6 +308,8 @@ void event_state_init_priv(struct event_state *ev, double fs, double norm_accom_
 	ewma_init(&ev->drift_scale[0], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
 	ewma_set(&ev->drift_scale[0], 1.0);
 	ewma_init(&ev->drift_scale[1], fs, EWMA_RISE_TIME(RISE_TIME_FAST*0.3));
+	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->drift_notch[i],
+		BIQUAD_PEAK, fs, ORD_NOTCH_FREQ, 0.5, ORD_NOTCH_GAIN, 0, BIQUAD_WIDTH_Q);
 	ev->t_hold = -2;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
@@ -415,6 +417,10 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ev->slope_buf[ev->buf_p][0] = l_slope;
 		ev->slope_buf[ev->buf_p][1] = r_slope;
 	#endif
+	const struct axes ord_d_notched = {
+		.lr = biquad(&ev->drift_notch[0], ord_d.lr),
+		.cs = biquad(&ev->drift_notch[1], ord_d.cs),
+	};
 
 	if (!ev->sample && ((l_slope > 0.0 && l_event > thresh) || (r_slope > 0.0 && r_event > thresh))) {
 		ev->sample = 1;
@@ -529,12 +535,12 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	else {
 		const struct axes ax_last = { .lr = ewma_get_last(&ev->drift[0]), .cs = ewma_get_last(&ev->drift[1]) };
 		const double ds_ord = ewma_run_set_max(&ev->drift_scale[0],
-			drift_err_scale(&ax_last, &ord_d, ORD_SENS_ERR) * ev->ds_ord_buf[ev->buf_p]);
+			drift_err_scale(&ax_last, &ord_d_notched, ORD_SENS_ERR) * ev->ds_ord_buf[ev->buf_p]);
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds_ord);
 		#endif
-		ax->lr = ewma_run_scale(&ev->drift[0], ord_d.lr, ds_ord);
-		ax->cs = ewma_run_scale(&ev->drift[1], ord_d.cs, ds_ord);
+		ax->lr = ewma_run_scale(&ev->drift[0], ord_d_notched.lr, ds_ord);
+		ax->cs = ewma_run_scale(&ev->drift[1], ord_d_notched.cs, ds_ord);
 		ewma_set(&ev->drift[2], ax->lr);
 		ewma_set(&ev->drift[3], ax->cs);
 		ax_ev->lr = ax_ev->cs = 0.0;
