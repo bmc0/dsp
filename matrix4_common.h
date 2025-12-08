@@ -275,8 +275,10 @@ static inline void norm_axes(struct axes *ax)
 
 static inline double phase_flip_pos_rs(struct axes *ax)
 {
-	const double cs = ax->cs*(-1/M_PI_4)+0.5;
-	return MAXIMUM(MINIMUM(cs, 1.0), 0.5);
+	if (ax->cs >= 0.0) return 0.5;
+	double x = ax->cs*(-2/M_PI_4);
+	x = x*x*0.5+0.5;
+	return MINIMUM(x, 1.0);
 }
 
 static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, double pos)
