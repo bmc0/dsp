@@ -45,8 +45,10 @@
 #define ORD_SENS_ERR          2.0
 #define ORD_SENS_WEIGHT       3.0
 #define ORD_WEIGHT_THRESH     0.3
-#define ORD_NOTCH_FREQ        5.0
-#define ORD_NOTCH_GAIN      -12.0
+#define ORD_NOTCH_FREQ_1      4.0
+#define ORD_NOTCH_GAIN_1     -8.5
+#define ORD_NOTCH_FREQ_2     12.0
+#define ORD_NOTCH_GAIN_2     -8.5
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
 
@@ -121,7 +123,7 @@ struct event_state {
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
 	struct ewma_state drift[4], drift_scale[2];
-	struct biquad_state drift_notch[2];
+	struct biquad_state drift_notch[4];
 	struct axes dir, diff_last, *ord_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
