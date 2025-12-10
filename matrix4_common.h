@@ -51,6 +51,9 @@
 #define ORD_NOTCH_GAIN_2     -8.5
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
+#define PWRCMP_RISE_TIME    100.0
+#define PWRCMP_FALL_TIME     15.0
+#define PWRCMP_FACTOR_SENS    0.2
 
 #define MATRIX_ID_DEFAULT          v3
 #define SURR_MULT_DEFAULT          0.7071
@@ -58,8 +61,8 @@
 #define SURR_DELAY_DEFAULT        15.0
 #define SHELF_MULT_DEFAULT         0.7071
 #define SHELF_F0_DEFAULT         500.0
-#define SHELF_PWRCMP_DEFAULT       0.3
-#define SHELF_PWRCMP_MB_DEFAULT    0.8
+#define SHELF_PWRCMP_DEFAULT       1.0
+#define SHELF_PWRCMP_MB_DEFAULT    1.0
 #define LOWPASS_F0_DEFAULT      6000.0
 #define DO_PHASE_FLIP_DEFAULT      1
 
@@ -122,7 +125,7 @@ struct event_state {
 		EVENT_FLAG_END = 1<<4,
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4], drift_scale[2];
+	struct ewma_state drift[4], drift_scale[2], pwrcmp_factor;
 	struct biquad_state drift_notch[4];
 	struct axes dir, diff_last, *ord_buf;
 	#if ENABLE_LOOKBACK
@@ -130,8 +133,8 @@ struct event_state {
 		double (*slope_buf)[2];
 	#endif
 	struct envs *env_buf;
-	double last[2], slope_last[2], clip_thresh, max[2];
-	double ord_factor, adj, ds_diff, *ds_ord_buf;
+	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
+	double ord_factor, adj, ds_diff, *ds_ord_buf, *max_buf;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	ssize_t buf_len, buf_p;
@@ -218,9 +221,9 @@ static inline double smoothstep(double x)
 }
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
-static void event_state_init(struct event_state *ev, const struct stream_info *istream)
+static void event_state_init(struct event_state *ev, const struct stream_info *istream, double base_thresh_scale)
 {
-	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), NORM_ACCOM_FACTOR);
+	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale);
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream)

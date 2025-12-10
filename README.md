@@ -238,12 +238,11 @@ Example:
 		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
 		four outputs. `v3` adds full steering of sounds encoded to the left and
 		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v3`.
-	* `shelf=gain[:f0[k][:pwrcmp]]`  
+	* `shelf=gain|none[:f0[k][:pwrcmp]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
 		-22.5°. `pwrcmp` is the high-frequency power compensation factor. The
-		default values for `gain` and `f0` are -3dB and 500Hz, respectively.
-		`pwrcmp` defaults to 0.3 for `matrix4` and 0.8 for `matrix4_mb`.
+		default values are -3dB, 500Hz, and 1, respectively.
 	* `lowpass=f0[k]|none`  
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed

@@ -118,7 +118,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			const double w_max = MAXIMUM(w_step, w);
 			const double surr_mult = (w_max*state->surr_mult[1] + (1.0-w_max)*state->surr_mult[0])*cur_fade_mult;
 			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
-			const double shelf_mult = (shelf_mult_tot-1.0)*state->shelf_pwrcmp + 1.0;
+			const double shelf_pwrcmp = state->shelf_pwrcmp * ewma_get_last(&state->ev.pwrcmp_factor);
+			const double shelf_mult = (shelf_mult_tot-1.0)*shelf_pwrcmp + 1.0;
 			const double shape_mult_shelf = shelf_mult_tot/shelf_mult;
 			const double shape_mult_lp = w + (1.0-w)*state->lowpass_mult;
 
@@ -212,9 +213,12 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		if (state->status_type) {
 			dsp_log_acquire();
 			if (state->status_type == STATUS_TYPE_TEXT) {
-				dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
-					e->name, (state->disable) ? " [off]" : "", TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-					state->ev.adj, state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
+				dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
+					"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
+					e->name, (state->disable) ? " [off]" : "",
+					TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
+					state->ev.adj, state->shelf_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
+					state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
 			}
 			else {
 				draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
@@ -344,7 +348,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	ap1_reset(&state->pf_ap[0]);
 	ap1_reset(&state->pf_ap[1]);
 	smooth_state_init(&state->sm, istream);
-	event_state_init(&state->ev, istream);
+	event_state_init(&state->ev, istream, 1.0);
 
 	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
 #if DOWNSAMPLE_FACTOR > 1

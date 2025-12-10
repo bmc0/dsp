@@ -94,7 +94,7 @@ struct matrix4_band {
 	struct ap1_state pf_ap[2];
 	struct ewma_state bg_cs, ev_thresh;
 	double ev_thresh_max, ev_thresh_min;
-	double surr_mult, shape_mult;
+	double shelf_mult, shape_mult;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
 #endif
@@ -112,7 +112,7 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double base_surr_mult;
+	double surr_mult[2], shelf_pwrcmp;
 	ssize_t len, p, fb_buf_len, fb_buf_p;
 	ssize_t drain_frames, fade_frames, fade_p;
 };
@@ -412,11 +412,14 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				norm_axes(&band->ax);
 
 				const double w = ewma_run_set_min(&band->bg_cs, smoothstep(band->ax.cs*(-2/M_PI_4))+1.0)-1.0;
-				const double surr_mult = (w*state->base_surr_mult + (1.0-w)*band->surr_mult)*cur_fade_mult;
-				const double shape_mult = w + band->shape_mult*(1.0-w);
+				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
+				const double shelf_mult_tot = w + (1.0-w)*band->shelf_mult;
+				const double shelf_pwrcmp = state->shelf_pwrcmp * ewma_get_last(&band->ev.pwrcmp_factor);
+				const double shelf_mult = (shelf_mult_tot-1.0)*shelf_pwrcmp + 1.0;
+				const double shape_mult = (w + (1.0-w)*band->shape_mult) * (shelf_mult_tot/shelf_mult);
 
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, surr_mult, state->base_surr_mult*cur_fade_mult, 1, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, surr_mult*shelf_mult, state->surr_mult[1]*cur_fade_mult, 1, &m, NULL);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -499,10 +502,12 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			if (state->status_type == STATUS_TYPE_TEXT) {
 				for (int i = 0; i < N_BANDS; ++i) {
 					struct matrix4_band *band = &state->band[i];
-					dsp_log_printf("\n%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); adj: %05.3f; thresh: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
+					dsp_log_printf("\n%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
+						"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
 						e->name, (state->disable) ? " [off]" : "", i,
 						TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
-						band->ev.adj, ewma_get_last(&band->ev_thresh), band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
+						band->ev.adj, ewma_get_last(&band->ev_thresh), state->shelf_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
+						band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
 				}
 			}
 			else {
@@ -639,11 +644,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	for (int k = 0; k < N_BANDS; ++k) {
 		struct matrix4_band *band = &state->band[k];
 		smooth_state_init(&band->sm, istream);
-		event_state_init(&band->ev, istream);
 		const double x = MAXIMUM(k-1, 0)*0.15*BAND_WEIGHT_IDX_MULT;
 		const double ev_thresh_mult = 1.0-(x/(x+1.0))*1.46*0.6;
 		band->ev_thresh_max = EVENT_THRESH_MAX * ev_thresh_mult;
 		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
+		event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH));
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
 		ewma_init(&band->bg_cs, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
@@ -681,18 +686,18 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		struct matrix4_band *band = &state->band[k];
 		const double fc2 = fb_fc[k]*fb_fc[k];
 		const double shelf_norm_f2 = fc2/shelf_f02;
-		const double shelf_mag = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
-		band->surr_mult = (shelf_mag-1.0)*config.shelf_pwrcmp + 1.0;
-		band->shape_mult = shelf_mag/band->surr_mult;
-		band->surr_mult *= config.surr_mult[0];
+		band->shelf_mult = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
+		band->shape_mult = 1.0;
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
 			band->shape_mult *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
-		/* LOG_FMT(LL_VERBOSE, "%s: band %d: surr_mult=%.4g shape_mult=%.4g",
-				argv[0], k, band->surr_mult, band->shape_mult); */
+		/* LOG_FMT(LL_VERBOSE, "%s: band %d: shelf_mult=%.4g shape_mult=%.4g",
+				argv[0], k, band->shelf_mult, band->shape_mult); */
 	}
-	state->base_surr_mult = config.surr_mult[1];
+	state->surr_mult[0] = config.surr_mult[0];
+	state->surr_mult[1] = config.surr_mult[1];
+	state->shelf_pwrcmp = config.shelf_pwrcmp;
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));

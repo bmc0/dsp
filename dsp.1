@@ -235,12 +235,11 @@ separation of sounds encoded from 0° to \-22.5° in the C/S axis in all
 four outputs. \fIv3\fR adds full steering of sounds encoded to the left and
 right surround positions (L/R=±22.5° C/S=\-22.5°). The default is \fIv3\fR.
 .TP
-shelf=\fIgain\fR[:\fIf0\fR[\fBk\fR][:\fIpwrcmp\fR]]
+shelf=\fIgain\fR|\fInone\fR[:\fIf0\fR[\fBk\fR][:\fIpwrcmp\fR]]
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to
 \-22.5°. \fIpwrcmp\fR is the high-frequency power compensation factor. The
-default values for \fIgain\fR and \fIf0\fR are \-3dB and 500Hz, respectively.
-\fIpwrcmp\fR defaults to 0.3 for \fBmatrix4\fR and 0.8 for \fBmatrix4_mb\fR.
+default values are \-3dB, 500Hz, and 1, respectively.
 .TP
 lowpass=\fIf0\fR[\fBk\fR]|\fInone\fR
 Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR
