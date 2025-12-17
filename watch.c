@@ -47,10 +47,13 @@ struct watch_node {
 
 static struct {
 	pthread_t thread;
-	pthread_mutex_t init_lock, lock;  /* note: .lock must be recursive */
+	pthread_mutex_t init_lock, lock;
 	struct watch_list list;
 	int init_count;
-} watch_state = { .init_lock = PTHREAD_MUTEX_INITIALIZER };
+} watch_state = {
+	.init_lock = PTHREAD_MUTEX_INITIALIZER,
+	.lock = PTHREAD_MUTEX_INITIALIZER,
+};
 
 static void watch_list_append(struct watch_list *list, struct watch_node *node)
 {
@@ -111,23 +114,32 @@ static void watch_reload(struct watch_node *node)
 
 static void * watch_worker(void *arg)
 {
-	struct stat sb;
+	const struct timespec poll_int = {
+		.tv_sec = (POLL_INTERVAL)/1000,
+		.tv_nsec = ((POLL_INTERVAL)%1000)*1000000
+	};
 	for (;;) {
-		struct timespec t = (struct timespec) {
-			.tv_sec = (POLL_INTERVAL)/1000,
-			.tv_nsec = ((POLL_INTERVAL)%1000)*1000000
-		};
-		nanosleep(&t, NULL);
+		nanosleep(&poll_int, NULL);
 		int old_cs;
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cs);
 		pthread_mutex_lock(&watch_state.lock);
-		for (struct watch_node *node = watch_state.list.head; node; node = node->next) {
+		struct watch_list reload_list = watch_state.list;
+		watch_state.list.tail = watch_state.list.head = NULL;
+		pthread_mutex_unlock(&watch_state.lock);
+		for (struct watch_node *node = reload_list.head; node; node = node->next) {
+			struct stat sb;
 			if (stat(node->path, &sb) < 0)
 				LOG_FMT(LL_VERBOSE, "%s: warning: stat() failed: %s: %s", node->e->name, node->path, strerror(errno));
 			else if (sb.st_mtim.tv_sec != node->last_mtime.tv_sec || sb.st_mtim.tv_nsec != node->last_mtime.tv_nsec) {
 				node->last_mtime = sb.st_mtim;
 				watch_reload(node);
 			}
+		}
+		pthread_mutex_lock(&watch_state.lock);
+		if (watch_state.list.tail == NULL) watch_state.list = reload_list;
+		else {
+			watch_state.list.tail->next = reload_list.head;
+			watch_state.list.tail = reload_list.tail;
 		}
 		pthread_mutex_unlock(&watch_state.lock);
 		pthread_setcancelstate(old_cs, &old_cs);
@@ -218,7 +230,6 @@ void watch_effect_destroy(struct effect *e)
 	if (--watch_state.init_count == 0) {
 		pthread_cancel(watch_state.thread);
 		pthread_join(watch_state.thread, NULL);
-		pthread_mutex_destroy(&watch_state.lock);
 		/* LOG_FMT(LL_VERBOSE, "%s: info: worker thread exited", e->name); */
 	}
 	pthread_mutex_unlock(&watch_state.init_lock);
@@ -242,7 +253,6 @@ ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 
 struct effect * watch_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	pthread_mutexattr_t m_attr;
 	struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
 	struct watch_node *node;
 	struct effect *e;
@@ -302,14 +312,9 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 
 	pthread_mutex_lock(&watch_state.init_lock);
 	if (watch_state.init_count == 0) {
-		pthread_mutexattr_init(&m_attr);
-		pthread_mutexattr_settype(&m_attr, PTHREAD_MUTEX_RECURSIVE);
-		pthread_mutex_init(&watch_state.lock, &m_attr);
-		pthread_mutexattr_destroy(&m_attr);
 		/* LOG_FMT(LL_VERBOSE, "%s: info: starting worker thread", argv[0]); */
 		if ((errno = pthread_create(&watch_state.thread, NULL, watch_worker, NULL)) != 0) {
 			LOG_FMT(LL_ERROR, "%s: error: pthread_create() failed: %s", argv[0], strerror(errno));
-			pthread_mutex_destroy(&watch_state.lock);
 			watch_node_destroy(node);
 			free(e);
 			pthread_mutex_unlock(&watch_state.init_lock);
