@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2024-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2024-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 #include <string.h>
 #include <math.h>
 #include "fir_util.h"
+#include "delay.h"
 
 sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
@@ -112,46 +113,55 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 	return data;
 }
 
-int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istream, struct codec_params *p, struct dsp_getopt_state *g, int argc, const char *const *argv, const char *optstr,
-	int (*extra_opts_fn)(const struct effect_info *, const struct stream_info *, const struct codec_params *, int, const char *, void *), void *extra_opts_data)
+int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istream, struct fir_config *config, struct dsp_getopt_state *g, int argc, const char *const *argv, const char *optstr,
+	int (*extra_opts_fn)(const struct effect_info *, const struct stream_info *, const struct fir_config *, int, const char *, void *), void *extra_opts_data)
 {
 	int opt, err;
 	char *endptr;
 
-	*p = (struct codec_params) CODEC_PARAMS_AUTO(NULL, CODEC_MODE_READ);
-	p->fs = istream->fs;
-	p->channels = istream->channels;
-	if (optstr == NULL) optstr = FIR_INPUT_CODEC_OPTS;
+	*config = (struct fir_config) {0};
+	config->p = (struct codec_params) CODEC_PARAMS_AUTO(NULL, CODEC_MODE_READ);
+	config->p.fs = istream->fs;
+	config->p.channels = istream->channels;
+	if (optstr == NULL) optstr = FIR_DEFAULT_OPTSTR;
 
-	while ((opt = dsp_getopt(g, argc, argv, optstr)) != -1) {
+	while ((opt = dsp_getopt(g, argc-1, argv, optstr)) != -1) {
 		switch (opt) {
-		case 't': p->type   = g->arg; break;
-		case 'e': p->enc    = g->arg; break;
-		case 'B': p->endian = CODEC_ENDIAN_BIG;    break;
-		case 'L': p->endian = CODEC_ENDIAN_LITTLE; break;
-		case 'N': p->endian = CODEC_ENDIAN_LITTLE; break;
+		case 'a':
+			config->do_align = 1;
+			if (g->arg) {
+				config->offset = parse_len(g->arg, istream->fs, &endptr);
+				if (check_endptr(ei->name, g->arg, endptr, "offset"))
+					return 1;
+			}
+			break;
+		case 't': config->p.type   = g->arg; break;
+		case 'e': config->p.enc    = g->arg; break;
+		case 'B': config->p.endian = CODEC_ENDIAN_BIG;    break;
+		case 'L': config->p.endian = CODEC_ENDIAN_LITTLE; break;
+		case 'N': config->p.endian = CODEC_ENDIAN_LITTLE; break;
 		case 'r':
 			if (strcmp(g->arg, "any") == 0)
-				p->fs = 0;
+				config->p.fs = 0;
 			else {
-				p->fs = lround(parse_freq(g->arg, &endptr));
+				config->p.fs = lround(parse_freq(g->arg, &endptr));
 				if (check_endptr(ei->name, g->arg, endptr, "sample rate"))
 					return 1;
-				if (p->fs <= 0) {
+				if (config->p.fs <= 0) {
 					LOG_FMT(LL_ERROR, "%s: error: sample rate must be > 0", ei->name);
 					return 1;
 				}
-				if (p->fs != istream->fs) {
-					LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: stream_fs=%d requested_fs=%d", ei->name, istream->fs, p->fs);
+				if (config->p.fs != istream->fs) {
+					LOG_FMT(LL_ERROR, "%s: error: sample rate mismatch: stream_fs=%d requested_fs=%d", ei->name, istream->fs, config->p.fs);
 					return 1;
 				}
 			}
 			break;
 		case 'c':
-			p->channels = strtol(g->arg, &endptr, 10);
+			config->p.channels = strtol(g->arg, &endptr, 10);
 			if (check_endptr(ei->name, g->arg, endptr, "number of channels"))
 				return 1;
-			if (p->channels <= 0) {
+			if (config->p.channels <= 0) {
 				LOG_FMT(LL_ERROR, "%s: error: number of channels must be > 0", ei->name);
 				return 1;
 			}
@@ -164,9 +174,31 @@ int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istre
 				LOG_FMT(LL_ERROR, "%s: error: illegal option '%c'", ei->name, g->opt);
 				return 1;
 			}
-			else if ((err = extra_opts_fn(ei, istream, p, opt, g->arg, extra_opts_data)) != 0)
+			else if ((err = extra_opts_fn(ei, istream, config, opt, g->arg, extra_opts_data)) != 0)
 				return err;
 		}
 	}
 	return 0;
+}
+
+struct effect * fir_init_align(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector,
+	const struct fir_config *config, const sample_t *filter_data, int filter_channels, ssize_t filter_frames)
+{
+	if (!config->do_align) return NULL;
+	ssize_t offset = 0;
+	if (config->offset > 0)
+		offset = config->offset;
+	else if (config->offset < 0)
+		offset = filter_frames + config->offset;
+	else {
+		sample_t peak = 0.0;
+		for (ssize_t i = 0; i < filter_frames*filter_channels; ++i) {
+			if (filter_data[i] > peak) {
+				peak = filter_data[i];
+				offset = i;
+			}
+		}
+	}
+	if (offset == 0) return NULL;
+	return delay_effect_init_with_params(ei, istream, channel_selector, -offset, 0, 0);
 }

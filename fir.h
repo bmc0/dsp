@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,12 +22,13 @@
 #ifdef HAVE_FFTW3
 #include "dsp.h"
 #include "effect.h"
+#include "fir_util.h"
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int);
 struct effect * fir_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define FIR_EFFECT_INFO \
-	{ "fir", "[input_options] [file:][~/]filter_path|coefs:list[/list...]", fir_effect_init, 0 }
+	{ "fir", FIR_USAGE_OPTS " " FIR_USAGE_FILTER, fir_effect_init, 0 }
 #else
 #define FIR_EFFECT_INFO \
 	{ "fir", NULL, NULL, 0 }

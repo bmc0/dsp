@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2016-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2016-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,7 +25,6 @@ extern "C" {
 	#include "util.h"
 	#include "codec.h"
 	#include "sampleconv.h"
-	#include "fir_util.h"
 }
 
 struct zita_convolver_state {
@@ -239,11 +238,11 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	ssize_t filter_frames;
 	struct effect *e;
 	sample_t *filter_data;
-	struct codec_params c_params;
+	struct fir_config config;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	char *endptr;
 
-	int err = fir_parse_opts(ei, istream, &c_params, &g, argc, argv, NULL, NULL, NULL);
+	int err = fir_parse_opts(ei, istream, &config, &g, argc, argv, NULL, NULL, NULL);
 	if (err || g.ind < argc-3 || g.ind > argc-1) {
 		print_effect_usage(ei);
 		return NULL;
@@ -258,11 +257,12 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 		CHECK_ENDPTR(argv[g.ind], endptr, "max_part_len", return NULL);
 		++g.ind;
 	}
-	c_params.path = argv[g.ind];
-	filter_data = fir_read_filter(ei, istream, dir, &c_params, &filter_channels, &filter_frames);
+	config.p.path = argv[g.ind];
+	filter_data = fir_read_filter(ei, istream, dir, &config.p, &filter_channels, &filter_frames);
 	if (filter_data == NULL)
 		return NULL;
 	e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, min_part_len, max_part_len);
+	e->next = fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames);
 	free(filter_data);
 	return e;
 }

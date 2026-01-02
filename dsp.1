@@ -326,12 +326,16 @@ default value is 5.
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]
 Sinc resampler. Ignores the channel selector.
 .TP
-\fBfir\fR [\fIinput_options\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
+\fBfir\fR [\fB\-a\fR [\fIoffset\fR[\fBs\fR|\fBm\fR|\fBS\fR]] [\fIinput_options\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
 filters up to 16 taps. For longer filters, the latency is equal to the
 \fIfft_len\fR reported in verbose mode. Each \fIlist\fR is a comma-separated list
 of coefficients for one filter channel. Missing values are filled with
 zeros.
+.sp 0.5
+If \fB\-a\fR is given and \fIoffset\fR is zero or unspecified, channels are aligned
+to the filter's peak sample. Positive or negative \fIoffset\fR values specify a
+fixed offset relative to the start or end of the filter, respectively.
 .sp 0.5
 The \fIinput_options\fR are useful mostly when loading raw (headerless) input
 files and are as follows:
@@ -357,23 +361,25 @@ Number of channels.
 By default, the sample rate of the filter must match that of the effect.
 Mismatches may be ignored by setting the sample rate to ``any''.
 .TP
-\fBfir_p\fR [\fIinput_options\fR] [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
+\fBfir_p\fR [\fB\-a\fR [\fIoffset\fR[\fBs\fR|\fBm\fR|\fBS\fR]] [\fIinput_options\fR] [\fImax_part_len\fR] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
 a bit slower than the \fBzita_convolver\fR effect except for very long filters
 on some hardware. \fImax_part_len\fR must be a power of 2 and has a default
 value of 16384. Each \fIlist\fR is a comma-separated list of coefficients for
 one filter channel. Missing values are filled with zeros.
 .sp 0.5
-See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
+See the \fBfir\fR effect description for an explanation of the \fB\-a\fR option and
+the \fIinput_options\fR.
 .TP
-\fBzita_convolver\fR [\fIinput_options\fR] [\fImin_part_len\fR [\fImax_part_len\fR]] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
+\fBzita_convolver\fR [\fB\-a\fR [\fIoffset\fR[\fBs\fR|\fBm\fR|\fBS\fR]] [\fIinput_options\fR] [\fImin_part_len\fR [\fImax_part_len\fR]] [file:][~/]\fIfilter_path\fR|coefs:\fIlist\fR[/\fIlist\fR...]
 Partitioned 32-bit FFT convolution using the zita-convolver library.
 Latency is equal to \fImin_part_len\fR (64 samples by default).
 \fI{min,max}_part_len\fR must be powers of 2 between 64 and 8192. Each \fIlist\fR
 is a comma-separated list of coefficients for one filter channel. Missing
 values are filled with zeros.
 .sp 0.5
-See the \fBfir\fR effect description for an explanation of the \fIinput_options\fR.
+See the \fBfir\fR effect description for an explanation of the \fB\-a\fR option and
+the \fIinput_options\fR.
 .TP
 \fBhilbert\fR [\fB\-pz\fR] [\fB\-a\fR \fIangle\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be

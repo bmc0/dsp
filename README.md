@@ -312,12 +312,16 @@ Example:
 	default value is 5.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
-* `fir [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
+* `fir [-a [offset[s|m|S]]] [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
 	Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
 	filters up to 16 taps. For longer filters, the latency is equal to the
 	`fft_len` reported in verbose mode. Each `list` is a comma-separated list
 	of coefficients for one filter channel. Missing values are filled with
 	zeros.
+
+	If `-a` is given and `offset` is zero or unspecified, channels are aligned
+	to the filter's peak sample. Positive or negative `offset` values specify a
+	fixed offset relative to the start or end of the filter, respectively.
 
 	The `input_options` are useful mostly when loading raw (headerless) input
 	files and are as follows:
@@ -333,22 +337,24 @@ Example:
 	By default, the sample rate of the filter must match that of the effect.
 	Mismatches may be ignored by setting the sample rate to "any".
 
-* `fir_p [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
+* `fir_p [-a [offset[s|m|S]]] [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
 	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
 	a bit slower than the `zita_convolver` effect except for very long filters
 	on some hardware. `max_part_len` must be a power of 2 and has a default
 	value of 16384. Each `list` is a comma-separated list of coefficients for
 	one filter channel. Missing values are filled with zeros.
 
-	See the `fir` effect description an explanation of the `input_options`.
-* `zita_convolver [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]`  
+	See the `fir` effect description for an explanation of the `-a` option and
+	the `input_options`.
+* `zita_convolver [-a [offset[s|m|S]]] [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192. Each `list`
 	is a comma-separated list of coefficients for one filter channel. Missing
 	values are filled with zeros.
 
-	See the `fir` effect description an explanation of the `input_options`.
+	See the `fir` effect description for an explanation of the `-a` option and
+	the `input_options`.
 * `hilbert [-pz] [-a angle] taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
 	odd. Bandwidth is controlled by the number of taps. If `-p` is given, the
