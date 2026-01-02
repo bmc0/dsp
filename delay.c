@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -43,6 +43,7 @@ struct delay_state {
 };
 
 #define DELAY_MIN_FRAC 0.1
+#define DELAY_FD_AP_N_DEFAULT 5
 
 #define DELAY_RUN_DEFINE_FN(X, C) \
 	static void delay_run ## X (struct delay_state *state, ssize_t frames, sample_t *ibuf_p, int channels) \
@@ -173,13 +174,94 @@ void delay_effect_destroy(struct effect *e)
 	free(state);
 }
 
+struct effect * delay_effect_init_with_params(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, double samples, int do_frac, int fd_ap_n)
+{
+	int is_offset = 0;
+	ssize_t samples_int;
+	double samples_frac;
+	if (fd_ap_n < 1) fd_ap_n = DELAY_FD_AP_N_DEFAULT;
+	if (do_frac && fabs(samples - rint(samples)) >= DBL_EPSILON) {  /* ignore extremely small fractional delay */
+		samples_int = (ssize_t) floor(fabs(samples)) - (fd_ap_n-1);
+		samples_frac = fabs(samples) - floor(fabs(samples));
+		if (samples_frac < DELAY_MIN_FRAC) {
+			samples_int -= 1;
+			samples_frac += 1.0;
+		}
+		samples_frac += fd_ap_n-1;
+		is_offset = (samples_int < 0);
+		if (samples < 0.0) {
+			samples_int = -samples_int;
+			samples_frac = -samples_frac;
+		}
+	}
+	else {
+		do_frac = 0;
+		samples_int = lround(samples);
+		samples_frac = 0.0;
+		samples = (double) samples_int;
+	}
+	struct effect *e = calloc(1, sizeof(struct effect));
+	if (samples_int == 0 && samples_frac == 0.0) {
+		if (strcmp(ei->name, "delay") == 0)
+			LOG_FMT(LL_VERBOSE, "%s: info: delay is zero; no proccessing will be done", ei->name);
+		return e;
+	}
+	e->name = ei->name;
+	e->istream.fs = e->ostream.fs = istream->fs;
+	e->istream.channels = e->ostream.channels = istream->channels;
+	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->run = delay_effect_run;
+	e->delay = delay_effect_delay;
+	e->reset = delay_effect_reset;
+	e->plot = delay_effect_plot;
+	e->drain = delay_effect_drain;
+	e->destroy = delay_effect_destroy;
+
+	struct delay_state *state = calloc(1, sizeof(struct delay_state));
+	e->data = state;
+	if (do_frac) {
+		if (fd_ap_n > 1) state->run = delay_run_frac_n;
+		else state->run = delay_run_frac_1;
+	}
+	else state->run = delay_run;
+	state->len = (samples_int < 0) ? -samples_int : samples_int;
+	state->samples = samples;
+	state->fd_ap_n = (do_frac) ? fd_ap_n : 0;
+	state->is_offset = is_offset;
+	if (do_frac) {
+		LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd%+g samples)",
+			ei->name, samples / istream->fs, samples_int, samples_frac);
+	}
+	else {
+		LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd sample%s)",
+			ei->name, (double) samples_int / istream->fs, samples_int, (state->len == 1) ? "" : "s");
+	}
+	state->cs = calloc(istream->channels, sizeof(struct delay_channel_state));
+	for (int k = 0; k < istream->channels; ++k) {
+		struct delay_channel_state *cs = &state->cs[k];
+		if (state->len > 0 && !TEST_BIT(channel_selector, k, samples_int < 0))
+			cs->buf = calloc(state->len, sizeof(sample_t));
+		cs->has_frac = (do_frac && !TEST_BIT(channel_selector, k, samples < 0.0));
+		if (cs->has_frac) {
+			if (state->fd_ap_n > 1) {
+				if ((cs->fd_ap.nth = thiran_ap_new(fd_ap_n, fabs(samples_frac))) == NULL) {
+					LOG_FMT(LL_ERROR, "%s: error: thiran_ap_new() failed", ei->name);
+					delay_effect_destroy(e);
+					free(e);
+					return NULL;
+				}
+			}
+			else cs->fd_ap.first.c0 = (1.0-fabs(samples_frac)) / (1.0+fabs(samples_frac));
+		}
+	}
+	return e;
+}
+
 struct effect * delay_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	char *endptr;
-	struct effect *e;
-	struct delay_state *state = NULL;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
-	int do_frac = 0, fd_ap_n = 5, is_offset = 0, opt;
+	int do_frac = 0, fd_ap_n = DELAY_FD_AP_N_DEFAULT, opt;
 
 	while ((opt = dsp_getopt(&g, argc-1, argv, "f::")) != -1) {
 		switch (opt) {
@@ -201,80 +283,6 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 	}
 	double samples = parse_len_frac(argv[g.ind], istream->fs, &endptr);
 	CHECK_ENDPTR(argv[g.ind], endptr, "delay", return NULL);
-	ssize_t samples_int;
-	double samples_frac;
-	if (do_frac && fabs(samples - rint(samples)) >= DBL_EPSILON) {  /* ignore extremely small fractional delay */
-		samples_int = (ssize_t) floor(fabs(samples)) - (fd_ap_n-1);
-		samples_frac = fabs(samples) - floor(fabs(samples));
-		if (samples_frac < DELAY_MIN_FRAC) {
-			samples_int -= 1;
-			samples_frac += 1.0;
-		}
-		samples_frac += fd_ap_n-1;
-		is_offset = (samples_int < 0);
-		if (samples < 0.0) {
-			samples_int = -samples_int;
-			samples_frac = -samples_frac;
-		}
-	}
-	else {
-		do_frac = 0;
-		samples_int = lround(samples);
-		samples_frac = 0.0;
-		samples = (double) samples_int;
-	}
-	e = calloc(1, sizeof(struct effect));
-	if (samples_int == 0 && samples_frac == 0.0) {
-		LOG_FMT(LL_VERBOSE, "%s: info: delay is zero; no proccessing will be done", argv[0]);
-		return e;
-	}
-	e->name = ei->name;
-	e->istream.fs = e->ostream.fs = istream->fs;
-	e->istream.channels = e->ostream.channels = istream->channels;
-	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
-	e->run = delay_effect_run;
-	e->delay = delay_effect_delay;
-	e->reset = delay_effect_reset;
-	e->plot = delay_effect_plot;
-	e->drain = delay_effect_drain;
-	e->destroy = delay_effect_destroy;
 
-	e->data = state = calloc(1, sizeof(struct delay_state));
-	if (do_frac) {
-		if (fd_ap_n > 1) state->run = delay_run_frac_n;
-		else state->run = delay_run_frac_1;
-	}
-	else state->run = delay_run;
-	state->len = (samples_int < 0) ? -samples_int : samples_int;
-	state->samples = samples;
-	state->fd_ap_n = (do_frac) ? fd_ap_n : 0;
-	state->is_offset = is_offset;
-	if (do_frac) {
-		LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd%+g samples)",
-			argv[0], samples / istream->fs, samples_int, samples_frac);
-	}
-	else {
-		LOG_FMT(LL_VERBOSE, "%s: info: actual delay is %gs (%zd sample%s)",
-			argv[0], (double) samples_int / istream->fs, samples_int, (state->len == 1) ? "" : "s");
-	}
-	state->cs = calloc(istream->channels, sizeof(struct delay_channel_state));
-	for (int k = 0; k < istream->channels; ++k) {
-		struct delay_channel_state *cs = &state->cs[k];
-		if (state->len > 0 && !TEST_BIT(channel_selector, k, samples_int < 0))
-			cs->buf = calloc(state->len, sizeof(sample_t));
-		cs->has_frac = (do_frac && !TEST_BIT(channel_selector, k, samples < 0.0));
-		if (cs->has_frac) {
-			if (state->fd_ap_n > 1) {
-				if ((cs->fd_ap.nth = thiran_ap_new(fd_ap_n, fabs(samples_frac))) == NULL) {
-					LOG_FMT(LL_ERROR, "%s: error: thiran_ap_new() failed", argv[0]);
-					delay_effect_destroy(e);
-					free(e);
-					return NULL;
-				}
-			}
-			else cs->fd_ap.first.c0 = (1.0-fabs(samples_frac)) / (1.0+fabs(samples_frac));
-		}
-	}
-
-	return e;
+	return delay_effect_init_with_params(ei, istream, channel_selector, samples, do_frac, fd_ap_n);
 }
