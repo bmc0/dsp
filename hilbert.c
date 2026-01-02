@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,7 @@
 #include "fir.h"
 #include "fir_p.h"
 #include "zita_convolver.h"
+#include "delay.h"
 #include "util.h"
 
 struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -30,13 +31,14 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	char *endptr;
 	struct effect *e;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
-	int conv = 0, opt;
+	int conv = 0, do_align = 0, opt;
 	double angle = -M_PI_2;
 
-	while ((opt = dsp_getopt(&g, argc-1, argv, "pza:")) != -1) {
+	while ((opt = dsp_getopt(&g, argc-1, argv, "pzca:")) != -1) {
 		switch (opt) {
 		case 'p': conv = 1; break;
 		case 'z': conv = 2; break;
+		case 'c': do_align = 1; break;
 		case 'a':
 			angle = strtod(g.arg, &endptr)/180.0*M_PI;
 			CHECK_ENDPTR(g.arg, endptr, "angle", return NULL);
@@ -86,5 +88,7 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	}
 	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
+	if (do_align)
+		e->next = delay_effect_init_with_params(ei, istream, channel_selector, -taps/2, 0, 0);
 	return e;
 }

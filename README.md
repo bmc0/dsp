@@ -355,12 +355,13 @@ Example:
 
 	See the `fir` effect description for an explanation of the `-a` option and
 	the `input_options`.
-* `hilbert [-pz] [-a angle] taps`  
+* `hilbert [-pzc] [-a angle] taps`  
 	Simple FIR approximation of a Hilbert transform. The number of taps must be
 	odd. Bandwidth is controlled by the number of taps. If `-p` is given, the
 	`fir_p` convolution engine is used instead of the default `fir` engine.
-	Similarly, if `-z` is given, `zita_convolver` is used (if available).
-	The `-a` option sets the phase shift in degrees. The default is -90°.
+	Similarly, if `-z` is given, `zita_convolver` is used (if available). If
+	`-c` is given, channels are automatically aligned to the middle tap. The
+	`-a` option sets the phase shift in degrees. The default is -90°.
 * `decorrelate [options] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187). With

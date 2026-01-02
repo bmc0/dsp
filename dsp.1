@@ -381,12 +381,13 @@ values are filled with zeros.
 See the \fBfir\fR effect description for an explanation of the \fB\-a\fR option and
 the \fIinput_options\fR.
 .TP
-\fBhilbert\fR [\fB\-pz\fR] [\fB\-a\fR \fIangle\fR] \fItaps\fR
+\fBhilbert\fR [\fB\-pzc\fR] [\fB\-a\fR \fIangle\fR] \fItaps\fR
 Simple FIR approximation of a Hilbert transform. The number of taps must be
 odd. Bandwidth is controlled by the number of taps. If \fB\-p\fR is given, the
 \fBfir_p\fR convolution engine is used instead of the default \fBfir\fR engine.
-Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available).
-The \fB\-a\fR option sets the phase shift in degrees. The default is -90°.
+Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available). If
+\fB\-c\fR is given, channels are automatically aligned to the middle tap. The
+\fB\-a\fR option sets the phase shift in degrees. The default is -90°.
 .TP
 \fBdecorrelate\fR [\fIoptions\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,7 +26,7 @@
 struct effect * hilbert_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define HILBERT_EFFECT_INFO \
-	{ "hilbert", "[-pz] [-a angle] taps", hilbert_effect_init, 0 }
+	{ "hilbert", "[-pzc] [-a angle] taps", hilbert_effect_init, 0 }
 #else
 #define HILBERT_EFFECT_INFO \
 	{ "hilbert", NULL, NULL, 0 }
