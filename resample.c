@@ -26,7 +26,7 @@
 #include "util.h"
 
 /* Tunables */
-#define DEFAULT_BANDWIDTH   0.938
+#define DEFAULT_BANDWIDTH   0.939
 #define SINC_SELF_CONVOLVE  0
 #define SINC_MAX_OVERSAMPLE 2
 /*
@@ -62,7 +62,7 @@ static double window(const double x)
 	const double a[] = {0.355768, 0.487396, 0.144232, 0.012604};
 #elif WINDOW_FUNCTION == 3
 	/* Albrecht 9-term, L=3 */
-	#define M_FACT 18
+	#define M_FACT 17.7822
 	const double a[] = {
 		2.318028013590306028393e-1, 3.932575471789488615081e-1, 2.385434764970747429454e-1,
 		1.014370437785239811268e-1, 2.911516061918003918645e-2, 5.280988177252078698806e-3,
@@ -270,9 +270,9 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	const int min_factor = MINIMUM(state->ratio.n, state->ratio.d);
 
 	/* calulate params for windowed sinc function */
-	const double width = (min_rate - min_rate * bw) / 2.0;
-	const double fc = (min_rate - width) / max_rate;
-	const int m = lround(M_FACT / (width / max_rate));
+	const int m = lround(2.0*M_FACT*max_rate / (min_rate*(1.0-bw)));
+	const double width = M_FACT*max_rate / m;
+	const double fc = (min_rate-width) / max_rate;
 	const int sinc_os = MINIMUM(min_factor, SINC_MAX_OVERSAMPLE);
 	const double fc_os = fc / sinc_os;
 	const int m_os = (m + 1) * sinc_os - 1;
