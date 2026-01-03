@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,9 +26,15 @@
 #include "util.h"
 
 /* Tunables */
-static const double default_bw = 0.95;  /* default bandwidth */
+#define DEFAULT_BANDWIDTH   0.938
+#define SINC_SELF_CONVOLVE  0
 #define SINC_MAX_OVERSAMPLE 2
-#define WINDOW_SHAPE        2  /* 1: Blackman; 2: Nuttall, continuous first derivative */
+/*
+ * 1: Blackman (-58dB, 18dB/oct)
+ * 2: Nuttall 4-term, continuous first derivative (-93dB, 18dB/oct)
+ * 3: Albrecht 9-term, L=3 (-220dB, 42dB/oct)
+*/
+#define WINDOW_FUNCTION 3
 
 struct resample_state {
 	struct {
@@ -45,19 +51,32 @@ struct resample_state {
 
 static double window(const double x)
 {
-#if WINDOW_SHAPE == 1
-	/* Blackman (~75dB stopband attenuation) */
+	if (x >= 1.0 || x <= 0.0) return 0.0;
+#if WINDOW_FUNCTION == 1
+	/* Blackman */
 	#define M_FACT 6
-	if (x >= 1.0 || x <= 0.0) return 0.0;
-	return 0.42 - 0.5*cos(2*M_PI*x) + 0.08*cos(4*M_PI*x);
-#elif WINDOW_SHAPE == 2
-	/* Nuttall window (continuous first derivative) (~112dB stopband attenuation) */
+	const double a[] = {0.42, 0.5, 0.08};
+#elif WINDOW_FUNCTION == 2
+	/* Nuttall 4-term, continuous first derivative */
 	#define M_FACT 8
-	if (x >= 1.0 || x <= 0.0) return 0.0;
-	return 0.355768 - 0.487396*cos(2*M_PI*x) + 0.144232*cos(4*M_PI*x) - 0.012604*cos(6*M_PI*x);
+	const double a[] = {0.355768, 0.487396, 0.144232, 0.012604};
+#elif WINDOW_FUNCTION == 3
+	/* Albrecht 9-term, L=3 */
+	#define M_FACT 18
+	const double a[] = {
+		2.318028013590306028393e-1, 3.932575471789488615081e-1, 2.385434764970747429454e-1,
+		1.014370437785239811268e-1, 2.911516061918003918645e-2, 5.280988177252078698806e-3,
+		5.382909093381945363528e-4, 2.442086527507867730168e-5, 2.706153764205043532817e-7,
+	};
 #else
 	#error "error: illegal WINDOW_SHAPE"
 #endif
+	double w = a[0];
+	for (int i = 1; i < LENGTH(a); ++i) {
+		const double c = (i&1) ? -a[i] : a[i];
+		w += c*cos(2*i*M_PI*x);
+	}
+	return w;
 }
 
 static double norm_sinc(const double x, const double fc)
@@ -146,11 +165,10 @@ ssize_t resample_effect_delay(struct effect *e)
 
 void resample_effect_reset(struct effect *e)
 {
-	int i;
 	struct resample_state *state = (struct resample_state *) e->data;
 	state->in_buf_pos = state->out_buf_pos = 0;
 	state->has_output = 0;
-	for (i = 0; i < e->ostream.channels; ++i)
+	for (int i = 0; i < e->ostream.channels; ++i)
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 }
 
@@ -183,12 +201,11 @@ sample_t * resample_effect_drain2(struct effect *e, ssize_t *frames, sample_t *b
 
 void resample_effect_destroy(struct effect *e)
 {
-	int i;
 	struct resample_state *state = (struct resample_state *) e->data;
 	fftw_free(state->sinc_fr);
 	fftw_free(state->tmp_fr);
 	fftw_free(state->tmp_fr_2);
-	for (i = 0; i < e->ostream.channels; ++i) {
+	for (int i = 0; i < e->ostream.channels; ++i) {
 		fftw_free(state->input[i]);
 		fftw_free(state->output[i]);
 		fftw_free(state->overlap[i]);
@@ -205,13 +222,9 @@ void resample_effect_destroy(struct effect *e)
 
 struct effect * resample_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct resample_state *state;
 	char *endptr;
 	int rate;
-	double bw = default_bw;
-	sample_t *sinc;
-	fftw_plan sinc_plan;
+	double bw = DEFAULT_BANDWIDTH;
 
 	if (argc < 2 || argc > 3) {
 		print_effect_usage(ei);
@@ -227,10 +240,10 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 		rate = lround(parse_freq(argv[1], &endptr));
 		CHECK_ENDPTR(argv[1], endptr, "fs", return NULL);
 	}
-	CHECK_RANGE(bw >= 0.8 && bw <= 0.999, "bandwidth", return NULL);
+	CHECK_RANGE(bw >= 0.7 && bw <= 0.999, "bandwidth", return NULL);
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 
-	e = calloc(1, sizeof(struct effect));
+	struct effect *e = calloc(1, sizeof(struct effect));
 	if (rate == istream->fs) {
 		LOG_FMT(LL_VERBOSE, "%s: info: sample rates match; no proccessing will be done", argv[0]);
 		return e;  /* Note: the effect will not be used because run() is unset */
@@ -245,7 +258,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	e->drain2 = resample_effect_drain2;
 	e->destroy = resample_effect_destroy;
 
-	state = calloc(1, sizeof(struct resample_state));
+	struct resample_state *state = calloc(1, sizeof(struct resample_state));
 	e->data = state;
 
 	const int max_rate = MAXIMUM(rate, istream->fs);
@@ -265,9 +278,13 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	const int m_os = (m + 1) * sinc_os - 1;
 
 	/* determine array lengths */
-	const int m_conv = (m + 1) * 2 - 1;  /* after convolving sinc function with itself */
-	int len_mult = (m_conv + 1) / max_factor;
-	if ((m_conv + 1) % max_factor != 0) len_mult += 1;
+#if SINC_SELF_CONVOLVE
+	const int m1 = (m + 1) * 2 - 1;
+#else
+	const int m1 = m;
+#endif
+	int len_mult = (m1 + 1) / max_factor;
+	if ((m1 + 1) % max_factor != 0) len_mult += 1;
 	if (len_mult > 16) {  /* 17 is the first slow size */
 		const int fast_len_mult = next_fast_fftw_len(len_mult);
 		if (fast_len_mult != len_mult
@@ -284,9 +301,9 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 
 	/* calculate output delay */
 	if (rate == max_rate)
-		state->out_delay = m_conv / 2;
+		state->out_delay = m1 / 2;
 	else
-		state->out_delay = lround(m_conv / 2 * ((double) state->ratio.n / state->ratio.d));
+		state->out_delay = lround(m1 / 2 * ((double) state->ratio.n / state->ratio.d));
 
 	/* allocate arrays, construct fftw plans */
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -296,12 +313,12 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
 	state->tmp_fr = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
 	state->tmp_fr_2 = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
-	sinc = fftw_malloc(sinc_len * 2 * sizeof(sample_t));
+	sample_t *sinc = fftw_malloc(sinc_len * 2 * sizeof(sample_t));
 	state->sinc_fr = fftw_malloc(state->sinc_fr_len * sizeof(fftw_complex));
 
 	dsp_fftw_acquire();
 	const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
-	sinc_plan = fftw_plan_dft_r2c_1d(sinc_len * 2, sinc, state->sinc_fr, FFTW_ESTIMATE);
+	fftw_plan sinc_plan = fftw_plan_dft_r2c_1d(sinc_len * 2, sinc, state->sinc_fr, FFTW_ESTIMATE);
 	for (int i = 0; i < e->ostream.channels; ++i) {
 		state->input[i] = fftw_malloc(state->in_len * 2 * sizeof(sample_t));
 		state->output[i] = fftw_malloc(state->out_len * 2 * sizeof(sample_t));
@@ -327,12 +344,14 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	fftw_destroy_plan(sinc_plan);
 	fftw_free(sinc);
 
+#if SINC_SELF_CONVOLVE
 	/* convolve sinc function with itself (doubles stopband attenuation) */
 	for (int i = 0; i < state->sinc_fr_len; ++i)
 		state->sinc_fr[i] *= state->sinc_fr[i];
+#endif
 
 	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%d in_len=%d out_len=%d sinc_oversample=%d",
-		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, m_conv+1, state->in_len, state->out_len, sinc_os);
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, m1+1, state->in_len, state->out_len, sinc_os);
 
 	return e;
 }
