@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,7 @@ struct effect {
 	char *channel_selector;  /* for use *only* by the effect */
 	int flags;
 	/* All functions may be NULL */
+	int (*prepare)(struct effect *);
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
 	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
 	void (*reset)(struct effect *);
@@ -50,7 +51,7 @@ struct effect {
 	void (*drain)(struct effect *, ssize_t *, sample_t *);
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
-	struct effect * (*merge)(struct effect *, struct effect *);
+	struct effect * (*merge)(struct effect *, struct effect *);  /* may not be called after prepare() */
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void *data;
 };

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -351,13 +351,24 @@ static void effects_chain_optimize(struct effects_chain *chain)
 #endif
 }
 
+static int effects_chain_prepare(struct effects_chain *chain)
+{
+	struct effect *e = chain->head;
+	while (e != NULL) {
+		if (e->prepare && e->prepare(e))
+			return 1;
+		e = e->next;
+	}
+	return 0;
+}
 
 int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
 {
 	int r = build_effects_chain_block(argc, argv, chain, stream, NULL, dir);
 	if (r) return r;
 	effects_chain_optimize(chain);
-	return 0;
+	r = effects_chain_prepare(chain);
+	return r;
 }
 
 int build_effects_chain_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
@@ -365,7 +376,8 @@ int build_effects_chain_from_file(const char *path, struct effects_chain *chain,
 	int r = build_effects_chain_block_from_file(path, chain, stream, channel_mask, dir, enforce_eof_marker);
 	if (r) return r;
 	effects_chain_optimize(chain);
-	return 0;
+	r = effects_chain_prepare(chain);
+	return r;
 }
 
 static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
