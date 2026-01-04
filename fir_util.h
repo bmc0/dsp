@@ -25,7 +25,7 @@
 #include "util.h"
 
 #define FIR_DEFAULT_OPTSTR "a::t:e:BLNr:c:"
-#define FIR_USAGE_OPTS   "[-a [offset[s|m|S]]] [input_options]"
+#define FIR_USAGE_OPTS   "[-a[offset[s|m|S]]] [input_options]"
 #define FIR_USAGE_FILTER "[file:][~/]filter_path|coefs:list[/list...]"
 
 struct fir_config {

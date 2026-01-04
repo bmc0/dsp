@@ -387,7 +387,6 @@ char * isolate(char *s, char c)
  * Slightly modified version of AT&T public domain getopt():
  *   - Returns ':' for a missing option argument.
  *   - Supports optional arguments (two colons).
- *   - Allows optional arguments to be in the next argv element.
  *   - Thread safe.
 */
 #define IS_OPT(S) ((S)[0] == '-' && (S)[1] != '\0')
@@ -416,15 +415,13 @@ int dsp_getopt(struct dsp_getopt_state *g, int argc, const char *const *argv, co
 	if (cp[1] == ':') {
 		if (argv[g->ind][g->sp + 1] != '\0')
 			g->arg = &argv[g->ind++][g->sp + 1];
+		else if (cp[2] == ':') {
+			++g->ind;
+			g->arg = NULL;
+		}
 		else if (++g->ind >= argc) {
 			g->sp = 1;
-			if (cp[2] == ':') g->arg = NULL;
-			else return ':';
-		}
-		else if (cp[2] == ':') {
-			if (!IS_OPT(argv[g->ind]) && strcmp(argv[g->ind], "--") != 0)
-				g->arg = argv[g->ind++];
-			else g->arg = NULL;
+			return ':';
 		}
 		else g->arg = argv[g->ind++];
 		g->sp = 1;

@@ -299,7 +299,7 @@ Example:
 	Convert stereo to mid/side.
 * `ms2st`
 	Convert mid/side to stereo.
-* `delay [-f [order]] delay[s|m|S]`  
+* `delay [-f[order]] delay[s|m|S]`  
 	Delay line. The unit for the delay argument depends on the suffix used:
 	`s` is seconds (the default), `m` is milliseconds, and `S` is samples. If
 	`delay` is negative, a positive delay is applied to all channels which are
@@ -312,7 +312,7 @@ Example:
 	default value is 5.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
-* `fir [-a [offset[s|m|S]]] [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
+* `fir [-a[offset[s|m|S]]] [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
 	Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
 	filters up to 16 taps. For longer filters, the latency is equal to the
 	`fft_len` reported in verbose mode. Each `list` is a comma-separated list
@@ -337,7 +337,7 @@ Example:
 	By default, the sample rate of the filter must match that of the effect.
 	Mismatches may be ignored by setting the sample rate to "any".
 
-* `fir_p [-a [offset[s|m|S]]] [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
+* `fir_p [-a[offset[s|m|S]]] [input_options] [max_part_len] [file:][~/]filter_path|coefs:list[/list...]`  
 	Zero-latency non-uniform partitioned 64-bit direct/FFT convolution. Usually
 	a bit slower than the `zita_convolver` effect except for very long filters
 	on some hardware. `max_part_len` must be a power of 2 and has a default
@@ -346,7 +346,7 @@ Example:
 
 	See the `fir` effect description for an explanation of the `-a` option and
 	the `input_options`.
-* `zita_convolver [-a [offset[s|m|S]]] [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]`  
+* `zita_convolver [-a[offset[s|m|S]]] [input_options] [min_part_len [max_part_len]] [file:][~/]filter_path|coefs:list[/list...]`  
 	Partitioned 32-bit FFT convolution using the zita-convolver library.
 	Latency is equal to `min_part_len` (64 samples by default).
 	`{min,max}_part_len` must be powers of 2 between 64 and 8192. Each `list`
