@@ -22,7 +22,8 @@
 #include "dsp.h"
 #include "effect.h"
 
-struct effect * delay_effect_init_with_params(const struct effect_info *, const struct stream_info *, const char *, double, int, int);
+struct effect * delay_effect_init_int(const char *, const struct stream_info *, const char *, ssize_t);
+struct effect * delay_effect_init_frac(const char *, const struct stream_info *, const char *, double, int);
 struct effect * delay_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define DELAY_EFFECT_INFO \

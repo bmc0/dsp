@@ -200,5 +200,5 @@ struct effect * fir_init_align(const struct effect_info *ei, const struct stream
 		}
 	}
 	if (offset == 0) return NULL;
-	return delay_effect_init_with_params(ei, istream, channel_selector, -offset, 0, 0);
+	return delay_effect_init_int(ei->name, istream, channel_selector, -offset);
 }
