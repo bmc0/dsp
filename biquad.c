@@ -357,7 +357,7 @@ static void biquad_effect_set_run_func(struct effect *e)
 	else e->run = biquad_effect_run;
 }
 
-struct effect * biquad_effect_merge(struct effect *dest, struct effect *src)
+int biquad_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (biquad_effect_can_merge(dest, src)) {
 		struct biquad_state *dest_state = (struct biquad_state *) dest->data;
@@ -369,9 +369,9 @@ struct effect * biquad_effect_merge(struct effect *dest, struct effect *src)
 			}
 		}
 		biquad_effect_set_run_func(dest);
-		return dest;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
 #define GET_ARG(v, str, name) \

@@ -61,28 +61,28 @@ void gain_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
-struct effect * gain_effect_merge(struct effect *dest, struct effect *src)
+int gain_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dest->merge == src->merge) {
 		sample_t *dest_state = (sample_t *) dest->data;
 		sample_t *src_state = (sample_t *) src->data;
 		for (int k = 0; k < dest->ostream.channels; ++k)
 			dest_state[k] *= src_state[k];
-		return dest;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
-struct effect * add_effect_merge(struct effect *dest, struct effect *src)
+int add_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dest->merge == src->merge) {
 		sample_t *dest_state = (sample_t *) dest->data;
 		sample_t *src_state = (sample_t *) src->data;
 		for (int k = 0; k < dest->ostream.channels; ++k)
 			dest_state[k] += src_state[k];
-		return dest;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
 struct effect * gain_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2025-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -237,7 +237,7 @@ static int dither_effect_can_merge(struct effect *dest, struct effect *src)
 	return 1;
 }
 
-struct effect * dither_effect_merge(struct effect *dest, struct effect *src)
+int dither_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dither_effect_can_merge(dest, src)) {
 		struct dither_state *dest_state = (struct dither_state *) dest->data;
@@ -248,9 +248,9 @@ struct effect * dither_effect_merge(struct effect *dest, struct effect *src)
 				memcpy(&dest_state[k], &src_state[k], sizeof(struct dither_state));
 			}
 		}
-		return dest;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
 int effect_is_dither(const struct effect *e)

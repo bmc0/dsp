@@ -51,7 +51,7 @@ struct effect {
 	void (*drain)(struct effect *, ssize_t *, sample_t *);
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
-	struct effect * (*merge)(struct effect *, struct effect *);  /* may not be called after prepare() */
+	int (*merge)(struct effect *, struct effect *);  /* may not be called after prepare(); returns 1 if merged, 0 otherwise */
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void *data;
 };
