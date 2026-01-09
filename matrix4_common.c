@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,7 +22,7 @@
 #include <math.h>
 #define DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 #include "matrix4_common.h"
-#include "dsp.h"
+#include "delay.h"
 
 void calc_matrix_coefs_v1(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
 void calc_matrix_coefs_v2(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
@@ -996,119 +996,19 @@ void draw_steering_bar(double a, int is_event, struct steering_bar *bar)
 }
 #endif
 
-struct matrix4_delay_state {
-	sample_t *buf;
-	ssize_t len, p, drain_frames;
-	int n_ch;
-	char buf_full, is_draining;
-};
-
-sample_t * matrix4_delay_surr_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	sample_t *ibuf_p = &ibuf[e->istream.channels-2];
-	if (!state->buf_full && state->p + *frames >= state->len)
-		state->buf_full = 1;
-	for (ssize_t i = *frames; i > 0; --i) {
-		sample_t *b = &state->buf[state->p*2];
-		const sample_t s0 = ibuf_p[0], s1 = ibuf_p[1];
-		ibuf_p[0] = b[0];
-		ibuf_p[1] = b[1];
-		b[0] = s0;
-		b[1] = s1;
-		ibuf_p += e->istream.channels;
-		state->p = CBUF_NEXT(state->p, state->len);
-	}
-	return ibuf;
-}
-
-sample_t * matrix4_delay_front_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	sample_t *ibuf_p = ibuf;
-	if (!state->buf_full && state->p + *frames >= state->len)
-		state->buf_full = 1;
-	for (ssize_t i = *frames; i > 0; --i) {
-		sample_t *b = &state->buf[state->p*state->n_ch];
-		for (int k = 0; k < state->n_ch; ++k) {
-			const sample_t s = ibuf_p[k];
-			ibuf_p[k] = b[k];
-			b[k] = s;
-		}
-		ibuf_p += e->istream.channels;
-		state->p = CBUF_NEXT(state->p, state->len);
-	}
-	return ibuf;
-}
-
-ssize_t matrix4_delay_front_effect_delay(struct effect *e)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	return (state->buf_full) ? state->len : state->p;
-}
-
-void matrix4_delay_effect_reset(struct effect *e)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	state->p = 0;
-	state->buf_full = 0;
-	memset(state->buf, 0, state->len * state->n_ch * sizeof(sample_t));
-}
-
-void matrix4_delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	if (!state->buf_full && state->p == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = state->len;
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
-			e->run(e, frames, obuf, NULL);
-		}
-		else *frames = -1;
-	}
-}
-
-void matrix4_delay_effect_destroy(struct effect *e)
-{
-	struct matrix4_delay_state *state = (struct matrix4_delay_state *) e->data;
-	free(state->buf);
-	free(state);
-}
-
 struct effect * matrix4_delay_effect_init(const struct effect_info *ei, const struct stream_info *istream, ssize_t frames)
 {
 	if (frames == 0)
 		return NULL;
 
-	struct effect *e = calloc(1, sizeof(struct effect));
-	e->name = ei->name;
-	e->istream.fs = e->ostream.fs = istream->fs;
-	e->istream.channels = e->ostream.channels = istream->channels;
-	if (frames > 0)
-		e->run = matrix4_delay_surr_effect_run;
-	else {
-		e->run = matrix4_delay_front_effect_run;
-		e->delay = matrix4_delay_front_effect_delay;
-	}
-	e->reset = matrix4_delay_effect_reset;
-	e->drain = matrix4_delay_effect_drain;
-	e->destroy = matrix4_delay_effect_destroy;
-
-	struct matrix4_delay_state *state = calloc(1, sizeof(struct matrix4_delay_state));
-	state->len = (frames < 0) ? -frames : frames;
-	state->n_ch = (frames > 0) ? 2 : e->istream.channels - 2;
-	state->buf = calloc(state->len * state->n_ch, sizeof(sample_t));
+	char *channel_selector = NEW_SELECTOR(istream->channels);
+	SET_BIT(channel_selector, istream->channels-2);
+	SET_BIT(channel_selector, istream->channels-1);
+	struct effect *e = delay_effect_init_int(ei->name, istream, channel_selector, frames);
+	free(channel_selector);
 
 	LOG_FMT(LL_VERBOSE, "%s: info: net surround delay is %gms (%zd sample%s)",
-		ei->name, frames*1000.0/istream->fs, frames, (state->len == 1) ? "" : "s");
+		ei->name, frames*1000.0/istream->fs, frames, (frames == 1 || frames == -1) ? "" : "s");
 
-	e->data = state;
 	return e;
 }
