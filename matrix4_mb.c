@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2022-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2022-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -102,7 +102,7 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_phase_flip;
+	char has_output, disable, do_phase_flip;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[4];
 	struct filter_bank fb[2];
@@ -114,7 +114,7 @@ struct matrix4_mb_state {
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_pwrcmp;
 	ssize_t len, p, fb_buf_len, fb_buf_p;
-	ssize_t drain_frames, fade_frames, fade_p;
+	ssize_t fade_frames, fade_p;
 };
 
 static void fshape_filter_init(struct biquad_state *b, double fs, const double p[4], int is_hf, int is_inv)
@@ -532,7 +532,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 ssize_t matrix4_mb_effect_delay(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	return (state->has_output) ? state->len : state->p;
+	return state->len;
 }
 
 void matrix4_mb_effect_reset(struct effect *e)
@@ -557,27 +557,13 @@ void matrix4_mb_effect_signal(struct effect *e)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
-sample_t * matrix4_mb_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	sample_t *rbuf = buf1;
-	if (!state->has_output && state->p == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = state->len;
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
-			rbuf = matrix4_mb_effect_run(e, frames, buf1, buf2);
-		}
-		else
-			*frames = -1;
-	}
-	return rbuf;
+	for (int i = 0; i < e->istream.channels; ++i)
+		drain_samples[i] += (i == state->c0 || i == state->c1) ? state->fb_buf_len : state->len;
+	drain_samples[e->ostream.channels-2] = drain_samples[state->c0];
+	drain_samples[e->ostream.channels-1] = drain_samples[state->c1];
 }
 
 void matrix4_mb_effect_destroy(struct effect *e)
@@ -599,6 +585,17 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	for (int i = 0; i < N_BANDS; ++i)
 		event_state_cleanup(&state->band[i].ev);
 	free(state);
+}
+
+void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
+	SET_BIT(deps[state->c0], state->c1);
+	SET_BIT(deps[state->c1], state->c0);
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
+		SET_BIT(deps[i], state->c0);
+		SET_BIT(deps[i], state->c1);
+	}
 }
 #endif
 
@@ -627,11 +624,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->run = matrix4_mb_effect_run;
 	e->delay = matrix4_mb_effect_delay;
 	e->reset = matrix4_mb_effect_reset;
-	e->drain2 = matrix4_mb_effect_drain2;
+	e->drain_samples = matrix4_mb_effect_drain_samples;
 	e->destroy = matrix4_mb_effect_destroy;
+	e->channel_deps = matrix4_mb_effect_channel_deps;
 #endif
 
 	state = calloc(1, sizeof(struct matrix4_mb_state));
+	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 #if !(DO_FILTER_BANK_TEST)
@@ -720,31 +719,19 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	struct effect *e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0);
 	free(filter);
 	state->fb[1] = state->fb[0];  /* reset */
+	if (e_fir == NULL) {
+		e->destroy(e);
+		free(e);
+		return NULL;
+	}
 
 #if !(DO_FILTER_BANK_TEST)
 	state->len = state->fb_buf_len + (phase_lin_frames - 1);
 	state->bufs = calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
 		state->bufs[i] = calloc(state->len, sizeof(sample_t));
-	struct effect *e_delay = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
+	e->next = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
 #endif
-
-	e->data = state;
-#if DO_FILTER_BANK_TEST
-	if (e_fir == NULL) {
-		matrix4_mb_test_fb_effect_destroy(e);
-		free(e);
-		return NULL;
-	}
-#else
-	if (e_fir == NULL) {
-		if (e_delay) e_delay->destroy(e_delay);
-		matrix4_mb_effect_destroy(e);
-		free(e);
-		return NULL;
-	}
-	e->next = e_delay;
-#endif
-	e_fir->next = e;
+	effect_list_append(e_fir, e);
 	return e_fir;
 }

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -902,7 +902,7 @@ int main(int argc, char *argv[])
 						LOG_S(LL_VERBOSE, "info: end of crossfade");
 					}
 				}
-				else obuf = run_effects_chain(chain.head, &w, buf1, buf2);
+				else obuf = run_effects_chain(&chain, &w, buf1, buf2);
 				write_out(w, obuf, add_dither);
 				k += w;
 				if (k >= out_codec->fs) {

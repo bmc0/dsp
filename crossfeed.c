@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -87,6 +87,13 @@ void crossfeed_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
+void crossfeed_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
+	SET_BIT(deps[state->c0], state->c1);
+	SET_BIT(deps[state->c1], state->c0);
+}
+
 struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
@@ -123,6 +130,7 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	e->reset = crossfeed_effect_reset;
 	e->plot = crossfeed_effect_plot;
 	e->destroy = crossfeed_effect_destroy;
+	e->channel_deps = crossfeed_effect_channel_deps;
 	state = calloc(1, sizeof(struct crossfeed_state));
 
 	state->c0 = state->c1 = -1;

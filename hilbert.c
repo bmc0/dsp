@@ -89,6 +89,6 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
 	if (do_align)
-		e->next = delay_effect_init_int(ei->name, istream, channel_selector, -taps/2);
+		effect_list_append(e, delay_effect_init_int(ei->name, istream, channel_selector, -taps/2));
 	return e;
 }

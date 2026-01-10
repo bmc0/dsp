@@ -86,7 +86,18 @@ void destroy_effect(struct effect *e)
 	free(e);
 }
 
-void append_effect(struct effects_chain *chain, struct effect *e)
+void effect_list_append(struct effect *list, struct effect *e)
+{
+	while (list) {
+		if (!list->next) {
+			list->next = e;
+			break;
+		}
+		list = list->next;
+	}
+}
+
+void effects_chain_append(struct effects_chain *chain, struct effect *e)
 {
 	if (chain->tail == NULL)
 		chain->head = e;
@@ -241,7 +252,7 @@ static int build_effects_chain_block(int argc, const char *const *argv, struct e
 					destroy_effect(e);
 				}
 				else {
-					append_effect(chain, e);
+					effects_chain_append(chain, e);
 					*stream = e->ostream;
 				}
 				e = e_n;
@@ -351,33 +362,125 @@ static void effects_chain_optimize(struct effects_chain *chain)
 #endif
 }
 
-static int effects_chain_prepare(struct effects_chain *chain)
+static int query_channel_deps(struct effects_chain *chain, struct effect *e, char **ch_deps)
 {
-	struct effect *e = chain->head;
-	while (e != NULL) {
-		if (e->prepare && e->prepare(e))
-			return 1;
-		e = e->next;
+	if (e->channel_deps) {
+		for (int i = 0; i < chain->max_out_ch; ++i)
+			CLEAR_SELECTOR(ch_deps[i], chain->max_in_ch);
+		/* set identity matrix as initial state */
+		const int min_ch = MINIMUM(e->istream.channels, e->ostream.channels);
+		for (int i = 0; i < min_ch; ++i)
+			SET_BIT(ch_deps[i], i);
+		e->channel_deps(e, ch_deps);
+		return 1;
 	}
 	return 0;
 }
 
+static void effects_chain_set_drain_frames(struct effects_chain *chain, char **ch_deps)
+{
+	if (chain->head == NULL)
+		return;
+	const int max_ch = MAXIMUM(chain->max_in_ch, chain->max_out_ch);
+	ssize_t *drain_samples = calloc(max_ch, sizeof(ssize_t));
+	ssize_t *drain_samples_tmp = calloc(max_ch, sizeof(ssize_t));
+	for (struct effect *e = chain->head; e; e = e->next) {
+		if (e->drain_samples)
+			e->drain_samples(e, drain_samples);
+		else if ((e->flags & (EFFECT_FLAG_OPT_REORDERABLE|EFFECT_FLAG_CH_DEPS_IDENTITY))
+				&& e->istream.channels == e->ostream.channels) {
+			/* passthrough; nothing to do */
+		}
+		else if (query_channel_deps(chain, e, ch_deps)) {
+			memcpy(drain_samples_tmp, drain_samples, max_ch * sizeof(ssize_t));
+			for (int i = 0; i < e->ostream.channels; ++i) {
+				ssize_t ch_drain = 0;
+				for (int k = 0; k < e->istream.channels; ++k) {
+					if (GET_BIT(ch_deps[i], k))
+						ch_drain = MAXIMUM(ch_drain, drain_samples_tmp[k]);
+				}
+				drain_samples[i] = ch_drain;
+			}
+		}
+		else {  /* effect does not drain, but channel deps unknown */
+			ssize_t drain_frames = 0;
+			for (int i = 0; i < e->istream.channels; ++i)
+				drain_frames = MAXIMUM(drain_frames, drain_samples[i]);
+			for (int i = 0; i < e->ostream.channels; ++i)
+				drain_samples[i] = drain_frames;
+		}
+		if (!e->drain_samples && e->ostream.fs != e->istream.fs) {
+			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;
+			for (int i = 0; i < e->ostream.channels; ++i)
+				drain_samples[i] = ratio_mult_ceil(drain_samples[i], ratio_n, ratio_d);
+		}
+		if (e->ostream.channels < e->istream.channels)
+			for (int i = e->ostream.channels; i < e->istream.channels; ++i)
+				drain_samples[i] = 0;
+	}
+	chain->drain_frames = 0;
+	for (int i = 0; i < chain->tail->ostream.channels; ++i)
+		chain->drain_frames = MAXIMUM(chain->drain_frames, drain_samples[i]);
+	free(drain_samples);
+	free(drain_samples_tmp);
+	if (chain->head->istream.fs != chain->tail->ostream.fs) {
+		const int gcd = find_gcd(chain->head->istream.fs, chain->tail->ostream.fs);
+		chain->drain_frames = (long long int) chain->drain_frames *
+			(chain->head->istream.fs / gcd) / (chain->tail->ostream.fs / gcd);
+	}
+	LOG_FMT(LL_VERBOSE, "info: input drain frames: %zd", chain->drain_frames);
+}
+
+static int effects_chain_prepare(struct effects_chain *chain)
+{
+	for (struct effect *e = chain->head; e; e = e->next)
+		if (e->prepare && e->prepare(e)) return 1;
+	return 0;
+}
+
+static int build_effects_chain_finish(struct effects_chain *chain)
+{
+	if (chain->head == NULL)
+		return 0;
+
+	int ret = 0;
+	effects_chain_optimize(chain);
+
+	for (struct effect *e = chain->head; e; e = e->next) {
+		chain->max_in_ch = MAXIMUM(chain->max_in_ch, e->istream.channels);
+		chain->max_out_ch = MAXIMUM(chain->max_out_ch, e->ostream.channels);
+	}
+	char **ch_deps = calloc(chain->max_out_ch, sizeof(char *));
+	for (int i = 0; i < chain->max_out_ch; ++i)
+		ch_deps[i] = NEW_SELECTOR(chain->max_in_ch);
+
+	if (effects_chain_prepare(chain)) goto fail;
+	effects_chain_set_drain_frames(chain, ch_deps);
+
+	done:
+	for (int i = 0; i < chain->max_out_ch; ++i)
+		free(ch_deps[i]);
+	free(ch_deps);
+	return ret;
+
+	fail:
+	ret = 1;
+	goto done;
+}
+
 int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
 {
-	int r = build_effects_chain_block(argc, argv, chain, stream, NULL, dir);
-	if (r) return r;
-	effects_chain_optimize(chain);
-	r = effects_chain_prepare(chain);
-	return r;
+	if (build_effects_chain_block(argc, argv, chain, stream, NULL, dir))
+		return 1;
+	return build_effects_chain_finish(chain);
 }
 
 int build_effects_chain_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
 {
-	int r = build_effects_chain_block_from_file(path, chain, stream, channel_mask, dir, enforce_eof_marker);
-	if (r) return r;
-	effects_chain_optimize(chain);
-	r = effects_chain_prepare(chain);
-	return r;
+	if (build_effects_chain_block_from_file(path, chain, stream, channel_mask, dir, enforce_eof_marker))
+		return 1;
+	return build_effects_chain_finish(chain);
 }
 
 static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
@@ -441,7 +544,7 @@ int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int e
 	return r && enabled;  /* note: non-zero return value means dither should be added */
 }
 
-sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+static sample_t * run_effect_list(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
 	while (e != NULL && *frames > 0) {
@@ -453,6 +556,14 @@ sample_t * run_effects_chain(struct effect *e, ssize_t *frames, sample_t *buf1, 
 		e = e->next;
 	}
 	return ibuf;
+}
+
+sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+{
+	if (*frames < 1)
+		return buf1;
+	chain->frames += *frames;
+	return run_effect_list(chain->head, frames, buf1, buf2);
 }
 
 double get_effects_chain_delay(struct effects_chain *chain)
@@ -573,8 +684,18 @@ void effect_plot_noop(struct effect *e, int i)
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
-	ssize_t ftmp = *frames, dframes = -1;
 	struct effect *e = chain->head;
+	if (e == NULL || chain->frames < 1 || *frames < 1) {
+		*frames = -1;
+		return buf1;
+	}
+	if (chain->drain_frames > 0) {
+		*frames = MINIMUM(*frames, chain->drain_frames);
+		chain->drain_frames -= *frames;
+		memset(buf1, 0, *frames * e->istream.channels * sizeof(sample_t));
+		return run_effect_list(e, frames, buf1, buf2);
+	}
+	ssize_t ftmp = *frames, dframes = -1;
 	while (e != NULL && dframes == -1) {
 		dframes = ftmp;
 		if (e->drain2 != NULL) {
@@ -593,7 +714,7 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 		e = e->next;
 	}
 	*frames = dframes;
-	return run_effects_chain(e, frames, buf1, buf2);
+	return run_effect_list(e, frames, buf1, buf2);
 }
 
 void destroy_effects_chain(struct effects_chain *chain)
@@ -635,9 +756,9 @@ sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *state, ssiz
 	sample_t *rbuf[2];
 
 	memcpy(state->buf, ibuf, *frames * state->istream.channels * sizeof(sample_t));
-	rbuf[0] = run_effects_chain(state->chain[0].head, frames, ibuf, obuf);
+	rbuf[0] = run_effects_chain(&state->chain[0], frames, ibuf, obuf);
 	rbuf[1] = (rbuf[0] == obuf) ? ibuf : obuf;
-	rbuf[1] = run_effects_chain(state->chain[1].head, &tmp_frames, state->buf, rbuf[1]);
+	rbuf[1] = run_effects_chain(&state->chain[1], &tmp_frames, state->buf, rbuf[1]);
 
 	const ssize_t min_frames = MINIMUM(*frames, tmp_frames);
 	const ssize_t offset_samples = (state->has_output) ? 0 : (*frames-min_frames)*state->ostream.channels;

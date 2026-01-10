@@ -93,6 +93,13 @@ void zita_convolver_effect_reset(struct effect *e)
 	state->has_output = 0;
 }
 
+void zita_convolver_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+{
+	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
+	for (int i = 0; i < e->ostream.channels; ++i)
+		if (GET_BIT(e->channel_selector, i)) drain_samples[i] += state->filter_frames-1;
+}
+
 sample_t * zita_convolver_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
@@ -101,7 +108,7 @@ sample_t * zita_convolver_effect_drain2(struct effect *e, ssize_t *frames, sampl
 		*frames = -1;
 	else {
 		if (!state->is_draining) {
-			state->drain_frames = state->filter_frames;
+			state->drain_frames = 0;
 			#ifdef SYMMETRIC_IO
 				state->drain_frames += state->len - state->pos;
 			#else
@@ -198,9 +205,11 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	e->channel_selector = (char *) NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = zita_convolver_effect_run;
 	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;
+	e->drain_samples = zita_convolver_effect_drain_samples;
 	e->drain2 = zita_convolver_effect_drain2;
 	e->destroy = zita_convolver_effect_destroy;
 
@@ -262,7 +271,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 	if (filter_data == NULL)
 		return NULL;
 	e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, min_part_len, max_part_len);
-	e->next = fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames);
+	effect_list_append(e, fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames));
 	free(filter_data);
 	return e;
 }

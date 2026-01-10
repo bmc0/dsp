@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -289,7 +289,7 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 		for (k = 0; k < d->input_channels; ++k)
 			d->buf1[j++] = (sample_t) d->ports[k][i];
 
-	obuf = run_effects_chain(d->chain.head, &w, d->buf1, d->buf2);
+	obuf = run_effects_chain(&d->chain, &w, d->buf1, d->buf2);
 
 	for (i = j = 0; i < s; i++)
 		for (k = d->input_channels; k < d->input_channels + d->output_channels; ++k)

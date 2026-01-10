@@ -39,8 +39,7 @@ struct delay_channel_state {
 
 struct delay_state {
 	struct delay_channel_state *cs;
-	ssize_t frames, offset, drain_frames;
-	int is_draining;
+	ssize_t offset;
 };
 
 #define DELAY_MIN_FRAC 0.1
@@ -89,7 +88,6 @@ static void delay_run_channel_frac_n(struct delay_channel_state *cs, ssize_t fra
 sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	state->frames += *frames;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		struct delay_channel_state *cs = &state->cs[k];
 		cs->run(cs, *frames, &ibuf[k], e->istream.channels);
@@ -99,21 +97,18 @@ sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 sample_t * delay_effect_run_noop(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	struct delay_state *state = (struct delay_state *) e->data;
-	state->frames += *frames;
 	return ibuf;
 }
 
 ssize_t delay_effect_delay(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	return MINIMUM(-state->offset, state->frames);
+	return -state->offset;
 }
 
 void delay_effect_reset(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	state->frames = 0;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		struct delay_channel_state *cs = &state->cs[k];
 		cs->p = 0;
@@ -144,29 +139,11 @@ void delay_effect_plot(struct effect *e, int i)
 	}
 }
 
-void delay_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+void delay_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	if (state->frames == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = 0;
-			for (int k = 0; k < e->istream.channels; ++k) {
-				const ssize_t d = state->cs[k].samples_int + state->cs[k].fd_ap_n;
-				if (state->drain_frames < d)
-					state->drain_frames = d;
-			}
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
-			e->run(e, frames, obuf, NULL);
-		}
-		else *frames = -1;
-	}
+	for (int k = 0; k < e->ostream.channels; ++k)
+		drain_samples[k] += state->cs[k].samples_int + state->cs[k].fd_ap_n;
 }
 
 void delay_effect_destroy(struct effect *e)
@@ -264,12 +241,13 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->prepare = delay_effect_prepare;
 	e->run = delay_effect_run;
 	e->delay = delay_effect_delay;
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;
-	e->drain = delay_effect_drain;
+	e->drain_samples = delay_effect_drain_samples;
 	e->destroy = delay_effect_destroy;
 	e->merge = delay_effect_merge;
 

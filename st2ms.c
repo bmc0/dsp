@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2018-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2018-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -76,6 +76,13 @@ void st2ms_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
+void st2ms_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct st2ms_state *state = (struct st2ms_state *) e->data;
+	SET_BIT(deps[state->c0], state->c1);
+	SET_BIT(deps[state->c1], state->c0);
+}
+
 struct effect * st2ms_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
@@ -111,6 +118,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	}
 	e->plot = st2ms_effect_plot;
 	e->destroy = st2ms_effect_destroy;
+	e->channel_deps = st2ms_effect_channel_deps;
 
 	state = calloc(1, sizeof(struct st2ms_state));
 	state->c0 = state->c1 = -1;

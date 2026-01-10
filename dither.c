@@ -370,6 +370,7 @@ struct effect * dither_effect_init(const struct effect_info *ei, const struct st
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = dither_effect_run;
 	e->reset = dither_effect_reset;
 	e->destroy = dither_effect_destroy;

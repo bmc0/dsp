@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "remix.h"
 #include "util.h"
 
@@ -122,6 +123,13 @@ void remix_effect_destroy(struct effect *e)
 	free(state);
 }
 
+void remix_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct remix_state *state = (struct remix_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		COPY_SELECTOR(deps[k], state->channel_selectors[k], e->istream.channels);
+}
+
 struct effect * remix_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effect *e;
@@ -195,6 +203,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	else e->run = remix_effect_run_generic;
 	e->plot = remix_effect_plot;
 	e->destroy = remix_effect_destroy;
+	e->channel_deps = remix_effect_channel_deps;
 	e->data = state;
 	return e;
 

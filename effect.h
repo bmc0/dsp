@@ -30,9 +30,10 @@ struct effect_info {
 };
 
 enum {
-	EFFECT_FLAG_PLOT_MIX        = 1<<0,
-	EFFECT_FLAG_OPT_REORDERABLE = 1<<1,
-	EFFECT_FLAG_NO_DITHER       = 1<<2,  /* does not modify the signal such that dither is useful */
+	EFFECT_FLAG_PLOT_MIX         = 1<<0,  /* needs Ht*(f) for plotting */
+	EFFECT_FLAG_OPT_REORDERABLE  = 1<<1,  /* may be reordered for optimization */
+	EFFECT_FLAG_NO_DITHER        = 1<<2,  /* does not modify the signal such that dither is useful */
+	EFFECT_FLAG_CH_DEPS_IDENTITY = 1<<3,  /* does not mix or reorder channels */
 };
 
 struct effect {
@@ -48,20 +49,24 @@ struct effect {
 	void (*reset)(struct effect *);
 	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);
+	void (*drain_samples)(struct effect *, ssize_t *);  /* per-channel cumulative drain samples */
 	void (*drain)(struct effect *, ssize_t *, sample_t *);
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
 	int (*merge)(struct effect *, struct effect *);  /* may not be called after prepare(); returns 1 if merged, 0 otherwise */
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
+	void (*channel_deps)(struct effect *, char **);  /* input channel dependencies for each output channel */
 	void *data;
 };
 
 struct effects_chain {
 	struct effect *head;
 	struct effect *tail;
+	ssize_t frames, drain_frames;
+	int max_in_ch, max_out_ch;
 };
 
-#define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL }  /* needed for GCC 12 and earlier */
+#define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL, 0, 0 }  /* needed for GCC 12 and earlier */
 #define EFFECTS_CHAIN_INITIALIZER ((struct effects_chain) EFFECTS_CHAIN_INITIALIZER_BARE)
 #define IS_EFFECTS_CHAIN_START(x) ( \
 	get_effect_info(x) != NULL \
@@ -74,14 +79,15 @@ struct effects_chain {
 
 const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);
-void append_effect(struct effects_chain *, struct effect *);
+void effect_list_append(struct effect *, struct effect *);
+void effects_chain_append(struct effects_chain *, struct effect *);
 int build_effects_chain(int, const char *const *, struct effects_chain *, struct stream_info *, const char *);
 int build_effects_chain_from_file(const char *, struct effects_chain *, struct stream_info *, const char *, const char *, int);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);
 int effects_chain_needs_dither(struct effects_chain *);
 int effects_chain_set_dither_params(struct effects_chain *, int, int);
-sample_t * run_effects_chain(struct effect *, ssize_t *, sample_t *, sample_t *);
+sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);

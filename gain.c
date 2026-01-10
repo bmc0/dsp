@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -113,6 +113,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	sample_t v_noop;
 	if (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) {
 		v_noop = 0.0;

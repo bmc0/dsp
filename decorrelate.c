@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -217,6 +217,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = decorrelate_effect_run;
 	e->reset = decorrelate_effect_reset;
 	e->plot = decorrelate_effect_plot;

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2020-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2020-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -36,7 +36,7 @@ struct dyn_shelf_state {
 
 struct matrix4_state {
 	int s, c0, c1;
-	char has_output, is_draining, disable, do_lowpass, do_phase_flip;
+	char has_output, disable, do_lowpass, do_phase_flip;
 	enum status_type status_type;
 	sample_t **bufs;
 	struct biquad_state in_hp[2], in_lp[2];
@@ -56,7 +56,7 @@ struct matrix4_state {
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
-	ssize_t len, p, drain_frames, fade_frames, fade_p;
+	ssize_t len, p, fade_frames, fade_p;
 #ifndef LADSPA_FRONTEND
 	struct steering_bar lr_bar, cs_bar;
 #endif
@@ -238,16 +238,15 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 ssize_t matrix4_effect_delay(struct effect *e)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	return (state->has_output) ? state->len : state->p;
+	return state->len;
 }
 
 void matrix4_effect_reset(struct effect *e)
 {
-	int i;
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	state->p = 0;
 	state->has_output = 0;
-	for (i = 0; i < e->istream.channels; ++i)
+	for (int i = 0; i < e->istream.channels; ++i)
 		memset(state->bufs[i], 0, state->len * sizeof(sample_t));
 }
 
@@ -260,27 +259,13 @@ void matrix4_effect_signal(struct effect *e)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
-sample_t * matrix4_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	sample_t *rbuf = buf1;
-	if (!state->has_output && state->p == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = state->len;
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
-			rbuf = matrix4_effect_run(e, frames, buf1, buf2);
-		}
-		else
-			*frames = -1;
-	}
-	return rbuf;
+	for (int i = 0; i < e->istream.channels; ++i)
+		drain_samples[i] += state->len;
+	drain_samples[e->ostream.channels-2] = drain_samples[state->c0];
+	drain_samples[e->ostream.channels-1] = drain_samples[state->c1];
 }
 
 void matrix4_effect_destroy(struct effect *e)
@@ -299,6 +284,17 @@ void matrix4_effect_destroy(struct effect *e)
 		}
 	#endif
 	free(state);
+}
+
+void matrix4_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct matrix4_state *state = (struct matrix4_state *) e->data;
+	SET_BIT(deps[state->c0], state->c1);
+	SET_BIT(deps[state->c1], state->c0);
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
+		SET_BIT(deps[i], state->c0);
+		SET_BIT(deps[i], state->c1);
+	}
 }
 
 struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -320,8 +316,9 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->run = matrix4_effect_run;
 	e->delay = matrix4_effect_delay;
 	e->reset = matrix4_effect_reset;
-	e->drain2 = matrix4_effect_drain2;
+	e->drain_samples = matrix4_effect_drain_samples;
 	e->destroy = matrix4_effect_destroy;
+	e->channel_deps = matrix4_effect_channel_deps;
 
 	state = calloc(1, sizeof(struct matrix4_state));
 	state->c0 = config.c0;

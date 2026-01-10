@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2025-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -176,7 +176,7 @@ sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 		}
 		return rbuf;
 	}
-	return run_effects_chain(node->chain.head, frames, ibuf, obuf);
+	return run_effects_chain(&node->chain, frames, ibuf, obuf);
 }
 
 ssize_t watch_effect_delay(struct effect *e)

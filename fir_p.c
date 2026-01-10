@@ -57,8 +57,8 @@ struct fft_part_group {
 struct fir_p_state {
 	struct direct_part part0;
 	struct fft_part_group group[MAX_FFT_GROUPS];
-	ssize_t filter_frames, drain_frames;
-	int n, has_output, is_draining;
+	ssize_t filter_frames;
+	int n;
 };
 
 static inline void fft_part_group_compute(struct fft_part_group *group)
@@ -174,8 +174,6 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 			}
 		}
 	}
-	if (*frames > 0)
-		state->has_output = 1;
 
 	return ibuf;
 }
@@ -183,7 +181,6 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 void fir_p_effect_reset(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	state->has_output = 0;
 	state->part0.p = 0;
 	for (int k = 0; k < e->istream.channels; ++k)
 		if (state->part0.buf[k]) memset(state->part0.buf[k], 0, DIRECT_LEN * sizeof(sample_t));
@@ -233,25 +230,11 @@ void fir_p_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_p_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+void fir_p_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
-	if (!state->has_output)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = state->filter_frames;
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
-			fir_p_effect_run(e, frames, obuf, NULL);
-		}
-		else
-			*frames = -1;
-	}
+	for (int k = 0; k < e->ostream.channels; ++k)
+		if (state->part0.buf[k]) drain_samples[k] += state->filter_frames-1;
 }
 
 void fir_p_effect_destroy(struct effect *e)
@@ -402,10 +385,11 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = fir_p_effect_run;
 	e->reset = fir_p_effect_reset;
 	e->plot = fir_p_effect_plot;
-	e->drain = fir_p_effect_drain;
+	e->drain_samples = fir_p_effect_drain_samples;
 	e->destroy = fir_p_effect_destroy;
 
 	state = calloc(1, sizeof(struct fir_p_state));
@@ -553,7 +537,7 @@ struct effect * fir_p_effect_init(const struct effect_info *ei, const struct str
 	if (filter_data == NULL)
 		return NULL;
 	e = fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, max_part_len);
-	e->next = fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames);
+	effect_list_append(e, fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames));
 	free(filter_data);
 	return e;
 }

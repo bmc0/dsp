@@ -29,9 +29,8 @@
 #define MAX_DIRECT_LEN (1<<4)
 
 struct fir_direct_state {
-	ssize_t len, mask, p, filter_frames, drain_frames;
+	ssize_t len, mask, p, filter_frames;
 	sample_t *lbuf, **filter, **buf;
-	int has_output, is_draining;
 };
 
 struct fir_state {
@@ -60,8 +59,6 @@ sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		}
 		state->p = (state->p+1) & state->mask;
 	}
-	if (*frames > 0)
-		state->has_output = 1;
 
 	return ibuf;
 }
@@ -89,25 +86,11 @@ void fir_direct_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_direct_effect_drain(struct effect *e, ssize_t *frames, sample_t *obuf)
+void fir_direct_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
-	if (!state->has_output && state->p == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = state->filter_frames;
-			state->is_draining = 1;
-		}
-		if (state->drain_frames > 0) {
-			*frames = MINIMUM(*frames, state->drain_frames);
-			state->drain_frames -= *frames;
-			memset(obuf, 0, *frames * e->istream.channels * sizeof(sample_t));
-			fir_direct_effect_run(e, frames, obuf, NULL);
-		}
-		else
-			*frames = -1;
-	}
+	for (int k = 0; k < e->ostream.channels; ++k)
+		if (state->buf[k]) drain_samples[k] += state->filter_frames-1;
 }
 
 void fir_direct_effect_destroy(struct effect *e)
@@ -179,7 +162,7 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 ssize_t fir_effect_delay(struct effect *e)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
-	return (state->has_output) ? state->len : state->p;
+	return state->len;
 }
 
 void fir_effect_reset(struct effect *e)
@@ -211,6 +194,13 @@ void fir_effect_plot(struct effect *e, int i)
 	}
 }
 
+void fir_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+{
+	struct fir_state *state = (struct fir_state *) e->data;
+	for (int k = 0; k < e->ostream.channels; ++k)
+		if (state->olap[k]) drain_samples[k] += state->filter_frames-1;
+}
+
 sample_t * fir_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
@@ -219,7 +209,7 @@ sample_t * fir_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, 
 		*frames = -1;
 	else {
 		if (!state->is_draining) {
-			state->drain_frames = state->filter_frames;
+			state->drain_frames = 0;
 			#ifdef SYMMETRIC_IO
 				state->drain_frames += state->len - state->p;
 			#else
@@ -282,12 +272,13 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 
 	if (filter_frames <= MAX_DIRECT_LEN || force_direct) {
 		e->run = fir_direct_effect_run;
 		e->reset = fir_direct_effect_reset;
 		e->plot = fir_direct_effect_plot;
-		e->drain = fir_direct_effect_drain;
+		e->drain_samples = fir_direct_effect_drain_samples;
 		e->destroy = fir_direct_effect_destroy;
 
 		struct fir_direct_state *state = calloc(1, sizeof(struct fir_direct_state));
@@ -324,6 +315,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->delay = fir_effect_delay;
 		e->reset = fir_effect_reset;
 		e->plot = fir_effect_plot;
+		e->drain_samples = fir_effect_drain_samples;
 		e->drain2 = fir_effect_drain2;
 		e->destroy = fir_effect_destroy;
 
@@ -406,7 +398,7 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 	if (filter_data == NULL)
 		return NULL;
 	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
-	e->next = fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames);
+	effect_list_append(e, fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames));
 	free(filter_data);
 	return e;
 }

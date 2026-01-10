@@ -153,12 +153,10 @@ sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 
 ssize_t resample_effect_delay(struct effect *e)
 {
-	ssize_t frames = 0;
 	struct resample_state *state = (struct resample_state *) e->data;
-	if (state->has_output) {
-		frames += state->out_delay;  /* filter delay */
+	ssize_t frames = state->out_delay;  /* filter delay */
+	if (state->has_output)
 		frames += state->out_len - state->out_buf_pos;  /* pending output frames */
-	}
 	frames += ratio_mult_ceil(state->in_buf_pos, state->ratio.n, state->ratio.d);  /* pending input frames */
 	return frames;
 }
@@ -252,6 +250,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	e->istream.fs = istream->fs;
 	e->ostream.fs = rate;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = resample_effect_run;
 	e->delay = resample_effect_delay;
 	e->reset = resample_effect_reset;
