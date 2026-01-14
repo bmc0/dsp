@@ -705,7 +705,6 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 				buf1 = rbuf;
 			}
 		}
-		else if (e->drain != NULL) e->drain(e, &dframes, buf1);
 		else dframes = -1;
 		if (e->ostream.fs != e->istream.fs) {
 			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
