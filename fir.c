@@ -35,11 +35,10 @@ struct fir_direct_state {
 
 struct fir_state {
 	ssize_t len, fr_len, p, filter_frames;
-	ssize_t drain_pos, drain_frames;
 	fftw_complex **filter_fr, *tmp_fr, *filter_fr_1ch;
 	sample_t **ibuf, **obuf, **olap;
 	fftw_plan r2c_plan, c2r_plan;
-	int has_output, is_draining;
+	int has_output;
 };
 
 sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -197,38 +196,10 @@ void fir_effect_plot(struct effect *e, int i)
 void fir_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k)
+	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state->olap[k]) drain_samples[k] += state->filter_frames-1;
-}
-
-sample_t * fir_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
-{
-	struct fir_state *state = (struct fir_state *) e->data;
-	sample_t *rbuf = buf1;
-	if (!state->has_output && state->p == 0)
-		*frames = -1;
-	else {
-		if (!state->is_draining) {
-			state->drain_frames = 0;
-			#ifdef SYMMETRIC_IO
-				state->drain_frames += state->len - state->p;
-			#else
-				if (state->has_output)
-					state->drain_frames += state->len - state->p;
-			#endif
-			state->drain_frames += state->p;
-			state->is_draining = 1;
-		}
-		if (state->drain_pos < state->drain_frames) {
-			memset(buf1, 0, *frames * e->ostream.channels * sizeof(sample_t));
-			rbuf = fir_effect_run(e, frames, buf1, buf2);
-			state->drain_pos += *frames;
-			*frames -= (state->drain_pos > state->drain_frames) ? state->drain_pos - state->drain_frames : 0;
-		}
-		else
-			*frames = -1;
+		drain_samples[k] += state->len;
 	}
-	return rbuf;
 }
 
 void fir_effect_destroy(struct effect *e)
@@ -316,7 +287,6 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->reset = fir_effect_reset;
 		e->plot = fir_effect_plot;
 		e->drain_samples = fir_effect_drain_samples;
-		e->drain2 = fir_effect_drain2;
 		e->destroy = fir_effect_destroy;
 
 		struct fir_state *state = calloc(1, sizeof(struct fir_state));
