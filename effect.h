@@ -86,6 +86,7 @@ double get_effects_chain_delay(struct effects_chain *);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);
 void plot_effects_chain(struct effects_chain *, int, int, int);
+void effect_plot_noop(struct effect *e, int);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
 void destroy_effects_chain(struct effects_chain *);
 void print_all_effects(void);

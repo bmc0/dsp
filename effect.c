@@ -565,6 +565,12 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 	puts("\npause mouse close");
 }
 
+void effect_plot_noop(struct effect *e, int i)
+{
+	for (int k = 0; k < e->istream.channels; ++k)
+		printf("H%d_%d(f)=1.0\n", k, i);
+}
+
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	ssize_t ftmp = *frames, dframes = -1;

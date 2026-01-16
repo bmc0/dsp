@@ -49,13 +49,6 @@ void gain_effect_plot(struct effect *e, int i)
 		printf("H%d_%d(w)=%.15e\n", k, i, state[k]);
 }
 
-void add_effect_plot(struct effect *e, int i)
-{
-	sample_t *state = (sample_t *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k)
-		printf("H%d_%d(w)=(w==0.0)?1.0+%.15e:1.0\n", k, i, state[k]);
-}
-
 void gain_effect_destroy(struct effect *e)
 {
 	free(e->data);
@@ -124,7 +117,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	if (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) {
 		v_noop = 0.0;
 		e->run = add_effect_run;
-		e->plot = add_effect_plot;
+		e->plot = effect_plot_noop;
 		e->merge = add_effect_merge;
 	}
 	else {
