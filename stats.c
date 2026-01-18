@@ -123,6 +123,7 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->flags |= EFFECT_FLAG_NO_DITHER;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
+	e->flags |= EFFECT_FLAG_ALIGN_BARRIER;
 	e->run = stats_effect_run;
 	e->plot = effect_plot_noop;
 	e->destroy = stats_effect_destroy;

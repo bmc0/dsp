@@ -34,6 +34,7 @@ enum {
 	EFFECT_FLAG_OPT_REORDERABLE  = 1<<1,  /* may be reordered for optimization */
 	EFFECT_FLAG_NO_DITHER        = 1<<2,  /* does not modify the signal such that dither is useful */
 	EFFECT_FLAG_CH_DEPS_IDENTITY = 1<<3,  /* does not mix or reorder channels */
+	EFFECT_FLAG_ALIGN_BARRIER    = 1<<4,  /* all input channels must be aligned */
 };
 
 struct effect {
@@ -49,12 +50,13 @@ struct effect {
 	void (*reset)(struct effect *);
 	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);
-	void (*drain_samples)(struct effect *, ssize_t *);  /* per-channel cumulative drain samples */
+	void (*drain_samples)(struct effect *, ssize_t *);  /* cumulative drain samples */
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
 	int (*merge)(struct effect *, struct effect *);  /* may not be called after prepare(); returns 1 if merged, 0 otherwise */
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void (*channel_deps)(struct effect *, char **);  /* input channel dependencies for each output channel */
+	void (*channel_offsets)(struct effect *, ssize_t *, ssize_t *);  /* cumulative latency and requested delay samples for each output channel */
 	void *data;
 };
 
@@ -62,7 +64,6 @@ struct effects_chain {
 	struct effect *head;
 	struct effect *tail;
 	ssize_t frames, drain_frames;
-	int max_in_ch, max_out_ch;
 };
 
 #define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL, 0, 0 }  /* needed for GCC 12 and earlier */

@@ -4,6 +4,7 @@ DSP_OBJDIR := ${OBJDIR}/dsp
 LADSPA_DSP_OBJDIR := ${OBJDIR}/ladspa_dsp
 DSP_OBJ := dsp.o \
 	effect.o \
+	align.o \
 	codec.o \
 	codec_buf.o \
 	sampleconv.o \
@@ -29,6 +30,7 @@ DSP_OBJ := dsp.o \
 DSP_CPP_OBJ :=
 LADSPA_DSP_OBJ := ladspa_dsp.o \
 	effect.o \
+	align.o \
 	util.o \
 	allpass.o \
 	cap5.o \

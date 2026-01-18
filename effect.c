@@ -44,6 +44,8 @@
 #include "stats.h"
 #include "watch.h"
 
+#include "align.h"
+
 #define DO_EFFECTS_CHAIN_OPTIMIZE 1
 
 static const struct effect_info effects[] = {
@@ -362,68 +364,260 @@ static void effects_chain_optimize(struct effects_chain *chain)
 #endif
 }
 
-static int query_channel_deps(struct effects_chain *chain, struct effect *e, char **ch_deps)
+struct effects_chain_postproc_state {
+	char **ch_deps;
+	ssize_t *samples[4];
+	int max_in_ch, max_out_ch, max_ch;
+};
+
+static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+{
+	for (struct effect *e = chain->head; e; e = e->next) {
+		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
+		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
+	}
+	state->max_ch = MAXIMUM(state->max_in_ch, state->max_out_ch);
+
+	state->ch_deps = calloc(state->max_out_ch, sizeof(char *));
+	for (int i = 0; i < state->max_out_ch; ++i)
+		state->ch_deps[i] = NEW_SELECTOR(state->max_in_ch);
+	for (int i = 0; i < LENGTH(state->samples); ++i)
+		state->samples[i] = calloc(state->max_ch, sizeof(ssize_t));
+
+	return 0;
+}
+
+static void effects_chain_postproc_state_cleanup(struct effects_chain_postproc_state *state)
+{
+	if (state->ch_deps) {
+		for (int i = 0; i < state->max_out_ch; ++i)
+			free(state->ch_deps[i]);
+		free(state->ch_deps);
+	}
+	for (int i = 0; i < LENGTH(state->samples); ++i)
+		free(state->samples[i]);
+}
+
+static int query_channel_deps(struct effects_chain_postproc_state *state, struct effects_chain *chain, struct effect *e)
 {
 	if (e->channel_deps) {
-		for (int i = 0; i < chain->max_out_ch; ++i)
-			CLEAR_SELECTOR(ch_deps[i], chain->max_in_ch);
-		/* set identity matrix as initial state */
+		for (int i = 0; i < state->max_out_ch; ++i)
+			CLEAR_SELECTOR(state->ch_deps[i], state->max_in_ch);
+		/* set identity as initial state */
 		const int min_ch = MINIMUM(e->istream.channels, e->ostream.channels);
 		for (int i = 0; i < min_ch; ++i)
-			SET_BIT(ch_deps[i], i);
-		e->channel_deps(e, ch_deps);
+			SET_BIT(state->ch_deps[i], i);
+		e->channel_deps(e, state->ch_deps);
 		return 1;
 	}
 	return 0;
 }
 
-static void effects_chain_set_drain_frames(struct effects_chain *chain, char **ch_deps)
+/* FIXME: Seems to work, but could probably be done in a better way... */
+static void find_input_deps(int ch, char **ch_deps, int n_in, int n_out, char *r_deps)
 {
-	if (chain->head == NULL)
-		return;
-	const int max_ch = MAXIMUM(chain->max_in_ch, chain->max_out_ch);
-	ssize_t *drain_samples = calloc(max_ch, sizeof(ssize_t));
-	ssize_t *drain_samples_tmp = calloc(max_ch, sizeof(ssize_t));
+	CLEAR_SELECTOR(r_deps, n_in);
+	SET_BIT(r_deps, ch);
+	restart:
+	for (int i = 0; i < n_out; ++i) {
+		for (int k = 0; k < n_in; ++k) {
+			if (GET_BIT(r_deps, k) && GET_BIT(ch_deps[i], k))
+				goto has_dep;
+		}
+		continue;
+		has_dep:
+		int mod = 0;
+		for (int k = 0; k < n_in; ++k) {
+			if (GET_BIT(r_deps, k)) continue;
+			if (GET_BIT(ch_deps[i], k)) {
+				SET_BIT(r_deps, k);
+				mod = 1;
+			}
+		}
+		if (mod && i > 0) goto restart;
+	}
+}
+
+static int effects_chain_align_channels(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+{
+	int ret = 0;
+	char *in_deps = NEW_SELECTOR(state->max_ch);
+	char *in_deps_all = NEW_SELECTOR(state->max_ch);
+
+	ssize_t delay_offset = 0;
+	ssize_t *offsets = state->samples[0], *delays = state->samples[1];
+	memset(offsets, 0, state->max_ch * sizeof(ssize_t));
+	memset(delays, 0, state->max_ch * sizeof(ssize_t));
+
+	struct effect *e = chain->head, *prev = NULL;
+	while (e) {
+		const int is_passthrough = (e->istream.channels == e->ostream.channels
+			&& e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE));
+		const int have_ch_deps = query_channel_deps(state, chain, e);
+		if (prev) {
+			/* align channels */
+			if (e->flags & EFFECT_FLAG_ALIGN_BARRIER) {
+				if (align_effect_insert(e, prev, offsets, NULL))
+					goto fail;
+			}
+			else if (have_ch_deps) {
+				CLEAR_SELECTOR(in_deps_all, e->istream.channels);
+				ssize_t *align_refs = state->samples[2];
+				memcpy(align_refs, offsets, e->istream.channels);
+				/* find channels which need to be aligned */
+				for (int k = 0; k < e->istream.channels; ++k) {
+					if (GET_BIT(in_deps_all, k)) continue;  /* already did channel k */
+					find_input_deps(k, state->ch_deps, e->istream.channels, e->ostream.channels, in_deps);
+					ssize_t max_offset = offsets[k];
+					for (int i = 0; i < e->istream.channels; ++i) {
+						if (GET_BIT(in_deps, i)) {
+							SET_BIT(in_deps_all, i);
+							max_offset = MAXIMUM(max_offset, offsets[i]);
+						}
+					}
+					for (int i = 0; i < e->istream.channels; ++i)
+						if (GET_BIT(in_deps, i)) align_refs[i] = max_offset;
+				}
+				if (align_effect_insert(e, prev, offsets, align_refs))
+					goto fail;
+			}
+			else if (e->istream.fs != e->ostream.fs) {
+				LOG_FMT(LL_VERBOSE, "info: %s: sample rate changed; doing full alignment", e->name);
+				if (align_effect_insert(e, prev, offsets, NULL))
+					goto fail;
+			}
+			else if (!is_passthrough) {
+				LOG_FMT(LL_VERBOSE, "warning: %s: channel deps unknown; doing full alignment", e->name);
+				if (align_effect_insert(e, prev, offsets, NULL))
+					goto fail;
+			}
+		}
+		/* find initial output offsets and delays */
+		if (have_ch_deps) {
+			#if 0
+				dsp_log_acquire();
+				dsp_log_printf("%s(): channel deps map:\n", __func__);
+				for (int i = 0; i < e->ostream.channels; ++i) {
+					for (int k = 0; k < e->istream.channels; ++k)
+						dsp_log_printf("  %d", GET_BIT(state->ch_deps[i], k));
+					dsp_log_printf("\n");
+				}
+				dsp_log_release();
+			#endif
+			ssize_t *tmp_offsets = state->samples[2], *tmp_delays = state->samples[3];
+			memcpy(tmp_offsets, offsets, e->istream.channels * sizeof(ssize_t));
+			memcpy(tmp_delays, delays, e->istream.channels * sizeof(ssize_t));
+			ssize_t max_offset = 0;
+			for (int k = 0; k < e->istream.channels; ++k)
+				max_offset = MAXIMUM(max_offset, tmp_offsets[k]);
+			for (int i = 0; i < e->ostream.channels; ++i) {
+				int offset_idx = -1;
+				delays[i] = 0;
+				for (int k = 0; k < e->istream.channels; ++k) {
+					if (GET_BIT(state->ch_deps[i], k)) {
+						if (offset_idx < 0) {
+							offset_idx = k;
+							delays[i] = tmp_delays[k];
+						}
+						else if (tmp_offsets[k] != tmp_offsets[offset_idx]) {
+							LOG_FMT(LL_ERROR, "%s(): BUG: channel %d offset incorrect: %zd!=%zd",
+								__func__, k, tmp_offsets[k], tmp_offsets[offset_idx]);
+							goto fail;
+						}
+						else delays[i] = MINIMUM(delays[i], tmp_delays[k]);
+					}
+				}
+				offsets[i] = (offset_idx >= 0) ? tmp_offsets[offset_idx] : max_offset;
+			}
+		}
+		else if (!is_passthrough) {
+			ssize_t min_delay = delays[0];
+			for (int k = 1; k < e->istream.channels; ++k) {
+				min_delay = MINIMUM(min_delay, delays[k]);
+				if (offsets[k] != offsets[k-1]) {
+					LOG_FMT(LL_ERROR, "%s(): BUG: channel %d offset incorrect: %zd!=%zd",
+						__func__, k, offsets[k], offsets[k-1]);
+					goto fail;
+				}
+			}
+			for (int i = 0; i < e->ostream.channels; ++i)
+				delays[i] = min_delay;
+		}
+		for (int i = e->ostream.channels; i < e->istream.channels; ++i)
+			delays[i] = offsets[i] = 0;
+		/* recalculate offsets */
+		for (int i = 0; i < e->ostream.channels; ++i)
+			offsets[i] += delays[i]-delay_offset;  /* cumulative latency */
+		if (e->channel_offsets)  /* query effect latency and requested delay */
+			e->channel_offsets(e, offsets, delays);
+		delay_offset = 0;
+		for (int i = 0; i < e->ostream.channels; ++i)
+			delay_offset = MINIMUM(delay_offset, delays[i]);
+		/* LOG_FMT(LL_VERBOSE, "%s(): delay_offset=%zd", __func__, delay_offset); */
+		for (int i = 0; i < e->ostream.channels; ++i) {
+			/* LOG_FMT(LL_VERBOSE, "%s(): output channel %d: offset=%zd latency=%zd delay=%zd",
+				__func__, i, offsets[i]-(delays[i]-delay_offset), offsets[i], delays[i]); */
+			offsets[i] -= delays[i]-delay_offset;
+		}
+
+		prev = e;
+		e = e->next;
+	}
+	if (prev && align_effect_insert(e, prev, offsets, NULL))
+		goto fail;
+
+	done:
+	free(in_deps_all);
+	free(in_deps);
+	return ret;
+
+	fail:
+	ret = 1;
+	goto done;
+}
+
+static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+{
+	ssize_t *samples = state->samples[0];
+	memset(samples, 0, state->max_ch * sizeof(ssize_t));
 	for (struct effect *e = chain->head; e; e = e->next) {
 		if (e->drain_samples)
-			e->drain_samples(e, drain_samples);
+			e->drain_samples(e, samples);
 		else if ((e->flags & (EFFECT_FLAG_OPT_REORDERABLE|EFFECT_FLAG_CH_DEPS_IDENTITY))
 				&& e->istream.channels == e->ostream.channels) {
 			/* passthrough; nothing to do */
 		}
-		else if (query_channel_deps(chain, e, ch_deps)) {
-			memcpy(drain_samples_tmp, drain_samples, max_ch * sizeof(ssize_t));
+		else if (query_channel_deps(state, chain, e)) {
+			ssize_t *tmp_samples = state->samples[1];
+			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
 			for (int i = 0; i < e->ostream.channels; ++i) {
 				ssize_t ch_drain = 0;
 				for (int k = 0; k < e->istream.channels; ++k) {
-					if (GET_BIT(ch_deps[i], k))
-						ch_drain = MAXIMUM(ch_drain, drain_samples_tmp[k]);
+					if (GET_BIT(state->ch_deps[i], k))
+						ch_drain = MAXIMUM(ch_drain, tmp_samples[k]);
 				}
-				drain_samples[i] = ch_drain;
+				samples[i] = ch_drain;
 			}
 		}
 		else {  /* effect does not drain, but channel deps unknown */
 			ssize_t drain_frames = 0;
 			for (int i = 0; i < e->istream.channels; ++i)
-				drain_frames = MAXIMUM(drain_frames, drain_samples[i]);
+				drain_frames = MAXIMUM(drain_frames, samples[i]);
 			for (int i = 0; i < e->ostream.channels; ++i)
-				drain_samples[i] = drain_frames;
+				samples[i] = drain_frames;
 		}
 		if (!e->drain_samples && e->ostream.fs != e->istream.fs) {
 			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;
 			for (int i = 0; i < e->ostream.channels; ++i)
-				drain_samples[i] = ratio_mult_ceil(drain_samples[i], ratio_n, ratio_d);
+				samples[i] = ratio_mult_ceil(samples[i], ratio_n, ratio_d);
 		}
-		if (e->ostream.channels < e->istream.channels)
-			for (int i = e->ostream.channels; i < e->istream.channels; ++i)
-				drain_samples[i] = 0;
+		for (int i = e->ostream.channels; i < e->istream.channels; ++i)
+			samples[i] = 0;
 	}
 	chain->drain_frames = 0;
 	for (int i = 0; i < chain->tail->ostream.channels; ++i)
-		chain->drain_frames = MAXIMUM(chain->drain_frames, drain_samples[i]);
-	free(drain_samples);
-	free(drain_samples_tmp);
+		chain->drain_frames = MAXIMUM(chain->drain_frames, samples[i]);
 	if (chain->head->istream.fs != chain->tail->ostream.fs) {
 		const int gcd = find_gcd(chain->head->istream.fs, chain->tail->ostream.fs);
 		chain->drain_frames = (long long int) chain->drain_frames *
@@ -441,32 +635,20 @@ static int effects_chain_prepare(struct effects_chain *chain)
 
 static int build_effects_chain_finish(struct effects_chain *chain)
 {
-	if (chain->head == NULL)
-		return 0;
+	if (chain->head == NULL) return 0;
+	struct effects_chain_postproc_state state = {0};
 
-	int ret = 0;
 	effects_chain_optimize(chain);
-
-	for (struct effect *e = chain->head; e; e = e->next) {
-		chain->max_in_ch = MAXIMUM(chain->max_in_ch, e->istream.channels);
-		chain->max_out_ch = MAXIMUM(chain->max_out_ch, e->ostream.channels);
-	}
-	char **ch_deps = calloc(chain->max_out_ch, sizeof(char *));
-	for (int i = 0; i < chain->max_out_ch; ++i)
-		ch_deps[i] = NEW_SELECTOR(chain->max_in_ch);
-
 	if (effects_chain_prepare(chain)) goto fail;
-	effects_chain_set_drain_frames(chain, ch_deps);
-
-	done:
-	for (int i = 0; i < chain->max_out_ch; ++i)
-		free(ch_deps[i]);
-	free(ch_deps);
-	return ret;
+	if (effects_chain_postproc_state_init(&state, chain)) goto fail;
+	if (effects_chain_align_channels(&state, chain)) goto fail;
+	effects_chain_set_drain_frames(&state, chain);
+	effects_chain_postproc_state_cleanup(&state);
+	return 0;
 
 	fail:
-	ret = 1;
-	goto done;
+	effects_chain_postproc_state_cleanup(&state);
+	return 1;
 }
 
 int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
