@@ -102,18 +102,17 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char has_output, disable, do_phase_flip;
+	char disable, do_phase_flip;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[4];
 	struct filter_bank fb[2];
 	struct matrix4_band band[N_BANDS];
-	sample_t **bufs;
 	struct filter_bank_frame *fb_buf[2];
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_pwrcmp;
-	ssize_t len, p, fb_buf_len, fb_buf_p;
+	ssize_t len, fb_buf_len, fb_buf_p;
 	ssize_t fade_frames, fade_p;
 };
 
@@ -343,9 +342,7 @@ void matrix4_mb_test_fb_effect_destroy(struct effect *e)
 
 sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t oframes = 0;
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-
 	for (ssize_t i = 0; i < *frames; ++i) {
 		double cur_fade_mult = 1.0;
 		if (state->fade_p > 0) {
@@ -463,37 +460,16 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		out_ls = fshape_run(&state->inv_fshape[2], out_ls);
 		out_rs = fshape_run(&state->inv_fshape[3], out_rs);
 
-		if (state->has_output) {
-			for (int k = 0; k < e->istream.channels; ++k) {
-				if (k == state->c0)
-					obuf[oframes*e->ostream.channels + k] = out_l;
-				else if (k == state->c1)
-					obuf[oframes*e->ostream.channels + k] = out_r;
-				else
-					obuf[oframes*e->ostream.channels + k] = state->bufs[k][state->p];
-				state->bufs[k][state->p] = ibuf[i*e->istream.channels + k];
-			}
-			obuf[oframes*e->ostream.channels + e->istream.channels + 0] = out_ls;
-			obuf[oframes*e->ostream.channels + e->istream.channels + 1] = out_rs;
-			++oframes;
+		for (int k = 0; k < e->istream.channels; ++k) {
+			obuf[i*e->ostream.channels + k] =
+				(k == state->c0) ? out_l :
+				(k == state->c1) ? out_r :
+				ibuf[i*e->istream.channels + k];
 		}
-		else {
-			for (int k = 0; k < e->istream.channels; ++k) {
-				#ifdef SYMMETRIC_IO
-					obuf[oframes*e->ostream.channels + k] = 0.0;
-				#endif
-				state->bufs[k][state->p] = ibuf[i*e->istream.channels + k];
-			}
-			#ifdef SYMMETRIC_IO
-				obuf[oframes*e->ostream.channels + e->istream.channels + 0] = 0.0;
-				obuf[oframes*e->ostream.channels + e->istream.channels + 1] = 0.0;
-				++oframes;
-			#endif
-		}
-		state->p = CBUF_NEXT(state->p, state->len);
+		obuf[i*e->ostream.channels + e->istream.channels + 0] = out_ls;
+		obuf[i*e->ostream.channels + e->istream.channels + 1] = out_rs;
+
 		state->fb_buf_p = CBUF_NEXT(state->fb_buf_p, state->fb_buf_len);
-		if (state->p == 0)
-			state->has_output = 1;
 	}
 	#ifndef LADSPA_FRONTEND
 		/* TODO: Implement a proper way for effects to show status lines. */
@@ -525,25 +501,13 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 		}
 	#endif
 
-	*frames = oframes;
 	return obuf;
-}
-
-ssize_t matrix4_mb_effect_delay(struct effect *e)
-{
-	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	return state->len;
 }
 
 void matrix4_mb_effect_reset(struct effect *e)
 {
-	int i;
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	state->p = 0;
 	state->fb_buf_p = 0;
-	state->has_output = 0;
-	for (i = 0; i < e->istream.channels; ++i)
-		memset(state->bufs[i], 0, state->len * sizeof(sample_t));
 	memset(state->fb_buf[0], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
 	memset(state->fb_buf[1], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
 }
@@ -560,20 +524,17 @@ void matrix4_mb_effect_signal(struct effect *e)
 void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	for (int i = 0; i < e->istream.channels; ++i)
-		drain_samples[i] += (i == state->c0 || i == state->c1) ? state->fb_buf_len : state->len;
-	drain_samples[e->ostream.channels-2] = drain_samples[state->c0];
-	drain_samples[e->ostream.channels-1] = drain_samples[state->c1];
+	drain_samples[state->c0] += state->fb_buf_len;
+	drain_samples[state->c1] += state->fb_buf_len;
+	drain_samples[e->istream.channels + 0] = drain_samples[state->c0];
+	drain_samples[e->istream.channels + 1] = drain_samples[state->c1];
 }
 
 void matrix4_mb_effect_destroy(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	for (int i = 0; i < e->istream.channels; ++i)
-		free(state->bufs[i]);
 	free(state->fb_buf[0]);
 	free(state->fb_buf[1]);
-	free(state->bufs);
 	#ifndef LADSPA_FRONTEND
 		if (state->status_type) {
 			dsp_log_acquire();
@@ -596,6 +557,15 @@ void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
 		SET_BIT(deps[i], state->c0);
 		SET_BIT(deps[i], state->c1);
 	}
+}
+
+void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+{
+	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
+	latency[state->c0] += state->len;
+	latency[state->c1] += state->len;
+	latency[e->istream.channels + 0] += state->len;
+	latency[e->istream.channels + 1] += state->len;
 }
 #endif
 
@@ -622,11 +592,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->istream.channels = istream->channels;
 	e->ostream.channels = istream->channels + 2;
 	e->run = matrix4_mb_effect_run;
-	e->delay = matrix4_mb_effect_delay;
 	e->reset = matrix4_mb_effect_reset;
 	e->drain_samples = matrix4_mb_effect_drain_samples;
 	e->destroy = matrix4_mb_effect_destroy;
 	e->channel_deps = matrix4_mb_effect_channel_deps;
+	e->channel_offsets = matrix4_mb_effect_channel_offsets;
 #endif
 
 	state = calloc(1, sizeof(struct matrix4_mb_state));
@@ -726,10 +696,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	}
 
 #if !(DO_FILTER_BANK_TEST)
-	state->len = state->fb_buf_len + (phase_lin_frames - 1);
-	state->bufs = calloc(istream->channels, sizeof(sample_t *));
-	for (int i = 0; i < istream->channels; ++i)
-		state->bufs[i] = calloc(state->len, sizeof(sample_t));
+	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */
 	e->next = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
 #endif
 	effect_list_append(e_fir, e);
