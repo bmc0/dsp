@@ -256,8 +256,8 @@ static void cleanup_and_exit(int s)
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (clip_count > 0)
-		LOG_FMT(LL_NORMAL, "warning: clipped %zd samples (%.2fdBFS peak)",
-			clip_count, 20.0*log10(peak));
+		LOG_FMT(LL_NORMAL, "warning: clipped %zd sample%s (%.2fdBFS peak)",
+			clip_count, (clip_count == 1) ? "" : "s", 20.0*log10(peak));
 	pthread_mutex_destroy(&log_lock);
 	exit(s);
 }
