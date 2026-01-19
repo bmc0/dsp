@@ -251,6 +251,15 @@ ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 	return buf_frames;
 }
 
+void watch_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct watch_node *node = (struct watch_node *) e->data;
+	for (int i = 0; i < e->ostream.channels; ++i) {
+		if (i >= e->istream.channels || GET_BIT(node->channel_mask, i))
+			COPY_SELECTOR(deps[i], node->channel_mask, e->istream.channels);
+	}
+}
+
 struct effect * watch_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
@@ -306,6 +315,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	e->drain2 = watch_effect_drain2;
 	e->destroy = watch_effect_destroy;
 	e->buffer_frames = watch_effect_buffer_frames;
+	e->channel_deps = watch_effect_channel_deps;
 
 	e->data = node;
 	node->e = e;
