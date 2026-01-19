@@ -114,6 +114,37 @@ void ladspa_host_effect_destroy(struct effect *e)
 	free(e->channel_selector);
 }
 
+void ladspa_host_effect_channel_deps(struct effect *e, char **deps)
+{
+	struct ladspa_host_state *state = (struct ladspa_host_state *) e->data;
+	if (state->n_handles > 1) {
+		for (int k = 0; k < e->istream.channels; ++k) {
+			if (GET_BIT(e->channel_selector, k))
+				CLEAR_SELECTOR(deps[k], e->istream.channels);
+		}
+		if (state->n_in > 0) {
+			const int n = state->n_out/state->n_handles;
+			for (int k = 0, i = 0; k < e->istream.channels; ++k) {
+				if (GET_BIT(e->channel_selector, k)) {
+					if (i < k) i = k;
+					for (int c = n; c > 0 && i < e->ostream.channels; ++i) {
+						if (i >= e->istream.channels || GET_BIT(e->channel_selector, i)) {
+							SET_BIT(deps[i], k);
+							--c;
+						}
+					}
+				}
+			}
+		}
+	}
+	else {
+		for (int i = 0; i < e->ostream.channels; ++i) {
+			if (i >= e->istream.channels || GET_BIT(e->channel_selector, i))
+				COPY_SELECTOR(deps[i], e->channel_selector, e->istream.channels);
+		}
+	}
+}
+
 struct effect * ladspa_host_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	char *endptr;
@@ -344,6 +375,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->run = ladspa_host_effect_run;
 	e->destroy = ladspa_host_effect_destroy;
+	e->channel_deps = ladspa_host_effect_channel_deps;
 
 	return e;
 
