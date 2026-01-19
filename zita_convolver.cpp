@@ -28,93 +28,72 @@ extern "C" {
 }
 
 struct zita_convolver_state {
-	ssize_t filter_frames, len, pos;
-	sample_t **output;
+	sample_t **buf;
 	Convproc *cproc;
-	int has_output;
+	ssize_t filter_frames, len, p;
 };
 
 sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
-	ssize_t i, k, iframes = 0, oframes = 0;
-	while (iframes < *frames) {
-		while (state->pos < state->len && iframes < *frames) {
-			for (i = k = 0; i < e->ostream.channels; ++i) {
-				#ifdef SYMMETRIC_IO
-					obuf[oframes * e->ostream.channels + i] = (state->has_output) ? state->output[i][state->pos] : 0.0;
-				#else
-					if (state->has_output)
-						obuf[oframes * e->ostream.channels + i] = state->output[i][state->pos];
-				#endif
-				if (GET_BIT(e->channel_selector, i)) {
-					state->cproc->inpdata(k)[state->pos] = ibuf[iframes * e->ostream.channels + i];
-					++k;
-				}
-				else
-					state->output[i][state->pos] = ibuf[iframes * e->ostream.channels + i];
+	for (ssize_t i = 0; i < *frames; ++i) {
+		for (int k = 0, l = 0; k < e->istream.channels; ++k) {
+			if (state->buf[k]) {
+				const sample_t s = ibuf[i*e->istream.channels + k];
+				ibuf[i*e->istream.channels + k] = state->buf[k][state->p];
+				state->cproc->inpdata(l)[state->p] = s;
+				++l;
 			}
-			#ifdef SYMMETRIC_IO
-				++oframes;
-			#else
-				if (state->has_output)
-					++oframes;
-			#endif
-			++iframes;
-			++state->pos;
 		}
-		if (state->pos == state->len) {
+		++state->p;
+		if (state->p == state->len) {
 			state->cproc->process(true);
-			for (i = k = 0; i < e->ostream.channels; ++i) {
-				if (GET_BIT(e->channel_selector, i)) {
-					read_buf_float((char *) state->cproc->outdata(k), state->output[i], state->len);
-					++k;
+			for (int k = 0, l = 0; k < e->istream.channels; ++k) {
+				if (state->buf[k]) {
+					read_buf_float((void *) state->cproc->outdata(l), state->buf[k], state->len);
+					++l;
 				}
 			}
-			state->pos = 0;
-			state->has_output = 1;
+			state->p = 0;
 		}
 	}
-	*frames = oframes;
-	return obuf;
-}
-
-ssize_t zita_convolver_effect_delay(struct effect *e)
-{
-	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
-	return (state->has_output) ? state->len : state->pos;
+	return ibuf;
 }
 
 void zita_convolver_effect_reset(struct effect *e)
 {
 	/* Note: This doesn't reset zita_convolver's internal state */
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
-	state->pos = 0;
-	state->has_output = 0;
+	state->p = 0;
 }
 
 void zita_convolver_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
-	for (int i = 0; i < e->ostream.channels; ++i) {
-		if (GET_BIT(e->channel_selector, i)) drain_samples[i] += state->filter_frames-1;
-		drain_samples[i] += state->len;
+	for (int k = 0; k < e->ostream.channels; ++k) {
+		if (state->buf[k])
+			drain_samples[k] += state->len + state->filter_frames-1;
 	}
 }
 
 void zita_convolver_effect_destroy(struct effect *e)
 {
-	int i;
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	if (!state->cproc->check_stop())
 		state->cproc->stop_process();
 	state->cproc->cleanup();
 	delete state->cproc;
-	for (i = 0; i < e->ostream.channels; ++i)
-		free(state->output[i]);
-	free(state->output);
+	for (int k = 0; k < e->ostream.channels; ++k)
+		free(state->buf[k]);
+	free(state->buf);
 	free(state);
-	free(e->channel_selector);
+}
+
+void zita_convolver_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+{
+	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
+	for (int k = 0; k < e->istream.channels; ++k)
+		if (state->buf[k]) latency[k] += state->len;
 }
 
 static void write_buf_floatp(sample_t *in, float **out, int channels, ssize_t s)
@@ -179,18 +158,19 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = zita_convolver_effect_run;
-	e->delay = zita_convolver_effect_delay;
 	e->reset = zita_convolver_effect_reset;
 	e->drain_samples = zita_convolver_effect_drain_samples;
 	e->destroy = zita_convolver_effect_destroy;
+	e->channel_offsets = zita_convolver_effect_channel_offsets;
 
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
 	state->filter_frames = filter_frames;
 	state->len = min_part_len;
 	state->cproc = cproc;
-	state->output = (sample_t **) calloc(istream->channels, sizeof(sample_t *));
+	state->buf = (sample_t **) calloc(istream->channels, sizeof(sample_t *));
 	for (int i = 0; i < istream->channels; ++i)
-		state->output[i] = (sample_t *) calloc(state->len, sizeof(sample_t));
+		if (GET_BIT(channel_selector, i))
+			state->buf[i] = (sample_t *) calloc(state->len, sizeof(sample_t));
 	e->data = (void *) state;
 
 	float **buf_planar = (float **) calloc(filter_channels, sizeof(float *));
