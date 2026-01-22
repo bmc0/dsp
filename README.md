@@ -425,11 +425,13 @@ Example:
 	
 	The `LADSPA_PATH` environment variable can be used to set the search path
 	for plugins.
-* `stats [ref_level]`  
+* `stats [-w cols] [ref_level]`  
 	Display the DC offset, minimum, maximum, peak level (dBFS), RMS level
 	(dBFS), crest factor (dB), peak count, peak sample, number of samples, and
 	length (s) for each channel. If `ref_level` is given, peak and RMS levels
-	relative to `ref_level` will be shown as well (dBr).
+	relative to `ref_level` will be shown as well (dBr). The `-w` option sets
+	the display width in characters. If set to zero or less, width is unlimited.
+	The default value is 80.
 * `watch [-e] [~/]path`  
 	Load effects from a file into a sub-chain and reload if the file is
 	modified. Other than the automatic reload, the behavior is similar to
