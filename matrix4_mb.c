@@ -526,8 +526,8 @@ void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	drain_samples[state->c0] += state->fb_buf_len;
 	drain_samples[state->c1] += state->fb_buf_len;
-	drain_samples[e->istream.channels + 0] = drain_samples[state->c0];
-	drain_samples[e->istream.channels + 1] = drain_samples[state->c1];
+	drain_samples[e->istream.channels + 0] += state->fb_buf_len;
+	drain_samples[e->istream.channels + 1] += state->fb_buf_len;
 }
 
 void matrix4_mb_effect_destroy(struct effect *e)

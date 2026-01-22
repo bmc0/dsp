@@ -50,7 +50,7 @@ struct effect {
 	void (*reset)(struct effect *);
 	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);
-	void (*drain_samples)(struct effect *, ssize_t *);  /* cumulative drain samples */
+	void (*drain_samples)(struct effect *, ssize_t *);  /* cumulative drain samples for each output channel */
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
 	int (*merge)(struct effect *, struct effect *);  /* may not be called after prepare(); returns 1 if merged, 0 otherwise */

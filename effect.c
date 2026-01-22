@@ -581,13 +581,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
 	for (struct effect *e = chain->head; e; e = e->next) {
-		if (e->drain_samples)
-			e->drain_samples(e, samples);
-		else if ((e->flags & (EFFECT_FLAG_OPT_REORDERABLE|EFFECT_FLAG_CH_DEPS_IDENTITY))
-				&& e->istream.channels == e->ostream.channels) {
-			/* passthrough; nothing to do */
-		}
-		else if (query_channel_deps(state, chain, e)) {
+		if (query_channel_deps(state, chain, e)) {
 			ssize_t *tmp_samples = state->samples[1];
 			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
 			for (int i = 0; i < e->ostream.channels; ++i) {
@@ -599,13 +593,17 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 				samples[i] = ch_drain;
 			}
 		}
-		else {  /* effect does not drain, but channel deps unknown */
+		else if (!(e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE))
+				&& e->istream.channels != e->ostream.channels) {
+			/* effect does not drain, but channel deps unknown */
 			ssize_t drain_frames = 0;
 			for (int i = 0; i < e->istream.channels; ++i)
 				drain_frames = MAXIMUM(drain_frames, samples[i]);
 			for (int i = 0; i < e->ostream.channels; ++i)
 				samples[i] = drain_frames;
 		}
+		if (e->drain_samples)
+			e->drain_samples(e, samples);
 		if (!e->drain_samples && e->ostream.fs != e->istream.fs) {
 			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;

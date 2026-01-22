@@ -236,8 +236,8 @@ void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	drain_samples[state->c0] += state->len;
 	drain_samples[state->c1] += state->len;
-	drain_samples[e->istream.channels + 0] = drain_samples[state->c0];
-	drain_samples[e->istream.channels + 1] = drain_samples[state->c1];
+	drain_samples[e->istream.channels + 0] += state->len;
+	drain_samples[e->istream.channels + 1] += state->len;
 }
 
 void matrix4_effect_destroy(struct effect *e)
