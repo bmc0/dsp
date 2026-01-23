@@ -309,7 +309,7 @@ Example:
 	By default, the delay is rounded to whole samples. The `-f` option enables
 	fractional delay using Thiran allpass interpolation. The `order` argument
 	sets the allpass filter order and may be any integer from 1 through 50. The
-	default value is 5.
+	default value is 2.
 * `resample [bandwidth] fs[k]`  
 	Sinc resampler. Ignores the channel selector.
 * `fir [-a[offset[s|m|S]]] [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
