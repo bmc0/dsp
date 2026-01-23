@@ -51,6 +51,7 @@
 #else
 #warning "clock_gettime() not available; Progress line throttling won't work."
 #endif
+#define CLEAR_PROGRESS_STR "\033[1K\r"
 
 enum input_mode {
 	INPUT_MODE_CONCAT,
@@ -68,12 +69,9 @@ struct event {
 	int val;
 };
 
-#define PROGRESS_MAX_LEN 1024
-#define CLEAR_PROGRESS   "\033[1K\r"
-
 static struct termios term_attrs;
 static int interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0,
-	force_dither = 0, drain_effects = 1, verbose_progress = 0, progress_cleared = 0,
+	force_dither = 0, drain_effects = 1, verbose_progress = 0, progress_cleared = 1,
 	block_frames = DEFAULT_BLOCK_FRAMES, input_buf_ratio = DEFAULT_INPUT_BUF_RATIO,
 	output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
 enum input_mode input_mode = INPUT_MODE_CONCAT;
@@ -86,7 +84,7 @@ static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
 static struct codec_write_buf *out_codec_buf = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL;
-static char *progress_line = NULL;
+static char progress_line[512] = {0};
 static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t sig_thread, key_thread;
 static int have_sig_thread = 0, have_key_thread = 0;
@@ -149,13 +147,13 @@ struct dsp_globals dsp_globals = {
 void dsp_log_acquire(void)
 {
 	pthread_mutex_lock(&log_lock);
-	if (progress_line && !progress_cleared)
-		fputs(CLEAR_PROGRESS, stderr);
+	if (!progress_cleared)
+		fputs(CLEAR_PROGRESS_STR, stderr);
 }
 
 void dsp_log_release(void)
 {
-	if (progress_line && !progress_cleared)
+	if (!progress_cleared)
 		fputs(progress_line, stderr);
 	pthread_mutex_unlock(&log_lock);
 }
@@ -217,9 +215,9 @@ static void * key_worker(void *arg)
 static void clear_progress(int n)
 {
 	pthread_mutex_lock(&log_lock);
-	if (progress_line && !progress_cleared) {
+	if (!progress_cleared) {
 		if (n) fputc('\n', stderr);
-		else fputs(CLEAR_PROGRESS, stderr);
+		else fputs(CLEAR_PROGRESS_STR, stderr);
 	}
 	progress_cleared = 1;
 	pthread_mutex_unlock(&log_lock);
@@ -251,8 +249,6 @@ static void cleanup_and_exit(int s)
 	#endif
 	free(buf1);
 	free(buf2);
-	free(progress_line);
-	progress_line = NULL;
 	if (term_attrs_saved)
 		tcsetattr(0, TCSANOW, &term_attrs);
 	if (clip_count > 0)
@@ -467,20 +463,18 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
 		if (verbose_progress)
 			in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
-		pthread_mutex_lock(&log_lock);
-		if (progress_line == NULL)
-			progress_line = calloc(PROGRESS_MAX_LEN, sizeof(char));
-		int pl = snprintf(progress_line, PROGRESS_MAX_LEN, "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
+		int pl = snprintf(progress_line, LENGTH(progress_line), "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
-		if (pl < PROGRESS_MAX_LEN - 1 && verbose_progress) {
-			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
+		if (pl < LENGTH(progress_line)-1 && verbose_progress) {
+			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
 		}
-		if (pl < PROGRESS_MAX_LEN - 1 && (verbose_progress || clip_count != 0)) {
-			pl += snprintf(progress_line + pl, PROGRESS_MAX_LEN - pl, "peak:%.2fdBFS  clip:%zd  ",
+		if (pl < LENGTH(progress_line)-1 && (verbose_progress || clip_count != 0)) {
+			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "peak:%.2fdBFS  clip:%zd  ",
 				20.0*log10(peak), clip_count);
 		}
+		pthread_mutex_lock(&log_lock);
 		dsp_log_printf("\r%s\033[K", progress_line);
 		progress_cleared = 0;
 		pthread_mutex_unlock(&log_lock);
