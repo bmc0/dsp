@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -39,6 +39,7 @@ struct alsa_state {
 	snd_pcm_t *dev;
 	struct alsa_enc_info *enc_info;
 	snd_pcm_sframes_t delay;
+	int pause;
 };
 
 static const char codec_name[] = "alsa";
@@ -69,7 +70,7 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: read failed", codec_name);
+			LOG_FMT(LL_ERROR, "%s: error: read failed: %s", codec_name, snd_strerror(n));
 			return r;
 		}
 		else
@@ -103,7 +104,7 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: write failed", codec_name);
+			LOG_FMT(LL_ERROR, "%s: error: write failed: %s", codec_name, snd_strerror(n));
 			return w;
 		}
 		else
@@ -129,7 +130,7 @@ ssize_t alsa_seek(struct codec *c, ssize_t pos)
 ssize_t alsa_delay(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
-	if (snd_pcm_state(state->dev) == SND_PCM_STATE_PAUSED)
+	if (state->pause || snd_pcm_state(state->dev) != SND_PCM_STATE_RUNNING)
 		return state->delay;
 	snd_pcm_delay(state->dev, &state->delay);
 	return state->delay;
@@ -147,9 +148,14 @@ void alsa_drop(struct codec *c)
 void alsa_pause(struct codec *c, int p)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
-	if (snd_pcm_state(state->dev) != SND_PCM_STATE_PAUSED)
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING) {
 		snd_pcm_delay(state->dev, &state->delay);
-	snd_pcm_pause(state->dev, p);
+		if (p && !state->pause) {
+			if (c->write) snd_pcm_drain(state->dev);
+			else snd_pcm_drop(state->dev);
+		}
+	}
+	state->pause = p;
 }
 
 void alsa_destroy(struct codec *c)
