@@ -198,6 +198,7 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	struct codec *c = NULL;
 	struct alsa_state *state = NULL;
 	snd_pcm_uframes_t buf_frames_min, buf_frames_max, buf_frames;
+	unsigned int periods_min, periods_max, periods;
 	struct alsa_enc_info *enc_info;
 
 	if ((err = snd_pcm_open(&dev, p->path, (p->mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
@@ -251,7 +252,21 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 		LOG_FMT(LL_ERROR, "%s: error: failed to set buffer size: %s", codec_name, snd_strerror(err));
 		goto fail;
 	}
-	LOG_FMT(LL_VERBOSE, "%s: info: buffer size: %lu frames [%lu %lu]", codec_name, buf_frames, buf_frames_min, buf_frames_max);
+	if ((err = snd_pcm_hw_params_get_periods_min(hw_p, &periods_min, NULL)) < 0) {
+		LOG_FMT(LL_ERROR, "%s: error: failed to get minimum periods: %s", codec_name, snd_strerror(err));
+		goto fail;
+	}
+	if ((err = snd_pcm_hw_params_get_periods_max(hw_p, &periods_max, NULL)) < 0) {
+		LOG_FMT(LL_ERROR, "%s: error: failed to get maximum periods: %s", codec_name, snd_strerror(err));
+		goto fail;
+	}
+	periods = MINIMUM(MAXIMUM(2, periods_min), periods_max);
+	if ((err = snd_pcm_hw_params_set_periods_near(dev, hw_p, &periods, NULL)) < 0) {
+		LOG_FMT(LL_ERROR, "%s: error: failed to set periods: %s", codec_name, snd_strerror(err));
+		goto fail;
+	}
+	LOG_FMT(LL_VERBOSE, "%s: info: buffer: %lu frames [%lu %lu]; %u periods [%u %u]", codec_name,
+		buf_frames, buf_frames_min, buf_frames_max, periods, periods_min, periods_max);
 	if ((err = snd_pcm_hw_params(dev, hw_p)) < 0) {
 		LOG_FMT(LL_ERROR, "%s: error: failed to set hw params: %s", codec_name, snd_strerror(err));
 		goto fail;
