@@ -92,7 +92,7 @@ struct matrix4_band {
 	} m_interp;
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
-	struct ewma_state bg_cs, ev_thresh;
+	struct ewma_state ev_thresh;
 	double ev_thresh_max, ev_thresh_min;
 	double shelf_mult, shape_mult;
 #ifndef LADSPA_FRONTEND
@@ -408,7 +408,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
 				norm_axes(&band->ax);
 
-				const double w = ewma_run_set_min(&band->bg_cs, smoothstep(band->ax.cs*(-2/M_PI_4))+1.0)-1.0;
+				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
 				const double shelf_mult_tot = w + (1.0-w)*band->shelf_mult;
 				const double shelf_pwrcmp = state->shelf_pwrcmp * ewma_get_last(&band->ev.pwrcmp_factor);
@@ -620,8 +620,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH));
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
-		ewma_init(&band->bg_cs, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(ACCOM_TIME*2.0));
-		ewma_set(&band->bg_cs, 1.0);
 		const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
 		cs_interp_set(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 		cs_interp_set(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
