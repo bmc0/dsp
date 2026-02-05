@@ -735,6 +735,8 @@ int main(int argc, char *argv[])
 		sigaddset(&set, SIGINT);
 		sigaddset(&set, SIGTERM);
 		sigaddset(&set, SIGTSTP);
+		sigaddset(&set, SIGUSR1);
+		sigaddset(&set, SIGUSR2);
 		if ((err = pthread_sigmask(SIG_BLOCK, &set, NULL)) != 0) {
 			LOG_FMT(LL_ERROR, "error: pthread_sigmask() failed: %s", strerror(err));
 			cleanup_and_exit(1);
@@ -792,6 +794,11 @@ int main(int argc, char *argv[])
 						case SIGTSTP:
 							handle_tstp(is_paused);
 							break;
+						case SIGUSR1:
+							goto handle_effects_chain_rebuild_request;
+						case SIGUSR2:
+							signal_effects_chain(&chain);
+							break;
 						default:
 							LOG_FMT(LL_ERROR, "%s: BUG: unhandled signal: %d", __func__, ev.val);
 						}
@@ -827,7 +834,7 @@ int main(int argc, char *argv[])
 							is_paused = !is_paused;
 							do_pause(in_codecs.head, is_paused, 0);
 							break;
-						case 'e':
+						case 'e': handle_effects_chain_rebuild_request:
 							clear_progress(0);
 							LOG_S(LL_NORMAL, "info: rebuilding effects chain");
 							if (xfade_state.pos > 0) finish_xfade();

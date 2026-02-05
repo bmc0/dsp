@@ -622,6 +622,10 @@ Effects utilizing FFTW3 can optionally load and save wisdom. For \fBdsp\fR, set
 `$DSP_FFTW_WISDOM_PATH'. \fBladspa_dsp\fR uses `$LADSPA_DSP_FFTW_WISDOM_PATH'
 instead. If a path is set, FFTW plans are created with the FFTW_MEASURE flag.
 Accumulated wisdom is written on exit.
+.SH SIGNALS
+\fBTSTP\fR is handled gracefully, pausing the active input and output and restoring
+terminal state. \fBUSR1\fR triggers a rebuild of the effects chain. \fBUSR2\fR sends a
+signal to the effects chain.
 .SH EXAMPLES
 Read \fIfile.flac\fR, apply a bass boost, and write to alsa device \fIhw:2\fR:
 .EX

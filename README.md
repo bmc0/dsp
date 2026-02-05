@@ -560,6 +560,12 @@ Effects utilizing FFTW3 can optionally load and save wisdom. For `dsp`, set
 instead. If a path is set, FFTW plans are created with the FFTW_MEASURE flag.
 Accumulated wisdom is written on exit.
 
+### Signals
+
+TSTP is handled gracefully, pausing the active input and output and restoring
+terminal state. USR1 triggers a rebuild of the effects chain. USR2 sends a
+signal to the effects chain.
+
 ### Examples
 
 Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
