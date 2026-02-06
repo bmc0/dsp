@@ -20,6 +20,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <string.h>
 #include <math.h>
 #include <signal.h>
@@ -70,10 +72,10 @@ struct event {
 };
 
 static struct termios term_attrs;
-static int interactive = -1, show_progress = 1, plot = 0, term_attrs_saved = 0,
-	force_dither = 0, drain_effects = 1, verbose_progress = 0, progress_cleared = 1,
-	block_frames = DEFAULT_BLOCK_FRAMES, input_buf_ratio = DEFAULT_INPUT_BUF_RATIO,
-	output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
+static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1,
+	plot = 0, term_attrs_saved = 0, force_dither = 0, drain_effects = 1,
+	verbose_progress = 0, progress_cleared = 1, block_frames = DEFAULT_BLOCK_FRAMES,
+	input_buf_ratio = DEFAULT_INPUT_BUF_RATIO, output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
 enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
 static sample_t peak = 0.0, dither_mult = 0.0;
@@ -191,7 +193,7 @@ static void * sig_worker(void *arg)
 	int sig;
 	for (;;) {
 		if (sigwait(set, &sig) != 0) {
-			LOG_S(LL_ERROR, "sig_worker: error: sigwait() failed");
+			LOG_FMT(LL_ERROR, "%s: error: sigwait() failed", __func__);
 			ev_queue_push(EVENT_TYPE_SIGNAL, SIGTERM);
 			break;
 		}
@@ -202,12 +204,16 @@ static void * sig_worker(void *arg)
 
 static void * key_worker(void *arg)
 {
+	const int fd = *((int *) arg);
 	for (;;) {
 		ssize_t r;
 		char ch = 0;
-		while ((r = read(STDIN_FILENO, &ch, 1)) < 0 && errno == EINTR);
+		while ((r = read(fd, &ch, 1)) < 0 && errno == EINTR);
 		if (r == 1) ev_queue_push(EVENT_TYPE_KEY, ch);
-		else if (r < 0) LOG_FMT(LL_ERROR, "key_worker: read error: %s", strerror(errno));
+		else if (r < 0) {
+			LOG_FMT(LL_ERROR, "%s: error: read: %s", __func__, strerror(errno));
+			return NULL;
+		}
 	}
 	return NULL;
 }
@@ -250,7 +256,7 @@ static void cleanup_and_exit(int s)
 	free(buf1);
 	free(buf2);
 	if (term_attrs_saved)
-		tcsetattr(0, TCSANOW, &term_attrs);
+		tcsetattr(term_fd, TCSANOW, &term_attrs);
 	if (clip_count > 0)
 		LOG_FMT(LL_NORMAL, "warning: clipped %zd sample%s (%.2fdBFS peak)",
 			clip_count, (clip_count == 1) ? "" : "s", 20.0*log10(peak));
@@ -262,14 +268,14 @@ static void term_setup(void)
 {
 	struct termios n;
 	if (!term_attrs_saved) {
-		tcgetattr(0, &term_attrs);
+		tcgetattr(term_fd, &term_attrs);
 		term_attrs_saved = 1;
 	}
 	n = term_attrs;
 	n.c_lflag &= ~(ICANON | ECHO);
 	n.c_cc[VMIN] = 1;
 	n.c_cc[VTIME] = 0;
-	tcsetattr(0, TCSANOW, &n);
+	tcsetattr(term_fd, TCSANOW, &n);
 }
 
 static void print_help(void)
@@ -588,7 +594,7 @@ static struct codec_write_buf * init_out_codec(struct codec_params *out_p, struc
 static void handle_tstp(int is_paused)
 {
 	sigset_t set;
-	if (interactive && term_attrs_saved) tcsetattr(0, TCSANOW, &term_attrs);
+	if (interactive && term_attrs_saved) tcsetattr(term_fd, TCSANOW, &term_attrs);
 	if (!is_paused) do_pause(in_codecs.head, 1, 1);
 	sigemptyset(&set);
 	sigaddset(&set, SIGTSTP);
@@ -669,8 +675,11 @@ int main(int argc, char *argv[])
 	dsp_globals.prog_name = argv[0];
 
 	opterr = 0;
-	if (!isatty(STDIN_FILENO))
-		interactive = 0;
+	if (!isatty(term_fd)) {
+		term_fd = open(ctermid(NULL), O_RDWR);
+		if (term_fd < 0 || !isatty(term_fd))
+			interactive = 0;
+	}
 	while (optind < argc && !IS_EFFECTS_CHAIN_START(argv[optind])) {
 		if (parse_codec_params(argc, argv, &p))
 			cleanup_and_exit(1);
@@ -763,7 +772,7 @@ int main(int argc, char *argv[])
 			interactive = (out_codec->hints & CODEC_HINT_INTERACTIVE) ? 1 : 0;
 		if (interactive) {
 			term_setup();
-			if ((err = pthread_create(&key_thread, NULL, key_worker, NULL)) != 0) {
+			if ((err = pthread_create(&key_thread, NULL, key_worker, &term_fd)) != 0) {
 				LOG_FMT(LL_ERROR, "error: could not create key handling thread: %s", strerror(err));
 				cleanup_and_exit(1);
 			}
