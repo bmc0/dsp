@@ -85,6 +85,9 @@ void dsp_statuslines_acquire(void);
 void dsp_statuslines_release(void);
 void dsp_statusline_register(struct statusline_state *);
 void dsp_statusline_unregister(struct statusline_state *);
+
+/* must wrap in dsp_log_{acquire,release}() calls */
+void dsp_get_term_size(int *, int *);
 #endif
 
 #endif

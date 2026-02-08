@@ -255,6 +255,12 @@ void dsp_statusline_unregister(struct statusline_state *line)
 	pthread_mutex_unlock(&log_lock);
 }
 
+void dsp_get_term_size(int *rows, int *cols)
+{
+	if (rows) *rows = term_size.rows;
+	if (cols) *cols = term_size.cols;
+}
+
 static void ev_queue_push(enum event_type type, int val)
 {
 	while (sem_wait(&ev_queue.slots) != 0);
