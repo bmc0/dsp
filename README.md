@@ -229,8 +229,7 @@ Example:
 	Options are given as a comma-separated list. Recognized options are:
 
 	* `show_status[=bars|text|none]`  
-		Show a status line (slightly broken currently, but still useful for
-		debugging).
+		Show real-time steering information.
 	* `matrix=v1|v2|v3`  
 		Controls steering behavior for rear-encoded sounds. `v1` does not
 		remove anything from the front outputs. `v2` adds full steering of

@@ -57,8 +57,10 @@ struct matrix4_state {
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
 	ssize_t len, p, fade_frames, fade_p;
-#ifndef LADSPA_FRONTEND
+#ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
+	struct statusline_state statusline;
+	int statusline_registered;
 #endif
 };
 
@@ -188,28 +190,33 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 		state->p = CBUF_NEXT(state->p, state->len);
 	}
-	#ifndef LADSPA_FRONTEND
-		/* TODO: Implement a proper way for effects to show status lines. */
-		if (state->status_type) {
-			dsp_log_acquire();
-			if (state->status_type == STATUS_TYPE_TEXT) {
-				dsp_log_printf("\n%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
-					"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r\033[A",
-					e->name, (state->disable) ? " [off]" : "",
-					TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-					state->ev.adj, state->shelf_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
-					state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
-			}
-			else {
-				draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
-				draw_steering_bar(state->ax.cs, state->ev.hold, &state->cs_bar);
-				dsp_log_printf("\n%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd\033[K\r\033[A",
-					e->name, (state->disable) ? " [off]" : "",
-					state->lr_bar.s, state->cs_bar.s, state->ev.ord_count, state->ev.diff_count, state->ev.ignore_count);
-			}
-			dsp_log_release();
+#ifdef DSP_STATUSLINES
+	if (state->status_type) {
+		dsp_statuslines_acquire();
+		if (!state->statusline_registered) {
+			dsp_statusline_register(&state->statusline);
+			state->statusline_registered = 1;
 		}
-	#endif
+		if (state->status_type == STATUS_TYPE_TEXT) {
+			snprintf(state->statusline.s, LENGTH(state->statusline.s),
+				"%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
+				"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
+				e->name, (state->disable) ? " [off]" : "",
+				TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
+				state->ev.adj, state->shelf_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
+				state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
+		}
+		else {
+			draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
+			draw_steering_bar(state->ax.cs, state->ev.hold, &state->cs_bar);
+			snprintf(state->statusline.s, LENGTH(state->statusline.s),
+				"%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd",
+				e->name, (state->disable) ? " [off]" : "",
+				state->lr_bar.s, state->cs_bar.s, state->ev.ord_count, state->ev.diff_count, state->ev.ignore_count);
+		}
+		dsp_statuslines_release();
+	}
+#endif
 
 	return obuf;
 }
@@ -246,13 +253,13 @@ void matrix4_effect_destroy(struct effect *e)
 	free(state->bufs[0]);
 	free(state->bufs[1]);
 	event_state_cleanup(&state->ev);
-	#ifndef LADSPA_FRONTEND
-		if (state->status_type) {
-			dsp_log_acquire();
-			dsp_log_printf("\033[K\n\033[K\r\033[A");
-			dsp_log_release();
-		}
-	#endif
+#ifdef DSP_STATUSLINES
+	if (state->statusline_registered) {
+		dsp_statuslines_acquire();
+		dsp_statusline_unregister(&state->statusline);
+		dsp_statuslines_release();
+	}
+#endif
 	free(state);
 }
 

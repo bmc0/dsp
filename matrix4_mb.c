@@ -95,8 +95,9 @@ struct matrix4_band {
 	struct ewma_state ev_thresh;
 	double ev_thresh_max, ev_thresh_min;
 	double shelf_mult, shape_mult;
-#ifndef LADSPA_FRONTEND
+#ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
+	struct statusline_state statusline;
 #endif
 };
 
@@ -114,6 +115,9 @@ struct matrix4_mb_state {
 	double surr_mult[2], shelf_pwrcmp;
 	ssize_t len, fb_buf_len, fb_buf_p;
 	ssize_t fade_frames, fade_p;
+#ifdef DSP_STATUSLINES
+	int statuslines_registered;
+#endif
 };
 
 static void fshape_filter_init(struct biquad_state *b, double fs, const double p[4], int is_hf, int is_inv)
@@ -471,35 +475,40 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 		state->fb_buf_p = CBUF_NEXT(state->fb_buf_p, state->fb_buf_len);
 	}
-	#ifndef LADSPA_FRONTEND
-		/* TODO: Implement a proper way for effects to show status lines. */
-		if (state->status_type) {
-			dsp_log_acquire();
-			if (state->status_type == STATUS_TYPE_TEXT) {
-				for (int i = 0; i < N_BANDS; ++i) {
-					struct matrix4_band *band = &state->band[i];
-					dsp_log_printf("\n%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
-						"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd\033[K\r",
-						e->name, (state->disable) ? " [off]" : "", i,
-						TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
-						band->ev.adj, ewma_get_last(&band->ev_thresh), state->shelf_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
-						band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
-				}
-			}
-			else {
-				for (int i = 0; i < N_BANDS; ++i) {
-					struct matrix4_band *band = &state->band[i];
-					draw_steering_bar(band->ax.lr, band->ev.hold, &band->lr_bar);
-					draw_steering_bar(band->ax.cs, band->ev.hold, &band->cs_bar);
-					dsp_log_printf("\n%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd\033[K\r",
-						e->name, (state->disable) ? " [off]" : "", i,
-						band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count);
-				}
-			}
-			dsp_log_printf("\033[%dA", N_BANDS);
-			dsp_log_release();
+#ifdef DSP_STATUSLINES
+	if (state->status_type) {
+		dsp_statuslines_acquire();
+		if (!state->statuslines_registered) {
+			for (int i = 0; i < N_BANDS; ++i)
+				dsp_statusline_register(&state->band[i].statusline);
+			state->statuslines_registered = 1;
 		}
-	#endif
+		if (state->status_type == STATUS_TYPE_TEXT) {
+			for (int i = 0; i < N_BANDS; ++i) {
+				struct matrix4_band *band = &state->band[i];
+				snprintf(band->statusline.s, LENGTH(band->statusline.s),
+					"%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
+					"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
+					e->name, (state->disable) ? " [off]" : "", i,
+					TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
+					band->ev.adj, ewma_get_last(&band->ev_thresh), state->shelf_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
+					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
+			}
+		}
+		else {
+			for (int i = 0; i < N_BANDS; ++i) {
+				struct matrix4_band *band = &state->band[i];
+				draw_steering_bar(band->ax.lr, band->ev.hold, &band->lr_bar);
+				draw_steering_bar(band->ax.cs, band->ev.hold, &band->cs_bar);
+				snprintf(band->statusline.s, LENGTH(band->statusline.s),
+					"%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd",
+					e->name, (state->disable) ? " [off]" : "", i,
+					band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count);
+			}
+		}
+		dsp_statuslines_release();
+	}
+#endif
 
 	return obuf;
 }
@@ -535,16 +544,16 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	free(state->fb_buf[0]);
 	free(state->fb_buf[1]);
-	#ifndef LADSPA_FRONTEND
-		if (state->status_type) {
-			dsp_log_acquire();
-			for (int i = 0; i < N_BANDS; ++i) dsp_log_printf("\033[K\n");
-			dsp_log_printf("\033[K\r\033[%dA", N_BANDS);
-			dsp_log_release();
-		}
-	#endif
 	for (int i = 0; i < N_BANDS; ++i)
 		event_state_cleanup(&state->band[i].ev);
+#ifdef DSP_STATUSLINES
+	if (state->statuslines_registered) {
+		dsp_statuslines_acquire();
+		for (int i = 0; i < N_BANDS; ++i)
+			dsp_statusline_unregister(&state->band[i].statusline);
+		dsp_statuslines_release();
+	}
+#endif
 	free(state);
 }
 
