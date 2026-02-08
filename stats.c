@@ -18,9 +18,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include "stats.h"
 #include "util.h"
+
+#define STATS_DEFAULT_WIDTH 80
 
 struct stats_state {
 	ssize_t samples, peak_count, peak_frame;
@@ -106,9 +109,15 @@ void stats_effect_destroy(struct effect *e)
 {
 	struct stats_state *state = (struct stats_state *) e->data;
 	int cols = e->ostream.channels;
+	dsp_log_acquire();
+#ifdef DSP_STATUSLINES
+	if (state->width < 0) {
+		dsp_get_term_size(NULL, &state->width);
+		if (state->width <= 0) state->width = STATS_DEFAULT_WIDTH;
+	}
+#endif
 	if (state->width > 0)
 		cols = MAXIMUM((state->width-18)/13, 1);
-	dsp_log_acquire();
 	for (int i = 0; i < e->ostream.channels; i+=cols)
 		stats_print_channels(e, i, MINIMUM(i+cols, e->ostream.channels));
 	dsp_log_release();
@@ -117,7 +126,7 @@ void stats_effect_destroy(struct effect *e)
 
 struct effect * stats_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	int width = 80, opt;
+	int width = STATS_DEFAULT_WIDTH, opt;
 	sample_t ref = -HUGE_VAL;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	char *endptr;
@@ -125,8 +134,16 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	while ((opt = dsp_getopt(&g, argc, argv, "w:")) != -1) {
 		switch (opt) {
 		case 'w':
-			width = strtol(g.arg, &endptr, 10);
-			CHECK_ENDPTR(g.arg, endptr, "width", return NULL);
+			if (strcmp(g.arg, "auto") == 0)
+				width = -1;
+			else {
+				width = strtol(g.arg, &endptr, 10);
+				CHECK_ENDPTR(g.arg, endptr, "width", return NULL);
+				if (width < 0) {
+					LOG_FMT(LL_ERROR, "%s: error: width must be positive or zero", argv[0]);
+					return NULL;
+				}
+			}
 			break;
 		case ':':
 			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);

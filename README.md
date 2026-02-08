@@ -429,8 +429,8 @@ Example:
 	(dBFS), crest factor (dB), peak count, peak sample, number of samples, and
 	length (s) for each channel. If `ref_level` is given, peak and RMS levels
 	relative to `ref_level` will be shown as well (dBr). The `-w` option sets
-	the display width in characters. If set to zero or less, width is unlimited.
-	The default value is 80.
+	the display width in characters. Zero means unlimited width. `auto` queries
+	the size of the terminal (if available). The default value is 80.
 * `watch [-e] [~/]path`  
 	Load effects from a file into a sub-chain and reload if the file is
 	modified. Other than the automatic reload, the behavior is similar to
