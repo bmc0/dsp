@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
@@ -53,7 +54,6 @@
 #else
 #warning "clock_gettime() not available; Progress line throttling won't work."
 #endif
-#define CLEAR_PROGRESS_STR "\033[1K\r"
 
 enum input_mode {
 	INPUT_MODE_CONCAT,
@@ -72,9 +72,9 @@ struct event {
 };
 
 static struct termios term_attrs;
-static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1,
-	plot = 0, term_attrs_saved = 0, force_dither = 0, drain_effects = 1,
-	verbose_progress = 0, progress_cleared = 1, block_frames = DEFAULT_BLOCK_FRAMES,
+static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1, plot = 0,
+	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0,
+	status_cleared = -1, status_redraw = 1, block_frames = DEFAULT_BLOCK_FRAMES,
 	input_buf_ratio = DEFAULT_INPUT_BUF_RATIO, output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
 enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
@@ -86,7 +86,6 @@ static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
 static struct codec_write_buf *out_codec_buf = NULL;
 static sample_t *buf1 = NULL, *buf2 = NULL;
-static char progress_line[512] = {0};
 static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t sig_thread, key_thread;
 static int have_sig_thread = 0, have_key_thread = 0;
@@ -96,6 +95,15 @@ static struct {
 	int front, back, init;
 	sem_t slots, items;
 } ev_queue = { .lock = PTHREAD_MUTEX_INITIALIZER };
+static char progress_line[DSP_STATUSLINE_MAX_LEN] = {0};
+static pthread_mutex_t status_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct {
+	struct statusline_state *head, *tail;
+	int len;
+} status_list = {0};
+static struct {
+	int rows, cols;
+} term_size = {0};
 
 static const char help_text[] =
 	"Usage: %s [options] path ... [effect [args]] ...\n"
@@ -146,17 +154,104 @@ struct dsp_globals dsp_globals = {
 	"dsp",                  /* prog_name */
 };
 
+static void statuslines_clear(void)
+{
+	pthread_mutex_lock(&status_lock);
+	if (show_progress || status_list.head) {
+		dsp_log_puts("\033[1K\r");
+		if (status_list.head) {
+			for (int i = 0; i < status_list.len; ++i) dsp_log_puts("\n\033[2K");
+			dsp_log_printf("\033[%dA", status_list.len);
+		}
+	}
+	pthread_mutex_unlock(&status_lock);
+}
+
+static const char * trunc_line(const char *s, int w)
+{
+	static char buf[DSP_STATUSLINE_MAX_LEN];
+	if (w < 1) return s;
+	const size_t len = strlen(s);
+	if (w >= LENGTH(buf)) w = LENGTH(buf)-1;
+	if (len > w) {
+		memcpy(buf, s, w-3);
+		memcpy(buf+w-3, "...", 4);
+		return buf;
+	}
+	return s;
+}
+
+static void statuslines_draw(int cr, int force)
+{
+	pthread_mutex_lock(&status_lock);
+	if ((show_progress || status_list.head) && (status_redraw || force)) {
+		const int w = term_size.cols - 1;
+		if (!cr && show_progress)
+			dsp_log_printf("\r%s\033[K\033[2C", trunc_line(progress_line, w));
+		for (struct statusline_state *line = status_list.head; line; line = line->next)
+			dsp_log_printf("\n%s\033[K", trunc_line(line->s, w));
+		dsp_log_putc((cr) ? '\r' : '\n');
+		if (cr) {
+			if (status_list.head)
+				dsp_log_printf("\033[%dA", status_list.len);
+			if (show_progress)
+				dsp_log_printf("%s\033[K\033[2C", trunc_line(progress_line, w));
+		}
+		status_redraw = 0;
+	}
+	pthread_mutex_unlock(&status_lock);
+}
+
 void dsp_log_acquire(void)
 {
 	pthread_mutex_lock(&log_lock);
-	if (!progress_cleared)
-		fputs(CLEAR_PROGRESS_STR, stderr);
+	if (!status_cleared)
+		statuslines_clear();
 }
 
 void dsp_log_release(void)
 {
-	if (!progress_cleared)
-		fputs(progress_line, stderr);
+	if (!status_cleared)
+		statuslines_draw(1, 1);
+	pthread_mutex_unlock(&log_lock);
+}
+
+void dsp_statuslines_acquire(void)
+{
+	pthread_mutex_lock(&status_lock);
+}
+
+void dsp_statuslines_release(void)
+{
+	status_redraw = 1;
+	pthread_mutex_unlock(&status_lock);
+}
+
+void dsp_statusline_register(struct statusline_state *line)
+{
+	if (status_list.head) {
+		line->prev = status_list.tail;
+		status_list.tail = line->prev->next = line;
+	}
+	else {
+		line->prev = NULL;
+		status_list.head = status_list.tail = line;
+	}
+	line->next = NULL;
+	++status_list.len;
+}
+
+void dsp_statusline_unregister(struct statusline_state *line)
+{
+	if (line->next) line->next->prev = line->prev;
+	else            status_list.tail = line->prev;
+	if (line->prev) line->prev->next = line->next;
+	else            status_list.head = line->next;
+	line->next = line->prev = NULL;
+	pthread_mutex_lock(&log_lock);
+	if (!status_cleared)  /* clear last line */
+		dsp_log_printf("\033[%dB\033[2K\033[%dA", status_list.len, status_list.len);
+	--status_list.len;
 	pthread_mutex_unlock(&log_lock);
 }
 
@@ -218,20 +313,39 @@ static void * key_worker(void *arg)
 	return NULL;
 }
 
-static void clear_progress(int n)
+enum status_ctrl_action {
+	STATUS_CTRL_DRAW = 1,
+	STATUS_CTRL_CLEAR,
+	STATUS_CTRL_KEEP,
+};
+
+static void status_ctrl(enum status_ctrl_action action)
 {
 	pthread_mutex_lock(&log_lock);
-	if (!progress_cleared) {
-		if (n) fputc('\n', stderr);
-		else fputs(CLEAR_PROGRESS_STR, stderr);
+	switch (action) {
+	case STATUS_CTRL_DRAW:
+		statuslines_draw(1, 0);
+		status_cleared = 0;
+		break;
+	case STATUS_CTRL_CLEAR:
+		if (!status_cleared) {
+			statuslines_clear();
+			status_cleared = 1;
+		}
+		break;
+	case STATUS_CTRL_KEEP:
+		if (status_cleared >= 0) {
+			statuslines_draw(0, 1);
+			status_cleared = -1;
+		}
+		break;
 	}
-	progress_cleared = 1;
 	pthread_mutex_unlock(&log_lock);
 }
 
 static void cleanup_and_exit(int s)
 {
-	clear_progress(s);
+	status_ctrl((s) ? STATUS_CTRL_KEEP : STATUS_CTRL_CLEAR);
 	if (have_key_thread) {
 		pthread_cancel(key_thread);
 		pthread_join(key_thread, NULL);
@@ -260,7 +374,6 @@ static void cleanup_and_exit(int s)
 	if (clip_count > 0)
 		LOG_FMT(LL_NORMAL, "warning: clipped %zd sample%s (%.2fdBFS peak)",
 			clip_count, (clip_count == 1) ? "" : "s", 20.0*log10(peak));
-	pthread_mutex_destroy(&log_lock);
 	exit(s);
 }
 
@@ -454,7 +567,7 @@ static int has_elapsed(struct timespec *then, double s)
 }
 #endif
 
-static void print_progress(struct codec *in, ssize_t pos, int is_paused, int force)
+static void update_progress(struct codec *in, ssize_t pos, int is_paused, int force)
 {
 	if (!show_progress)
 		return;
@@ -469,21 +582,19 @@ static void print_progress(struct codec *in, ssize_t pos, int is_paused, int for
 		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
 		if (verbose_progress)
 			in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
-		int pl = snprintf(progress_line, LENGTH(progress_line), "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT"  ",
+		dsp_statuslines_acquire();
+		int pl = snprintf(progress_line, LENGTH(progress_line), "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT,
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
 		if (pl < LENGTH(progress_line)-1 && verbose_progress) {
-			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "lat:%.2fms+%.2fms+%.2fms=%.2fms  ",
+			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "  lat:%.2fms+%.2fms+%.2fms=%.2fms",
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
 		}
 		if (pl < LENGTH(progress_line)-1 && (verbose_progress || clip_count != 0)) {
-			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "peak:%.2fdBFS  clip:%zd  ",
+			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "  peak:%.2fdBFS  clip:%zd",
 				20.0*log10(peak), clip_count);
 		}
-		pthread_mutex_lock(&log_lock);
-		dsp_log_printf("\r%s\033[K", progress_line);
-		progress_cleared = 0;
-		pthread_mutex_unlock(&log_lock);
+		dsp_statuslines_release();
 #ifdef HAVE_CLOCK_GETTIME
 	}
 #endif
@@ -591,6 +702,29 @@ static struct codec_write_buf * init_out_codec(struct codec_params *out_p, struc
 	return out_codec_buf;
 }
 
+static void query_term_size(void)
+{
+	if (term_fd < 0) return;
+	dsp_log_acquire();
+#if defined(TIOCGWINSZ)
+	struct winsize ws;
+	if (ioctl(term_fd, TIOCGWINSZ, &ws) == 0) {
+		term_size.rows = ws.ws_row;
+		term_size.cols = ws.ws_col;
+#elif defined(TIOCGSIZE)
+	struct ttysize ts;
+	if (ioctl(term_fd, TIOCGSIZE, &ts) == 0) {
+		term_size.rows = ts.ts_row;
+		term_size.cols = ws.ts_col;
+#endif
+		/* if (LOGLEVEL(LL_VERBOSE))
+			dsp_log_printf("%s: info: terminal size: %dx%d\n", dsp_globals.prog_name, term_size.cols, term_size.rows); */
+	}
+	/* else if (LOGLEVEL(LL_ERROR))
+		dsp_log_printf("%s: error: ioctl(): %s\n", dsp_globals.prog_name, strerror(errno)); */
+	dsp_log_release();
+}
+
 static void handle_tstp(int is_paused)
 {
 	sigset_t set;
@@ -602,6 +736,7 @@ static void handle_tstp(int is_paused)
 		LOG_S(LL_ERROR, "error: pthread_sigmask() failed");
 		cleanup_and_exit(1);
 	}
+	status_ctrl(STATUS_CTRL_KEEP);
 	raise(SIGTSTP);
 	if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
 		LOG_S(LL_ERROR, "error: pthread_sigmask() failed");
@@ -609,6 +744,7 @@ static void handle_tstp(int is_paused)
 	}
 	if (interactive) term_setup();
 	if (!is_paused) do_pause(in_codecs.head, 0, 0);
+	query_term_size();
 }
 
 #define DRAIN_EFFECTS_CHAIN \
@@ -746,6 +882,7 @@ int main(int argc, char *argv[])
 		sigaddset(&set, SIGTSTP);
 		sigaddset(&set, SIGUSR1);
 		sigaddset(&set, SIGUSR2);
+		if (term_fd >= 0) sigaddset(&set, SIGWINCH);
 		if ((err = pthread_sigmask(SIG_BLOCK, &set, NULL)) != 0) {
 			LOG_FMT(LL_ERROR, "error: pthread_sigmask() failed: %s", strerror(err));
 			cleanup_and_exit(1);
@@ -755,6 +892,7 @@ int main(int argc, char *argv[])
 			cleanup_and_exit(1);
 		}
 		have_sig_thread = 1;
+		query_term_size();
 
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 			cleanup_and_exit(1);
@@ -789,7 +927,7 @@ int main(int argc, char *argv[])
 			int k = 0;
 			SET_DITHER(&chain);
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
-			print_progress(in_codecs.head, pos, is_paused, 1);
+			update_progress(in_codecs.head, pos, is_paused, 1);
 			do {
 				struct event ev;
 				while (ev_queue_pop(is_paused, &ev) == 0) {
@@ -799,14 +937,19 @@ int main(int argc, char *argv[])
 						case SIGINT:
 						case SIGTERM:
 							term_sig = ev.val;
+							update_progress(in_codecs.head, pos, is_paused, 1);
 							goto got_term_sig;
 						case SIGTSTP:
 							handle_tstp(is_paused);
+							print_io_info(in_codecs.head, LL_NORMAL, "input");
 							break;
 						case SIGUSR1:
 							goto handle_effects_chain_rebuild_request;
 						case SIGUSR2:
 							signal_effects_chain(&chain);
+							break;
+						case SIGWINCH:
+							query_term_size();
 							break;
 						default:
 							LOG_FMT(LL_ERROR, "%s: BUG: unhandled signal: %d", __func__, ev.val);
@@ -844,7 +987,7 @@ int main(int argc, char *argv[])
 							do_pause(in_codecs.head, is_paused, 0);
 							break;
 						case 'e': handle_effects_chain_rebuild_request:
-							clear_progress(0);
+							status_ctrl(STATUS_CTRL_CLEAR);
 							LOG_S(LL_NORMAL, "info: rebuilding effects chain");
 							if (xfade_state.pos > 0) finish_xfade();
 							if (!is_paused && !drain_effects) {  /* attempt crossfade */
@@ -893,6 +1036,12 @@ int main(int argc, char *argv[])
 						case 'q':
 							codec_write_buf_drop(out_codec_buf, 1, 0);
 							goto end_rw_loop;
+						case '\f':  /* full redraw */
+							dsp_log_acquire();
+							dsp_log_printf("\033[2J\033[H");
+							dsp_log_release();
+							print_io_info(in_codecs.head, LL_NORMAL, "input");
+							break;
 						}
 						break;
 					case EVENT_TYPE_CODEC_ERROR:
@@ -901,7 +1050,8 @@ int main(int argc, char *argv[])
 					default:
 						LOG_FMT(LL_ERROR, "%s: BUG: unhandled event type: %d", __func__, (int) ev.type);
 					}
-					print_progress(in_codecs.head, pos, is_paused, 1);
+					update_progress(in_codecs.head, pos, is_paused, 1);
+					status_ctrl(STATUS_CTRL_DRAW);
 				}
 				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
 				pos += r;
@@ -916,9 +1066,10 @@ int main(int argc, char *argv[])
 				write_out(w, obuf, add_dither);
 				k += w;
 				if (k >= out_codec->fs) {
-					print_progress(in_codecs.head, pos, is_paused, 0);
+					update_progress(in_codecs.head, pos, is_paused, 0);
 					k -= out_codec->fs;
 				}
+				status_ctrl(STATUS_CTRL_DRAW);
 			} while (r > 0);
 			next_input:
 			codec_read_buf_next(in_codec_buf);
@@ -926,7 +1077,7 @@ int main(int argc, char *argv[])
 			stream.channels = in_codecs.head->channels;
 			destroy_codec_list_head(&in_codecs);
 			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
-				clear_progress(0);
+				status_ctrl(STATUS_CTRL_CLEAR);
 				LOG_S(LL_NORMAL, "info: input sample rate and/or channels changed; rebuilding effects chain");
 				if (!is_paused)
 					DRAIN_EFFECTS_CHAIN;
@@ -941,7 +1092,7 @@ int main(int argc, char *argv[])
 	cleanup_and_exit(0);
 
 	got_term_sig:
-	clear_progress(1);
+	status_ctrl(STATUS_CTRL_KEEP);
 	LOG_FMT(LL_NORMAL, "info: signal %d: terminating...", term_sig);
 	codec_write_buf_drop(out_codec_buf, 1, 0);
 	goto end_rw_loop;

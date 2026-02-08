@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -31,6 +31,8 @@ enum {
 };
 #define LOGLEVEL(l) (dsp_globals.loglevel >= (l))
 #define dsp_log_printf(...) fprintf(stderr, __VA_ARGS__)
+#define dsp_log_puts(str)   fputs(str, stderr)
+#define dsp_log_putc(c)     putc(c, stderr)
 #define LOG_FMT(l, fmt, ...) \
 	do { \
 		if (LOGLEVEL(l)) { \
@@ -68,7 +70,21 @@ struct stream_info {
 };
 
 extern struct dsp_globals dsp_globals;
-extern void dsp_log_acquire(void);
-extern void dsp_log_release(void);
+void dsp_log_acquire(void);
+void dsp_log_release(void);
+
+#ifndef LADSPA_FRONTEND
+#define DSP_STATUSLINES
+#define DSP_STATUSLINE_MAX_LEN 256
+struct statusline_state {
+	struct statusline_state *next, *prev;
+	char s[DSP_STATUSLINE_MAX_LEN];
+};
+
+void dsp_statuslines_acquire(void);
+void dsp_statuslines_release(void);
+void dsp_statusline_register(struct statusline_state *);
+void dsp_statusline_unregister(struct statusline_state *);
+#endif
 
 #endif
