@@ -134,6 +134,7 @@ static void set_fb_stop_default(struct matrix4_config *config)
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
+	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
 	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
