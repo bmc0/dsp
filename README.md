@@ -452,6 +452,10 @@ Example:
 	the `-e` option may be given, which enforces an end-of-file marker in order
 	to detect partially-written files. This marker, `#EOF#`, must be placed at
 	the beginning of a line and may only be followed by whitespace characters.
+* `levels [-t time_const]`  
+	Show a basic real-time level meter for each channel. Values are in dBFS.
+	The `-t` option sets the averaging time constant as well as the decay rate
+	of the peak indicator.
 
 #### Selector syntax
 

@@ -43,6 +43,7 @@
 #include "ladspa_host.h"
 #include "stats.h"
 #include "watch.h"
+#include "levels.h"
 
 #include "align.h"
 
@@ -68,6 +69,7 @@ static const struct effect_info effects[] = {
 	LADSPA_HOST_EFFECT_INFO,
 	STATS_EFFECT_INFO,
 	WATCH_EFFECT_INFO,
+	LEVELS_EFFECT_INFO,
 };
 
 const struct effect_info * get_effect_info(const char *name)

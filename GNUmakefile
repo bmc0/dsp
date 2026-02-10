@@ -24,6 +24,7 @@ DSP_OBJ := dsp.o \
 	dither.o \
 	stats.o \
 	watch.o \
+	levels.o \
 	null.o \
 	sgen.o \
 	pcm.o

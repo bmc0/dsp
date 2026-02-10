@@ -509,6 +509,11 @@ modifications should be atomic (i.e. by writing to a temporary file, then
 the \fB\-e\fR option may be given, which enforces an end-of-file marker in order
 to detect partially-written files. This marker, `#EOF#', must be placed at
 the beginning of a line and may only be followed by whitespace characters.
+.TP
+\fBlevels\fR [\fB\-t\fR \fItime_const\fR]
+Show a basic real-time level meter for each channel. Values are in dBFS.
+The \fB\-t\fR option sets the averaging time constant as well as the decay rate
+of the peak indicator.
 .SS Selector syntax
 .TS
 tab (|);
