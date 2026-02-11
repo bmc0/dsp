@@ -26,7 +26,7 @@
 #define STATS_DEFAULT_WIDTH 80
 
 struct stats_interp_state {
-	double y[4], m[64];
+	double m[64], y[6];
 	int p;
 };
 
@@ -37,23 +37,24 @@ struct stats_state {
 	int width;
 };
 
-#define STATS_INTERP_DELAY 8  /* actually 7.75 samples */
+#define STATS_INTERP_DELAY 9  /* actually 7.75+1 samples (fir+quadratic) */
 static void stats_interp_insert(struct stats_interp_state *state, double x)
 {
 	const double r[24] = {  /* 4x half filter with every 4th coefficient omitted */
-		-2.528027505871548e-05*x, -1.492967755391258e-04*x, -2.498347079064015e-04*x,
-		+7.831080185674322e-04*x, +1.708093377320698e-03*x, +1.768293237103391e-03*x,
-		-3.413221760288557e-03*x, -6.458809053338532e-03*x, -5.995935731783464e-03*x,
-		+9.872209709847601e-03*x, +1.758092533147545e-02*x, +1.549225165809426e-02*x,
-		-2.344098059262447e-02*x, -4.034666919661497e-02*x, -3.453230890382279e-02*x,
-		+5.002916581046515e-02*x, +8.494677897317342e-02*x, +7.218430278662867e-02*x,
-		-1.057373220928655e-01*x, -1.838450697399255e-01*x, -1.630304040720098e-01*x,
-		+2.895980681259508e-01*x, +6.266267535848659e-01*x, +8.967647355401489e-01*x,
+		-2.292696820100212e-03*x, -3.632564438586121e-03*x, -2.998924572397495e-03*x,
+		+4.375866329666534e-03*x, +7.566978585751975e-03*x, +6.536564904763872e-03*x,
+		-9.609846568226849e-03*x, -1.631405055919521e-02*x, -1.375102028618078e-02*x,
+		+1.916029404285670e-02*x, +3.171063237850385e-02*x, +2.611507115865749e-02*x,
+		-3.502882494903352e-02*x, -5.715222141386963e-02*x, -4.656484593218484e-02*x,
+		+6.187428708389852e-02*x, +1.012013370304949e-01*x, +8.315134587371799e-02*x,
+		-1.151392087590832e-01*x, -1.956968398962822e-01*x, -1.702480386063366e-01*x,
+		+2.941399237777173e-01*x, +6.309727747248304e-01*x, +8.983149825095726e-01*x,
 	};
 	int p = state->p;
 	double *m = state->m, *y = state->y;
-	y[0]=m[p++]+r[0]; y[1]=m[p++]+r[1]; y[2]=m[p++]+r[2]; y[3]=m[p++]; p&=0x3f;
-	memset(&m[state->p], 0, sizeof(state->y));
+	y[0]=y[4]; y[1]=y[5];  /* for quadratic peak estimation */
+	y[2]=m[p++]+r[0]; y[3]=m[p++]+r[1]; y[4]=m[p++]+r[2]; y[5]=m[p++]; p&=0x3f;
+	memset(&m[state->p], 0, sizeof(double)*4);
 	state->p = p;
 	m[p++]+=r[3];  m[p++]+=r[4];  m[p++]+=r[5];  p++; p&=0x3f;
 	m[p++]+=r[6];  m[p++]+=r[7];  m[p++]+=r[8];  p++; p&=0x3f;
@@ -99,14 +100,21 @@ sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 
 static inline void stats_interp_peak(struct stats_state *state)
 {
+	double *y = state->interp.y;
 	int r = 0;
-	for (int i = 0; i < LENGTH(state->interp.y); ++i) {
-		const double y = state->interp.y[i];
-		const double ay = fabs(y);
-		if (ay > 0.0 && ay == state->peak) r = 1;
-		else if (ay > state->peak) { state->peak = ay; r = 2; }
-		if (y < state->min) state->min = y;
-		if (y > state->max) state->max = y;
+	for (int i = 1; i < LENGTH(state->interp.y)-1; ++i) {
+		const double d0 = y[i]-y[i-1], d1=y[i]-y[i+1];
+		if ((d0 > 0.0 && d1 < 0.0) || (d0 < 0.0 && d1 > 0.0) || (d0 == 0.0 && d1 == 0.0))
+			continue;  /* no extrema */
+		const double dy = y[i-1]-y[i+1];
+		/* quadratic peak estimation */
+		const double p_4 = dy/(8.0*(y[i-1]-2.0*y[i]+y[i+1]));
+		const double yq = y[i] - dy*p_4;
+		const double ayq = fabs(yq);
+		if (ayq > 0.0 && ayq == state->peak) r = 1;
+		else if (ayq > state->peak) { state->peak = ayq; r = 2; }
+		if (yq < state->min) state->min = yq;
+		if (yq > state->max) state->max = yq;
 	}
 	if (r == 2) {
 		state->peak_frame = state->samples - (STATS_INTERP_DELAY-1);
@@ -125,7 +133,7 @@ sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *
 			const double s = ibuf[i+k];
 			state[k].sum += s;
 			state[k].sum_sq += s*s;
-			stats_interp_insert(&state[k].interp, ibuf[i+k]);
+			stats_interp_insert(&state[k].interp, s);
 			stats_interp_peak(&state[k]);
 			++state[k].samples;
 		}
