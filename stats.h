@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,6 +25,6 @@
 struct effect * stats_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define STATS_EFFECT_INFO \
-	{ "stats", "[ref_level]", stats_effect_init, 0 }
+	{ "stats", "[-i] [-w cols] [ref_level]", stats_effect_init, 0 }
 
 #endif

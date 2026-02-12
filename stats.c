@@ -26,15 +26,22 @@
 #define STATS_DEFAULT_WIDTH 80
 
 struct stats_interp_state {
-	double m[64], y[6], z[9], tmin, tmax;
+	double m[64], y[6], tmin, tmax, z[9];
 	int p, zp, n;
 };
 
-struct stats_state {
+struct stats_ch_state {
+	double sum, sum_sq, min, max, peak;
+	ssize_t peak_count, peak_frame;
 	struct stats_interp_state interp;
-	ssize_t samples, peak_count, peak_frame;
-	double sum, sum_sq, min, max, peak, ref;
-	int width;
+	int ch;
+};
+
+struct stats_state {
+	struct stats_ch_state *cs;
+	double ref;
+	ssize_t samples;
+	int width, n_cs;
 };
 
 sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -42,9 +49,9 @@ sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
 	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
-		for (int k = 0; k < e->ostream.channels; ++k) {
-			struct stats_state *cs = &state[k];
-			const double s = ibuf[i+k];
+		for (int k = 0; k < state->n_cs; ++k) {
+			struct stats_ch_state *cs = &state->cs[k];
+			const double s = ibuf[i+cs->ch];
 			cs->sum += s;
 			cs->sum_sq += s*s;
 			int pk = 0;
@@ -56,12 +63,12 @@ sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 					++cs->peak_count;
 				else if (abs_s > cs->peak) {
 					cs->peak = abs_s;
-					cs->peak_frame = cs->samples;
+					cs->peak_frame = state->samples;
 					cs->peak_count = 1;
 				}
 			}
-			++cs->samples;
 		}
+		++state->samples;
 	}
 	return ibuf;
 }
@@ -102,11 +109,11 @@ static void stats_interp_insert(struct stats_interp_state *state, double x)
 	m[p++]+=r[2];  m[p++]+=r[1];  m[p++]+=r[0];
 }
 
-static inline void stats_interp_peak(struct stats_state *state)
+static void stats_interp_peak(struct stats_state *state, struct stats_ch_state *cs)
 {
-	double *y = state->interp.y;
+	double *y = cs->interp.y;
 	int r = 0;
-	for (int i = 1; i < LENGTH(state->interp.y)-1; ++i) {
+	for (int i = 1; i < LENGTH(cs->interp.y)-1; ++i) {
 		const double d0 = y[i]-y[i-1], d1=y[i]-y[i+1];
 		if ((d0 > 0.0 && d1 < 0.0) || (d0 < 0.0 && d1 > 0.0) || (d0 == 0.0 && d1 == 0.0))
 			continue;  /* no extrema */
@@ -115,20 +122,20 @@ static inline void stats_interp_peak(struct stats_state *state)
 		const double p_4 = dy/(8.0*(y[i-1]-2.0*y[i]+y[i+1]));
 		const double yq = y[i] - dy*p_4;
 		int pk = 0;
-		if      (yq <= state->min) { state->min = yq; state->interp.tmin = 0.5*yq; pk = 1; }
-		else if (yq >= state->max) { state->max = yq; state->interp.tmax = 0.5*yq; pk = 1; }
+		if      (yq <= cs->min) { cs->min = yq; cs->interp.tmin = 0.5*yq; pk = 1; }
+		else if (yq >= cs->max) { cs->max = yq; cs->interp.tmax = 0.5*yq; pk = 1; }
 		if (pk) {
 			const double ayq = fabs(yq);
-			if (ayq > 0.0 && ayq == state->peak) r = 1;
-			else if (ayq > state->peak) { state->peak = ayq; r = 2; }
+			if (ayq > 0.0 && ayq == cs->peak) r = 1;
+			else if (ayq > cs->peak) { cs->peak = ayq; r = 2; }
 		}
 	}
 	if (r == 2) {
-		state->peak_frame = state->samples - (STATS_INTERP_DELAY-1);
-		state->peak_count = 1;
+		cs->peak_frame = state->samples - (STATS_INTERP_DELAY-1);
+		cs->peak_count = 1;
 	}
 	else if (r == 1)
-		++state->peak_count;
+		++cs->peak_count;
 }
 
 sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -136,23 +143,23 @@ sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *
 	ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
 	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
-		for (int k = 0; k < e->ostream.channels; ++k) {
-			struct stats_state *cs = &state[k];
+		for (int k = 0; k < state->n_cs; ++k) {
+			struct stats_ch_state *cs = &state->cs[k];
 			struct stats_interp_state *cis = &cs->interp;
-			const double s = ibuf[i+k];
+			const double s = ibuf[i+cs->ch];
 			cs->sum += s;
 			cs->sum_sq += s*s;
 			if (s < cis->tmin || s > cis->tmax)
-				cis->n = 18;
+				cis->n = STATS_INTERP_DELAY;
 			if (cis->n > 0) {
 				stats_interp_insert(cis, cis->z[cis->zp]);
-				stats_interp_peak(cs);
+				stats_interp_peak(state, cs);
 				--cis->n;
 			}
 			cis->z[cis->zp++] = s;
 			if (cis->zp >= LENGTH(cis->z)) cis->zp = 0;
-			++cs->samples;
 		}
+		++state->samples;
 	}
 	return ibuf;
 }
@@ -162,47 +169,47 @@ static void stats_print_channels(struct effect *e, int start, int end)
 	struct stats_state *state = (struct stats_state *) e->data;
 	dsp_log_printf("\n%-18s", "Channel");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12d", i);
+		dsp_log_printf(" %12d", state->cs[i].ch);
 	dsp_log_printf("\n%-18s", "DC offset");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.8f", state[i].sum/state[i].samples);
+		dsp_log_printf(" %12.8f", state->cs[i].sum/state->samples);
 	dsp_log_printf("\n%-18s", "Minimum");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.8f", state[i].min);
+		dsp_log_printf(" %12.8f", state->cs[i].min);
 	dsp_log_printf("\n%-18s", "Maximum");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.8f", state[i].max);
+		dsp_log_printf(" %12.8f", state->cs[i].max);
 	dsp_log_printf("\n%-18s", "Peak level (dBFS)");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.4f", 20.0*log10(state[i].peak));
+		dsp_log_printf(" %12.4f", 20.0*log10(state->cs[i].peak));
 	if (state->ref != -HUGE_VAL) {
 		dsp_log_printf("\n%-18s", "Peak level (dBr)");
 		for (int i = start; i < end; ++i)
-			dsp_log_printf(" %12.4f", state->ref + 20.0*log10(state[i].peak));
+			dsp_log_printf(" %12.4f", state->ref + 20.0*log10(state->cs[i].peak));
 	}
 	dsp_log_printf("\n%-18s", "RMS level (dBFS)");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.4f", 20.0*log10(sqrt(state[i].sum_sq/state[i].samples)));
+		dsp_log_printf(" %12.4f", 20.0*log10(sqrt(state->cs[i].sum_sq/state->samples)));
 	if (state->ref != -HUGE_VAL) {
 		dsp_log_printf("\n%-18s", "RMS level (dBr)");
 		for (int i = start; i < end; ++i)
-			dsp_log_printf(" %12.4f", state->ref + 20.0*log10(sqrt(state[i].sum_sq/state[i].samples)));
+			dsp_log_printf(" %12.4f", state->ref + 20.0*log10(sqrt(state->cs[i].sum_sq/state->samples)));
 	}
 	dsp_log_printf("\n%-18s", "Crest factor (dB)");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.4f", 20.0*log10(state[i].peak/sqrt(state[i].sum_sq/state[i].samples)));
+		dsp_log_printf(" %12.4f", 20.0*log10(state->cs[i].peak/sqrt(state->cs[i].sum_sq/state->samples)));
 	dsp_log_printf("\n%-18s", "Peak count");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12zd", state[i].peak_count);
+		dsp_log_printf(" %12zd", state->cs[i].peak_count);
 	dsp_log_printf("\n%-18s", "Peak sample");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12zd", state[i].peak_frame);
+		dsp_log_printf(" %12zd", state->cs[i].peak_frame);
 	dsp_log_printf("\n%-18s", "Samples");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12zd", state[i].samples);
+		dsp_log_printf(" %12zd", state->samples);
 	dsp_log_printf("\n%-18s", "Length (s)");
 	for (int i = start; i < end; ++i)
-		dsp_log_printf(" %12.2f", (double) state[i].samples / e->ostream.fs);
+		dsp_log_printf(" %12.2f", (double) state->samples / e->ostream.fs);
 	dsp_log_printf("\n");
 }
 
@@ -211,23 +218,22 @@ void stats_effect_destroy(struct effect *e)
 	struct stats_state *state = (struct stats_state *) e->data;
 	if (e->run == stats_effect_run_interp) {
 		for (ssize_t i = 0; i < STATS_INTERP_DELAY; ++i) {
-			for (int k = 0; k < e->ostream.channels; ++k) {
-				struct stats_state *cs = &state[k];
+			for (int k = 0; k < state->n_cs; ++k) {
+				struct stats_ch_state *cs = &state->cs[k];
 				struct stats_interp_state *cis = &cs->interp;
 				if (cis->n > 0) {
 					stats_interp_insert(cis, cis->z[cis->zp]);
-					stats_interp_peak(cs);
+					stats_interp_peak(state, cs);
 					--cis->n;
 				}
 				cis->z[cis->zp++] = 0.0;
 				if (cis->zp >= LENGTH(cis->z)) cis->zp = 0;
-				++state[k].samples;
 			}
+			++state->samples;
 		}
-		for (int k = 0; k < e->ostream.channels; ++k)
-			state[k].samples -= STATS_INTERP_DELAY;
+		state->samples -= STATS_INTERP_DELAY;
 	}
-	int cols = e->ostream.channels;
+	int cols = state->n_cs;
 	dsp_log_acquire();
 #ifdef DSP_STATUSLINES
 	if (state->width < 0) {
@@ -237,10 +243,11 @@ void stats_effect_destroy(struct effect *e)
 #endif
 	if (state->width > 0)
 		cols = MAXIMUM((state->width-18)/13, 1);
-	for (int i = 0; i < e->ostream.channels; i+=cols)
-		stats_print_channels(e, i, MINIMUM(i+cols, e->ostream.channels));
+	for (int i = 0; i < state->n_cs; i+=cols)
+		stats_print_channels(e, i, MINIMUM(i+cols, state->n_cs));
 	dsp_log_release();
-	free(e->data);
+	free(state->cs);
+	free(state);
 }
 
 struct effect * stats_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -294,9 +301,15 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	e->run = (do_interp) ? stats_effect_run_interp : stats_effect_run;
 	e->plot = effect_plot_noop;
 	e->destroy = stats_effect_destroy;
-	struct stats_state *state = calloc(istream->channels, sizeof(struct stats_state));
+	struct stats_state *state = calloc(1, sizeof(struct stats_state));
 	state->ref = ref;
 	state->width = width;
+	state->n_cs = num_bits_set(channel_selector, istream->channels);
+	state->cs = calloc(state->n_cs, sizeof(struct stats_ch_state));
+	for (int i = 0, k = 0; k < istream->channels; ++k) {
+		if (GET_BIT(channel_selector, k))
+			state->cs[i++].ch = k;
+	}
 	e->data = state;
 	return e;
 }
