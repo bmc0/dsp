@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -95,25 +95,25 @@ static inline sample_t biquad(struct biquad_state *state, sample_t s)
 #define BIQUAD_PLOT_FMT_ARGS(s) (s)->c0, (s)->c1, (s)->c2, (s)->c3, (s)->c4
 
 #define BIQUAD_EFFECT_INFO \
-	{ "lowpass_1",          "f0[k]",                             biquad_effect_init, BIQUAD_LOWPASS_1 }, \
-	{ "highpass_1",         "f0[k]",                             biquad_effect_init, BIQUAD_HIGHPASS_1 }, \
-	{ "allpass_1",          "f0[k]",                             biquad_effect_init, BIQUAD_ALLPASS_1 }, \
-	{ "lowshelf_1",         "f0[k] gain",                        biquad_effect_init, BIQUAD_LOWSHELF_1 }, \
-	{ "highshelf_1",        "f0[k] gain",                        biquad_effect_init, BIQUAD_HIGHSHELF_1 }, \
-	{ "lowpass_1p",         "f0[k]",                             biquad_effect_init, BIQUAD_LOWPASS_1P }, \
-	{ "lowpass",            "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_LOWPASS }, \
-	{ "highpass",           "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_HIGHPASS }, \
-	{ "bandpass_skirt",     "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_BANDPASS_SKIRT }, \
-	{ "bandpass_peak",      "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_BANDPASS_PEAK }, \
-	{ "notch",              "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_NOTCH }, \
-	{ "allpass",            "f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_ALLPASS }, \
-	{ "eq",                 "f0[k] width[q|o|h|k] gain",         biquad_effect_init, BIQUAD_PEAK }, \
-	{ "lowshelf",           "f0[k] width[q|s|d|o|h|k] gain",     biquad_effect_init, BIQUAD_LOWSHELF }, \
-	{ "highshelf",          "f0[k] width[q|s|d|o|h|k] gain",     biquad_effect_init, BIQUAD_HIGHSHELF }, \
-	{ "lowpass_transform",  "fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_LOWPASS_TRANSFORM }, \
-	{ "highpass_transform", "fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM }, \
-	{ "linkwitz_transform", "fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM }, \
-	{ "deemph",             "",                                  biquad_effect_init, BIQUAD_DEEMPH }, \
-	{ "biquad",             "b0 b1 b2 a0 a1 a2",                 biquad_effect_init, BIQUAD_BIQUAD }
+	{ "lowpass_1",          "[-r[thresh]] f0[k]",                             biquad_effect_init, BIQUAD_LOWPASS_1 }, \
+	{ "highpass_1",         "[-r[thresh]] f0[k]",                             biquad_effect_init, BIQUAD_HIGHPASS_1 }, \
+	{ "allpass_1",          "[-r[thresh]] f0[k]",                             biquad_effect_init, BIQUAD_ALLPASS_1 }, \
+	{ "lowshelf_1",         "[-r[thresh]] f0[k] gain",                        biquad_effect_init, BIQUAD_LOWSHELF_1 }, \
+	{ "highshelf_1",        "[-r[thresh]] f0[k] gain",                        biquad_effect_init, BIQUAD_HIGHSHELF_1 }, \
+	{ "lowpass_1p",         "[-r[thresh]] f0[k]",                             biquad_effect_init, BIQUAD_LOWPASS_1P }, \
+	{ "lowpass",            "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_LOWPASS }, \
+	{ "highpass",           "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_HIGHPASS }, \
+	{ "bandpass_skirt",     "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_BANDPASS_SKIRT }, \
+	{ "bandpass_peak",      "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_BANDPASS_PEAK }, \
+	{ "notch",              "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_NOTCH }, \
+	{ "allpass",            "[-r[thresh]] f0[k] width[q|o|h|k]",              biquad_effect_init, BIQUAD_ALLPASS }, \
+	{ "eq",                 "[-r[thresh]] f0[k] width[q|o|h|k] gain",         biquad_effect_init, BIQUAD_PEAK }, \
+	{ "lowshelf",           "[-r[thresh]] f0[k] width[q|s|d|o|h|k] gain",     biquad_effect_init, BIQUAD_LOWSHELF }, \
+	{ "highshelf",          "[-r[thresh]] f0[k] width[q|s|d|o|h|k] gain",     biquad_effect_init, BIQUAD_HIGHSHELF }, \
+	{ "lowpass_transform",  "[-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_LOWPASS_TRANSFORM }, \
+	{ "highpass_transform", "[-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM }, \
+	{ "linkwitz_transform", "[-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]", biquad_effect_init, BIQUAD_HIGHPASS_TRANSFORM }, \
+	{ "deemph",             "[-r[thresh]]",                                   biquad_effect_init, BIQUAD_DEEMPH }, \
+	{ "biquad",             "[-r[thresh]] b0 b1 b2 a0 a1 a2",                 biquad_effect_init, BIQUAD_BIQUAD }
 
 #endif

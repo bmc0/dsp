@@ -22,6 +22,7 @@
 #include <math.h>
 #include "biquad.h"
 #include "util.h"
+#include "reverse_iir.h"
 
 static double parse_width(const char *s, int *type, char **endptr)
 {
@@ -374,6 +375,32 @@ int biquad_effect_merge(struct effect *dest, struct effect *src)
 	return 0;
 }
 
+struct biquad_effect_opts {
+	int reverse;
+	double thresh;
+};
+
+static int biquad_effect_parse_opts(struct dsp_getopt_state *g, int argc, const char *const *argv, struct biquad_effect_opts *o)
+{
+	int opt;
+	char *endptr;
+	while ((opt = dsp_getopt(g, argc, argv, "r::")) != -1) {
+		switch (opt) {
+		case 'r':
+			o->reverse = 1;
+			if (g->arg) {
+				o->thresh = strtol(g->arg, &endptr, 10);
+				CHECK_ENDPTR(g->arg, endptr, "thresh", return 1);
+				CHECK_RANGE(o->thresh >= 10.0 && o->thresh <= 200.0, "thresh", return 1);
+			}
+			break;
+		default:
+			return 1;
+		}
+	}
+	return 0;
+}
+
 #define GET_ARG(v, str, name) \
 	do { \
 		v = strtod(str, &endptr); \
@@ -403,7 +430,7 @@ int biquad_effect_merge(struct effect *dest, struct effect *src)
 
 #define INIT_COMMON(n_args, b_type) \
 	do { \
-		if (argc != (n_args) + 1) { \
+		if (biquad_effect_parse_opts(&g, argc-(n_args), argv, &o) || argc-g.ind != (n_args)) { \
 			print_effect_usage(ei); \
 			return NULL; \
 		} \
@@ -412,12 +439,14 @@ int biquad_effect_merge(struct effect *dest, struct effect *src)
 
 struct effect * biquad_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	int i, type, width_type = BIQUAD_WIDTH_Q;
+	int type, width_type = BIQUAD_WIDTH_Q;
 	double arg0 = 0.0, arg1 = 0.0, arg2 = 0.0, arg3 = 0.0;
 	double b0 = 0.0, b1 = 0.0, b2 = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
-	struct biquad_state *state;
+	struct biquad_state *state, b = {0};
 	struct effect *e;
 	char *endptr;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	struct biquad_effect_opts o = { .reverse = 0, .thresh = 80.0 };
 
 	switch (ei->effect_number) {
 	case BIQUAD_LOWPASS_1:
@@ -425,14 +454,14 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	case BIQUAD_ALLPASS_1:
 	case BIQUAD_LOWPASS_1P:
 		INIT_COMMON(1, ei->effect_number);
-		GET_FREQ_ARG(arg0, argv[1], "f0");
+		GET_FREQ_ARG(arg0, argv[g.ind], "f0");
 		break;
 	case BIQUAD_LOWSHELF_1:
 	case BIQUAD_HIGHSHELF_1:
 		INIT_COMMON(2, ei->effect_number);
-		GET_FREQ_ARG(arg0, argv[1], "f0");
+		GET_FREQ_ARG(arg0, argv[g.ind], "f0");
 		/* no width argument */
-		GET_ARG(arg2, argv[2], "gain");
+		GET_ARG(arg2, argv[g.ind+1], "gain");
 		break;
 	case BIQUAD_LOWPASS:
 	case BIQUAD_HIGHPASS:
@@ -441,27 +470,27 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	case BIQUAD_NOTCH:
 	case BIQUAD_ALLPASS:
 		INIT_COMMON(2, ei->effect_number);
-		GET_FREQ_ARG(arg0, argv[1], "f0");
-		GET_WIDTH_ARG(arg1, argv[2], "width");
+		GET_FREQ_ARG(arg0, argv[g.ind], "f0");
+		GET_WIDTH_ARG(arg1, argv[g.ind+1], "width");
 		CHECK_WIDTH_TYPE(BIQUAD_WIDTH_TEST_NO_SLOPE);
 		break;
 	case BIQUAD_PEAK:
 	case BIQUAD_LOWSHELF:
 	case BIQUAD_HIGHSHELF:
 		INIT_COMMON(3, ei->effect_number);
-		GET_FREQ_ARG(arg0, argv[1], "f0");
-		GET_WIDTH_ARG(arg1, argv[2], "width");
+		GET_FREQ_ARG(arg0, argv[g.ind], "f0");
+		GET_WIDTH_ARG(arg1, argv[g.ind+1], "width");
 		if (ei->effect_number == BIQUAD_PEAK) CHECK_WIDTH_TYPE(BIQUAD_WIDTH_TEST_NO_SLOPE);
-		GET_ARG(arg2, argv[3], "gain");
+		GET_ARG(arg2, argv[g.ind+2], "gain");
 		break;
 	case BIQUAD_LOWPASS_TRANSFORM:
 	case BIQUAD_HIGHPASS_TRANSFORM:
 		INIT_COMMON(4, ei->effect_number);
-		GET_FREQ_ARG(arg0, argv[1], "fz");
-		GET_WIDTH_ARG(arg1, argv[2], "width_z");
+		GET_FREQ_ARG(arg0, argv[g.ind], "fz");
+		GET_WIDTH_ARG(arg1, argv[g.ind+1], "width_z");
 		CHECK_WIDTH_TYPE(width_type == BIQUAD_WIDTH_Q);
-		GET_FREQ_ARG(arg2, argv[3], "fp");
-		GET_WIDTH_ARG(arg3, argv[4], "width_p");
+		GET_FREQ_ARG(arg2, argv[g.ind+2], "fp");
+		GET_WIDTH_ARG(arg3, argv[g.ind+3], "width_p");
 		CHECK_WIDTH_TYPE(width_type == BIQUAD_WIDTH_Q);
 		break;
 	case BIQUAD_DEEMPH:
@@ -485,17 +514,22 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 		break;
 	case BIQUAD_BIQUAD:
 		INIT_COMMON(6, BIQUAD_BIQUAD);
-		GET_ARG(b0, argv[1], "b0");
-		GET_ARG(b1, argv[2], "b1");
-		GET_ARG(b2, argv[3], "b2");
-		GET_ARG(a0, argv[4], "a0");
-		GET_ARG(a1, argv[5], "a1");
-		GET_ARG(a2, argv[6], "a2");
+		GET_ARG(b0, argv[g.ind], "b0");
+		GET_ARG(b1, argv[g.ind+1], "b1");
+		GET_ARG(b2, argv[g.ind+2], "b2");
+		GET_ARG(a0, argv[g.ind+3], "a0");
+		GET_ARG(a1, argv[g.ind+4], "a1");
+		GET_ARG(a2, argv[g.ind+5], "a2");
 		break;
 	default:
 		LOG_FMT(LL_ERROR, "%s: BUG: unknown filter type: %s (%d)", __FILE__, argv[0], ei->effect_number);
 		return NULL;
 	}
+	if (type == BIQUAD_BIQUAD) biquad_init(&b, b0, b1, b2, a0, a1, a2);
+	else biquad_init_using_type(&b, type, istream->fs, arg0, arg1, arg2, arg3, width_type);
+
+	if (o.reverse)
+		return reverse_iir_effect_init_from_biquad(ei, istream, channel_selector, &b, o.thresh);
 
 	e = calloc(1, sizeof(struct effect));
 	e->name = ei->name;
@@ -511,13 +545,9 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->destroy = biquad_effect_destroy;
 	e->merge = biquad_effect_merge;
 	state = calloc(istream->channels, sizeof(struct biquad_state));
-	for (i = 0; i < istream->channels; ++i) {
-		if (GET_BIT(channel_selector, i)) {
-			if (type == BIQUAD_BIQUAD)
-				biquad_init(&state[i], b0, b1, b2, a0, a1, a2);
-			else
-				biquad_init_using_type(&state[i], type, istream->fs, arg0, arg1, arg2, arg3, width_type);
-		}
+	for (int i = 0; i < istream->channels; ++i) {
+		if (GET_BIT(channel_selector, i))
+			memcpy(&state[i], &b, sizeof(struct biquad_state));
 	}
 	e->data = state;
 	return e;

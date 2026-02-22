@@ -155,50 +155,79 @@ Example:
 
 #### Complete effects list
 
-* `lowpass_1 f0[k]`  
-	First-order lowpass filter.
-* `highpass_1 f0[k]`  
-	First-order highpass filter.
-* `allpass_1 f0[k]`  
-	First-order allpass filter.
-* `lowshelf_1 f0[k] gain`  
-	First-order lowshelf filter.
-* `highshelf_1 f0[k] gain`  
-	First-order highshelf filter.
-* `lowpass_1p f0[k]`  
-	Single pole lowpass (EWMA) filter.
-* `lowpass f0[k] width[q|o|h|k]`  
-	Second-order lowpass filter.
-* `highpass f0[k] width[q|o|h|k]`  
-	Second-order highpass filter.
-* `bandpass_skirt f0[k] width[q|o|h|k]`  
-	Second-order bandpass filter with constant skirt gain.
-* `bandpass_peak f0[k] width[q|o|h|k]`  
-	Second-order bandpass filter with constant peak gain.
-* `notch f0[k] width[q|o|h|k]`  
-	Second-order notch filter.
-* `allpass f0[k] width[q|o|h|k]`  
-	Second-order allpass filter.
-* `eq f0[k] width[q|o|h|k] gain`  
-	Second-order peaking filter.
-* `lowshelf f0[k] width[q|s|d|o|h|k] gain`  
-	Second-order lowshelf filter.
-* `highshelf f0[k] width[q|s|d|o|h|k] gain`  
-	Second-order highshelf filter.
-* `lowpass_transform fz[k] width_z[q] fp[k] width_p[q]`  
+* `lowpass_1 [-r[thresh]] f0[k]`  
+	First-order lowpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `highpass_1 [-r[thresh]] f0[k]`  
+	First-order highpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `allpass_1 [-r[thresh]] f0[k]`  
+	First-order allpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `lowshelf_1 [-r[thresh]] f0[k] gain`  
+	First-order lowshelf filter. See `biquad` for an explanation of the `-r`
+	option.
+* `highshelf_1 [-r[thresh]] f0[k] gain`  
+	First-order highshelf filter. See `biquad` for an explanation of the `-r`
+	option.
+* `lowpass_1p [-r[thresh]] f0[k]`  
+	Single pole lowpass (EWMA) filter. See `biquad` for an explanation of the
+	`-r` option.
+* `lowpass [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order lowpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `highpass [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order highpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `bandpass_skirt [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order bandpass filter with constant skirt gain. See `biquad` for an
+	explanation of the `-r` option.
+* `bandpass_peak [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order bandpass filter with constant peak gain. See `biquad` for an
+	explanation of the `-r` option.
+* `notch [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order notch filter. See `biquad` for an explanation of the `-r`
+	option.
+* `allpass [-r[thresh]] f0[k] width[q|o|h|k]`  
+	Second-order allpass filter. See `biquad` for an explanation of the `-r`
+	option.
+* `eq [-r[thresh]] f0[k] width[q|o|h|k] gain`  
+	Second-order peaking filter. See `biquad` for an explanation of the `-r`
+	option.
+* `lowshelf [-r[thresh]] f0[k] width[q|s|d|o|h|k] gain`  
+	Second-order lowshelf filter. See `biquad` for an explanation of the `-r`
+	option.
+* `highshelf [-r[thresh]] f0[k] width[q|s|d|o|h|k] gain`  
+	Second-order highshelf filter. See `biquad` for an explanation of the `-r`
+	option.
+* `lowpass_transform [-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]`  
 	Second-order lowpass transformation filter. Cancels the poles defined by
 	`fz` and `width_z` and replaces them with new poles defined by `fp` and
-	`width_p`. Gain is unity at DC.
-* `highpass_transform fz[k] width_z[q] fp[k] width_p[q]`  
+	`width_p`. Gain is unity at DC. See `biquad` for an explanation of the `-r`
+	option.
+* `highpass_transform [-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]`  
 	Second-order highpass transformation filter. Also known as a Linkwitz
 	transform (see http://www.linkwitzlab.com/filters.htm#9). Same as
-	`lowpass_transform` except the gain is unity at Fs/2.
-* `linkwitz_transform fz[k] width_z[q] fp[k] width_p[q]`  
-	Alias for `highpass_transform`.
-* `deemph`  
-	Compact Disc de-emphasis filter.
-* `biquad b0 b1 b2 a0 a1 a2`  
+	`lowpass_transform` except the gain is unity at Fs/2. See `biquad` for an
+	explanation of the `-r` option.
+* `linkwitz_transform [-r[thresh]] fz[k] width_z[q] fp[k] width_p[q]`  
+	Alias for `highpass_transform`. See `biquad` for an explanation of the `-r`
+	option.
+* `deemph [-r[thresh]]`  
+	Compact Disc de-emphasis filter. See `biquad` for an explanation of the `-r`
+	option.
+* `biquad [-r[thresh]] b0 b1 b2 a0 a1 a2`  
 	Biquad filter.
+
+	If the `-r` option is given, the filter is reversed in time using the
+	method described in [1]. The optional `thresh` parameter sets the
+	truncation threshold in negative dB based on the pole with the longest
+	decay time. The default `thresh` is 80. Cascaded time-reversed filters are
+	transformed into a parallel structure for minimum latency.
+
+	[1] M. Vicanek, "A New Reverse IIR Filtering Algorithm," Oct. 2015,
+	rev. Jan. 2022
+
 * `gain gain_dB`  
 	Gain adjustment in decibels.
 * `mult multiplier`  

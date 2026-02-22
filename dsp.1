@@ -125,69 +125,99 @@ Example:
 .SH EFFECTS
 .SS Complete effects list
 .TP
-\fBlowpass_1\fR \fIf0\fR[\fBk\fR]
-First-order lowpass filter.
+\fBlowpass_1\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR]
+First-order lowpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBhighpass_1\fR \fIf0\fR[\fBk\fR]
-First-order highpass filter.
+\fBhighpass_1\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR]
+First-order highpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBallpass_1\fR \fIf0\fR[\fBk\fR]
-First-order allpass filter.
+\fBallpass_1\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR]
+First-order allpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBlowshelf_1\fR \fIf0\fR[\fBk\fR] \fIgain\fR
-First-order lowshelf filter.
+\fBlowshelf_1\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIgain\fR
+First-order lowshelf filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBhighshelf_1\fR \fIf0\fR[\fBk\fR] \fIgain\fR
-First-order highshelf filter.
+\fBhighshelf_1\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIgain\fR
+First-order highshelf filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBlowpass_1p\fR \fIf0\fR[\fBk\fR]
-Single pole lowpass (EWMA) filter.
+\fBlowpass_1p\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR]
+Single pole lowpass (EWMA) filter. See \fBbiquad\fR for an explanation of the
+\fB\-r\fR option.
 .TP
-\fBlowpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order lowpass filter.
+\fBlowpass\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order lowpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBhighpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order highpass filter.
+\fBhighpass\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order highpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBbandpass_skirt\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order bandpass filter with constant skirt gain.
+\fBbandpass_skirt\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order bandpass filter with constant skirt gain. See \fBbiquad\fR for an
+explanation of the \fB\-r\fR option.
 .TP
-\fBbandpass_peak\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order bandpass filter with constant peak gain.
+\fBbandpass_peak\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order bandpass filter with constant peak gain. See \fBbiquad\fR for an
+explanation of the \fB\-r\fR option.
 .TP
-\fBnotch\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order notch filter.
+\fBnotch\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order notch filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBallpass\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
-Second-order allpass filter.
+\fBallpass\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR]
+Second-order allpass filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBeq\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Second-order peaking filter.
+\fBeq\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Second-order peaking filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBlowshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Second-order lowshelf filter.
+\fBlowshelf\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Second-order lowshelf filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBhighshelf\fR \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
-Second-order highshelf filter.
+\fBhighshelf\fR [\fB\-r\fR[\fIthresh\fR]] \fIf0\fR[\fBk\fR] \fIwidth\fR[\fBq\fR|\fBs\fR|\fBd\fR|\fBo\fR|\fBh\fR|\fBk\fR] \fIgain\fR
+Second-order highshelf filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBlowpass_transform\fR \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
+\fBlowpass_transform\fR [\fB\-r\fR[\fIthresh\fR]] \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
 Second-order lowpass transformation filter. Cancels the poles defined by
 \fIfz\fR and \fIwidth_z\fR and replaces them with new poles defined by \fIfp\fR and
-\fIwidth_p\fR. Gain is unity at DC.
+\fIwidth_p\fR. Gain is unity at DC. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBhighpass_transform\fR \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
+\fBhighpass_transform\fR [\fB\-r\fR[\fIthresh\fR]] \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
 Second-order highpass transformation filter. Also known as a Linkwitz
 transform (see http://www.linkwitzlab.com/filters.htm#9). Same as
-\fBlowpass_transform\fR except the gain is unity at Fs/2.
+\fBlowpass_transform\fR except the gain is unity at Fs/2. See \fBbiquad\fR for an
+explanation of the \fB\-r\fR option.
 .TP
-\fBlinkwitz_transform\fR \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
-Alias for \fBhighpass_transform\fR.
+\fBlinkwitz_transform\fR [\fB\-r\fR[\fIthresh\fR]] \fIfz\fR[\fBk\fR] \fIwidth_z\fR[\fBq\fR] \fIfp\fR[\fBk\fR] \fIwidth_p\fR[\fBq\fR]
+Alias for \fBhighpass_transform\fR. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBdeemph\fR
-Compact Disc de-emphasis filter.
+\fBdeemph\fR [\fB\-r\fR[\fIthresh\fR]]
+Compact Disc de-emphasis filter. See \fBbiquad\fR for an explanation of the \fB\-r\fR
+option.
 .TP
-\fBbiquad\fR \fIb0\fR \fIb1\fR \fIb2\fR \fIa0\fR \fIa1\fR \fIa2\fR
+\fBbiquad\fR [\fB\-r\fR[\fIthresh\fR]] \fIb0\fR \fIb1\fR \fIb2\fR \fIa0\fR \fIa1\fR \fIa2\fR
 Biquad filter.
+.sp 0.5
+If the \fB\-r\fR option is given, the filter is reversed in time using the
+method described in [1]. The optional \fIthresh\fR parameter sets the
+truncation threshold in negative dB based on the pole with the longest
+decay time. The default \fIthresh\fR is 80. Cascaded time-reversed filters are
+transformed into a parallel structure for minimum latency.
+.sp 0.5
+.RS
+.IP [1] 4
+M. Vicanek, ``A New Reverse IIR Filtering Algorithm,'' Oct. 2015, rev. Jan. 2022
+.RE
 .TP
 \fBgain\fR \fIgain_dB\fR
 Gain adjustment in decibels.
@@ -460,7 +490,7 @@ S. P. Lipshitz, J. Vanderkooy, and R. A. Wannamaker,
 ``Minimally Audible Noise Shaping,'' J. AES, vol. 39, no. 11,
 November 1991
 .IP [2] 4
-R. A. Wannamaker, "Psychoacoustically Optimal Noise Shaping,"
+R. A. Wannamaker, ``Psychoacoustically Optimal Noise Shaping,''
 J. AES, vol. 40, no. 7/8, July 1992
 .RE
 .TP

@@ -11,6 +11,7 @@ DSP_OBJ := dsp.o \
 	util.o \
 	allpass.o \
 	cap5.o \
+	reverse_iir.o \
 	biquad.o \
 	gain.o \
 	crossfeed.o \
@@ -35,6 +36,7 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	util.o \
 	allpass.o \
 	cap5.o \
+	reverse_iir.o \
 	biquad.o \
 	gain.o \
 	crossfeed.o \
