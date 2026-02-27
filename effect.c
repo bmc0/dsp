@@ -446,7 +446,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 	char *in_deps = NEW_SELECTOR(state->max_ch);
 	char *in_deps_all = NEW_SELECTOR(state->max_ch);
 
-	ssize_t delay_offset = 0;
+	chain->delay_offset = 0;
 	ssize_t *offsets = state->samples[0], *delays = state->samples[1];
 	memset(offsets, 0, state->max_ch * sizeof(ssize_t));
 	memset(delays, 0, state->max_ch * sizeof(ssize_t));
@@ -549,17 +549,17 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 			delays[i] = offsets[i] = 0;
 		/* recalculate offsets */
 		for (int i = 0; i < e->ostream.channels; ++i)
-			offsets[i] += delays[i]-delay_offset;  /* cumulative latency */
+			offsets[i] += delays[i]-chain->delay_offset;  /* cumulative latency */
 		if (e->channel_offsets)  /* query effect latency and requested delay */
 			e->channel_offsets(e, offsets, delays);
-		delay_offset = 0;
+		chain->delay_offset = 0;
 		for (int i = 0; i < e->ostream.channels; ++i)
-			delay_offset = MINIMUM(delay_offset, delays[i]);
-		/* LOG_FMT(LL_VERBOSE, "%s(): delay_offset=%zd", __func__, delay_offset); */
+			chain->delay_offset = MINIMUM(chain->delay_offset, delays[i]);
+		/* LOG_FMT(LL_VERBOSE, "%s(): delay_offset=%zd", __func__, chain->delay_offset); */
 		for (int i = 0; i < e->ostream.channels; ++i) {
 			/* LOG_FMT(LL_VERBOSE, "%s(): output channel %d: offset=%zd latency=%zd delay=%zd",
-				__func__, i, offsets[i]-(delays[i]-delay_offset), offsets[i], delays[i]); */
-			offsets[i] -= delays[i]-delay_offset;
+				__func__, i, offsets[i]-(delays[i]-chain->delay_offset), offsets[i], delays[i]); */
+			offsets[i] -= delays[i]-chain->delay_offset;
 		}
 
 		prev = e;
@@ -750,12 +750,17 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sampl
 
 double get_effects_chain_delay(struct effects_chain *chain)
 {
+	int out_fs = 0;
 	double delay = 0.0;
 	struct effect *e = chain->head;
-	while (e != NULL) {
-		if (e->delay != NULL) delay += (double) e->delay(e) / e->ostream.fs;
+	while (e) {
+		out_fs = e->ostream.fs;
+		if (e->delay)
+			delay += (double) e->delay(e) / out_fs;
 		e = e->next;
 	}
+	if (out_fs && chain->delay_offset < 0)
+		delay += (double) -chain->delay_offset / out_fs;
 	return delay;
 }
 

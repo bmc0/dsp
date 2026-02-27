@@ -63,7 +63,7 @@ struct effect {
 struct effects_chain {
 	struct effect *head;
 	struct effect *tail;
-	ssize_t frames, drain_frames;
+	ssize_t frames, drain_frames, delay_offset;
 };
 
 #define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL, 0, 0 }  /* needed for GCC 12 and earlier */
