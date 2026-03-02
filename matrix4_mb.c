@@ -311,10 +311,10 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			const double norm_mult = CALC_NORM_MULT(band->surr_mult);
+			const double norm_mult = CALC_NORM_MULT(state->surr_mult[0]*band->shelf_mult);
 			out_l += state->fb[0].s[k]*norm_mult;
 			out_r += state->fb[1].s[k]*norm_mult;
-			out_s += state->fb[0].s[k]*norm_mult*band->surr_mult*band->shape_mult;
+			out_s += state->fb[0].s[k]*norm_mult*state->surr_mult[0]*band->shelf_mult*band->shape_mult;
 		}
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
 		out_r = fshape_run(&state->inv_fshape[1], out_r);
@@ -327,11 +327,8 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 			else
 				obuf[i*e->ostream.channels + k] = ibuf[i*e->istream.channels + k];
 		}
-		for (int k = 0; k < N_BANDS; ++k) {
-			struct matrix4_band *band = &state->band[k];
-			const double norm_mult = CALC_NORM_MULT(band->surr_mult);
-			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k]*norm_mult*band->surr_mult*band->shape_mult;
-		}
+		for (int k = 0; k < N_BANDS; ++k)
+			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k];
 		obuf[i*e->ostream.channels + e->istream.channels + N_BANDS] = out_s;
 	}
 	return obuf;
