@@ -113,7 +113,7 @@ struct matrix4_mb_state {
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_pwrcmp;
-	ssize_t len, fb_buf_len, fb_buf_p;
+	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
 	ssize_t fade_frames, fade_p;
 #ifdef DSP_STATUSLINES
 	int statuslines_registered;
@@ -532,8 +532,8 @@ void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	drain_samples[state->c0] += state->fb_buf_len;
 	drain_samples[state->c1] += state->fb_buf_len;
-	drain_samples[e->istream.channels + 0] += state->fb_buf_len;
-	drain_samples[e->istream.channels + 1] += state->fb_buf_len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i)
+		drain_samples[i] += state->fb_buf_len;
 }
 
 void matrix4_mb_effect_destroy(struct effect *e)
@@ -570,8 +570,10 @@ void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	latency[state->c0] += state->len;
 	latency[state->c1] += state->len;
-	latency[e->istream.channels + 0] += state->len;
-	latency[e->istream.channels + 1] += state->len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
+		latency[i] += state->len;
+		req_delay[i] += state->surr_delay_frames;
+	}
 }
 #endif
 
@@ -609,6 +611,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
+	state->surr_delay_frames = config.surr_delay_frames;
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
 	state->do_phase_flip = (config.do_phase_flip != 0);
@@ -693,16 +696,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	struct effect *e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0);
 	free(filter);
 	state->fb[1] = state->fb[0];  /* reset */
+	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */
 	if (e_fir == NULL) {
 		e->destroy(e);
 		free(e);
 		return NULL;
 	}
 
-#if !(DO_FILTER_BANK_TEST)
-	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */
-	e->next = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
-#endif
 	effect_list_append(e_fir, e);
 	return e_fir;
 }

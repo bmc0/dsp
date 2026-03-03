@@ -193,7 +193,7 @@ void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void event_state_cleanup(struct event_state *);
 
-#ifndef LADSPA_FRONTEND
+#ifdef DSP_STATUSLINES
 struct steering_bar {
 	char s[32];
 	int e;
@@ -205,8 +205,6 @@ void draw_steering_bar(double, int, struct steering_bar *);
 void event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double, double);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, double, struct axes *, struct axes *);
-
-struct effect * matrix4_delay_effect_init(const struct effect_info *, const struct stream_info *, ssize_t);
 
 static inline double smoothstep_nc(double x)
 {

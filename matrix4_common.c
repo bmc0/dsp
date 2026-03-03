@@ -972,7 +972,7 @@ void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_m
 	m->rsr *= pdc_s;
 }
 
-#ifndef LADSPA_FRONTEND
+#ifdef DSP_STATUSLINES
 void draw_steering_bar(double a, int is_event, struct steering_bar *bar)
 {
 	memset(bar->s, ' ', 31);
@@ -996,20 +996,3 @@ void draw_steering_bar(double a, int is_event, struct steering_bar *bar)
 	else if (i < 15) memset(&bar->s[i+1], fill_c, 15-i);
 }
 #endif
-
-struct effect * matrix4_delay_effect_init(const struct effect_info *ei, const struct stream_info *istream, ssize_t frames)
-{
-	if (frames == 0)
-		return NULL;
-
-	char *channel_selector = NEW_SELECTOR(istream->channels);
-	SET_BIT(channel_selector, istream->channels-2);
-	SET_BIT(channel_selector, istream->channels-1);
-	struct effect *e = delay_effect_init_int(ei->name, istream, channel_selector, frames);
-	free(channel_selector);
-
-	LOG_FMT(LL_VERBOSE, "%s: info: net surround delay is %gms (%zd sample%s)",
-		ei->name, frames*1000.0/istream->fs, frames, (frames == 1 || frames == -1) ? "" : "s");
-
-	return e;
-}

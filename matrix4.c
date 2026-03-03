@@ -56,7 +56,7 @@ struct matrix4_state {
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
-	ssize_t len, p, fade_frames, fade_p;
+	ssize_t len, p, fade_frames, fade_p, surr_delay_frames;
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
 	struct statusline_state statusline;
@@ -243,8 +243,8 @@ void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	drain_samples[state->c0] += state->len;
 	drain_samples[state->c1] += state->len;
-	drain_samples[e->istream.channels + 0] += state->len;
-	drain_samples[e->istream.channels + 1] += state->len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i)
+		drain_samples[i] += state->len;
 }
 
 void matrix4_effect_destroy(struct effect *e)
@@ -279,8 +279,10 @@ void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t 
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	latency[state->c0] += state->len;
 	latency[state->c1] += state->len;
-	latency[e->istream.channels + 0] += state->len;
-	latency[e->istream.channels + 1] += state->len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
+		latency[i] += state->len;
+		req_delay[i] += state->surr_delay_frames;
+	}
 }
 
 struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -307,8 +309,10 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->channel_offsets = matrix4_effect_channel_offsets;
 
 	state = calloc(1, sizeof(struct matrix4_state));
+	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
+	state->surr_delay_frames = config.surr_delay_frames;
 	state->status_type = config.status_type;
 	state->do_lowpass = (config.lowpass_f0 > 0.0);
 	state->do_phase_flip = (config.do_phase_flip != 0);
@@ -350,9 +354,5 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 
-	struct effect *e_delay = matrix4_delay_effect_init(ei, &e->ostream, config.surr_delay_frames);
-
-	e->data = state;
-	e->next = e_delay;
 	return e;
 }
