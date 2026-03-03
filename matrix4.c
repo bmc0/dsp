@@ -152,8 +152,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		const sample_t s1_d = state->bufs[1][state->p];
 		sample_t out_l = s0_d*cs_interp(&state->m_interp.ll, state->s) + s1_d*cs_interp(&state->m_interp.lr, state->s);
 		sample_t out_r = s0_d*cs_interp(&state->m_interp.rl, state->s) + s1_d*cs_interp(&state->m_interp.rr, state->s);
-		sample_t out_ls = s0_d*cs_interp(&state->m_interp.lsl, state->s) + s1_d*cs_interp(&state->m_interp.lsr, state->s);
-		sample_t out_rs = s0_d*cs_interp(&state->m_interp.rsl, state->s) + s1_d*cs_interp(&state->m_interp.rsr, state->s);
+		sample_t out_ls = s0_d*cs_interp(&state->m_interp.lsl, state->s) + s1_d*cs_interp(&state->m_interp.lsr, state->s) + 1e-15;
+		sample_t out_rs = s0_d*cs_interp(&state->m_interp.rsl, state->s) + s1_d*cs_interp(&state->m_interp.rsr, state->s) + 1e-15;
 
 		if (state->shelf_mult != 1.0) {
 			const sample_t g_surr_shelf = cs_interp(&state->m_interp.g_surr_shelf, state->s);
@@ -183,8 +183,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				(k == state->c1) ? out_r :
 				ibuf[i*e->istream.channels + k];
 		}
-		obuf[i*e->ostream.channels + e->istream.channels + 0] = out_ls;
-		obuf[i*e->ostream.channels + e->istream.channels + 1] = out_rs;
+		obuf[i*e->ostream.channels + e->istream.channels + 0] = out_ls - 1e-15;
+		obuf[i*e->ostream.channels + e->istream.channels + 1] = out_rs - 1e-15;
 		state->bufs[0][state->p] = s0;
 		state->bufs[1][state->p] = s1;
 

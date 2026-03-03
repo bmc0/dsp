@@ -444,8 +444,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 			if (state->do_phase_flip) {
 				band->pf_ap[0].c0 = cs_interp(&band->pf_ap_c0[0], state->s);
 				band->pf_ap[1].c0 = cs_interp(&band->pf_ap_c0[1], state->s);
-				out_ls += ap1_run(&band->pf_ap[0], ls_tmp);
-				out_rs += ap1_run(&band->pf_ap[1], rs_tmp);
+				out_ls += ap1_run(&band->pf_ap[0], ls_tmp+1e-15)-1e-15;
+				out_rs += ap1_run(&band->pf_ap[1], rs_tmp+1e-15)-1e-15;
 			}
 			else {
 				out_ls += ls_tmp;
@@ -458,8 +458,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
 		out_r = fshape_run(&state->inv_fshape[1], out_r);
-		out_ls = fshape_run(&state->inv_fshape[2], out_ls);
-		out_rs = fshape_run(&state->inv_fshape[3], out_rs);
+		out_ls = fshape_run(&state->inv_fshape[2], out_ls+(1e-15/324))-1e-15;
+		out_rs = fshape_run(&state->inv_fshape[3], out_rs+(1e-15/324))-1e-15;
 
 		for (int k = 0; k < e->istream.channels; ++k) {
 			obuf[i*e->ostream.channels + k] =
