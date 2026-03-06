@@ -112,7 +112,7 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double surr_mult[2], shelf_pwrcmp;
+	double surr_mult[2], shelf_pwrcmp, freq_mask;
 	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
 	ssize_t fade_frames, fade_p;
 #ifdef DSP_STATUSLINES
@@ -327,8 +327,9 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 			else
 				obuf[i*e->ostream.channels + k] = ibuf[i*e->istream.channels + k];
 		}
+		double s0_fb_fm = 0.0;
 		for (int k = 0; k < N_BANDS; ++k)
-			obuf[i*e->ostream.channels + e->istream.channels + k] = state->fb[0].s[k];
+			obuf[i*e->ostream.channels + e->istream.channels + k] = s0_fb_fm = state->fb[0].s[k] + state->freq_mask*s0_fb_fm;
 		obuf[i*e->ostream.channels + e->istream.channels + N_BANDS] = out_s;
 	}
 	return obuf;
@@ -374,16 +375,17 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					angles[n_angles++] = ev->diff_last;
 			}
 		}
+		sample_t s0_fb_fm = 0.0, s1_fb_fm = 0.0;
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
 
-			const sample_t s0_fb = state->fb[0].s[k];
-			const sample_t s1_fb = state->fb[1].s[k];
+			s0_fb_fm = state->fb[0].s[k] + state->freq_mask*s0_fb_fm;
+			s1_fb_fm = state->fb[1].s[k] + state->freq_mask*s1_fb_fm;
 			const sample_t s0_d_fb = state->fb_buf[0][state->fb_buf_p].s[k];
 			const sample_t s1_d_fb = state->fb_buf[1][state->fb_buf_p].s[k];
 
 			struct envs env, pwr_env;
-			calc_input_envs(&band->sm, s0_fb, s1_fb, &env, &pwr_env);
+			calc_input_envs(&band->sm, s0_fb_fm, s1_fb_fm, &env, &pwr_env);
 
 			#if DOWNSAMPLE_FACTOR > 1
 			if (state->s == 0) {
@@ -674,6 +676,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->surr_mult[0] = config.surr_mult[0];
 	state->surr_mult[1] = config.surr_mult[1];
 	state->shelf_pwrcmp = config.shelf_pwrcmp;
+	state->freq_mask = config.freq_mask;
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));

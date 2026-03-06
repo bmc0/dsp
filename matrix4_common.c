@@ -143,6 +143,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
+	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = GET_MATRIX_FUNC(MATRIX_ID_DEFAULT);
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
@@ -223,7 +224,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;
 				config->surr_delay_frames = parse_len(opt_arg, istream->fs, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, "surround_delay", goto fail);
+				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
 			}
 			else if (is_opt(opt, "filter_type=")) {
 				char *opt_arg = isolate(opt, '=');
@@ -274,6 +275,14 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 						LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg);
 					}
 				}
+			}
+			else if (is_opt(opt, "freq_mask=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (!is_mb) goto mb_only;
+				if (*opt_arg == '\0') goto needs_arg;
+				config->freq_mask = strtod(opt_arg, &endptr);
+				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
+				CHECK_RANGE(config->freq_mask >= 0.0 && config->freq_mask <= 1.0, opt, goto fail);
 			}
 			else {
 				LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
