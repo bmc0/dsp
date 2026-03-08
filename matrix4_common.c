@@ -200,7 +200,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				}
 				if (*opt_subarg1 != '\0') {
 					config->shelf_pwrcmp = strtod(opt_subarg1, &endptr);
-					CHECK_ENDPTR(opt_subarg, endptr, "shelf: pwrcmp", goto fail);
+					CHECK_ENDPTR(opt_subarg1, endptr, "shelf: pwrcmp", goto fail);
 					CHECK_RANGE(config->shelf_pwrcmp >= 0.0 && config->shelf_pwrcmp <= 1.0, "shelf: pwrcmp", goto fail);
 				}
 			}
