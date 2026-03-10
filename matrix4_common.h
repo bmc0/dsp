@@ -61,8 +61,8 @@
 #define SURR_DELAY_DEFAULT        15.0
 #define SHELF_MULT_DEFAULT         0.7071
 #define SHELF_F0_DEFAULT         500.0
-#define SHELF_PWRCMP_DEFAULT       1.0
-#define SHELF_PWRCMP_MB_DEFAULT    1.0
+#define CONTOUR_PWRCMP_DEFAULT     1.0
+#define CONTOUR_PWRCMP_MB_DEFAULT  1.0
 #define LOWPASS_F0_DEFAULT      6000.0
 #define DO_PHASE_FLIP_DEFAULT      1
 
@@ -162,11 +162,15 @@ enum filter_bank_type {
 	FILTER_BANK_TYPE_ELLIPTIC,
 };
 
-typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
+union cmc_shelf_mult {
+	double arg;
+	struct { double front, surr; } ret;
+};
+typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip;
-	double surr_mult[2], shelf_mult, shelf_f0, shelf_pwrcmp, lowpass_f0, fb_stop[2], freq_mask;
+	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, fb_stop[2], freq_mask;
 	ssize_t surr_delay_frames;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;

@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
 #include <math.h>
 #include "matrix4.h"
 #include "biquad.h"
@@ -36,11 +37,11 @@ struct dyn_shelf_state {
 
 struct matrix4_state {
 	int s, c0, c1;
-	char disable, do_lowpass, do_phase_flip;
+	char disable, do_phase_flip;
 	enum status_type status_type;
 	sample_t *bufs[2];
 	struct biquad_state in_hp[2], in_lp[2];
-	struct dyn_shelf_state surr_shelf[2], surr_lp[2], front_shelf[2];
+	struct dyn_shelf_state surr_shelf[2], surr_lp[2], front_shelf[2], front_lp[2];
 	struct smooth_state sm;
 	struct event_state ev;
 	struct event_config evc;
@@ -49,13 +50,13 @@ struct matrix4_state {
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
-		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf;
+		struct cs_interp_state g_surr_shelf, g_surr_lp, g_front_shelf, g_front_lp;
 	} m_interp;
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double surr_mult[2], shelf_mult, shelf_pwrcmp, lowpass_mult;
+	double surr_mult[2], shelf_mult, lowpass_mult, contour_pwrcmp;
 	ssize_t len, p, fade_frames, fade_p, surr_delay_frames;
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
@@ -115,17 +116,19 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
-			const double w_max = MAXIMUM(w_step, w);
-			const double surr_mult = (w_max*state->surr_mult[1] + (1.0-w_max)*state->surr_mult[0])*cur_fade_mult;
-			const double shelf_mult_tot = w + (1.0-w)*state->shelf_mult;
-			const double shelf_pwrcmp = state->shelf_pwrcmp * ewma_get_last(&state->ev.pwrcmp_factor);
-			const double shelf_mult = (shelf_mult_tot-1.0)*shelf_pwrcmp + 1.0;
-			const double shape_mult_shelf = shelf_mult_tot/shelf_mult;
-			const double shape_mult_lp = w + (1.0-w)*state->lowpass_mult;
+			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
+			const double ct_pcf = state->contour_pwrcmp * ewma_get_last(&state->ev.pwrcmp_factor);
+			const double shelf_ct0 = w + (1.0-w)*state->shelf_mult;
+			const double shelf_ct1 = (shelf_ct0-1.0)*ct_pcf + 1.0;
+			const double lp_ct0 = w + (1.0-w)*state->lowpass_mult;
+			const double lp_ct1 = (lp_ct0-1.0)*pow(ct_pcf, 1.0/state->shelf_mult) + 1.0;
 
 			struct matrix_coefs m = {0};
-			double r_shelf_mult[2] = {surr_mult*shelf_mult, 0.0};
-			state->calc_matrix_coefs(&state->ax, surr_mult, state->surr_mult[1]*cur_fade_mult, 0, &m, r_shelf_mult);
+			union cmc_shelf_mult r_shelf_mult[2] = {
+				{ .arg = surr_mult*shelf_ct1 },
+				{ .arg = surr_mult*shelf_ct1*lp_ct1 },
+			};
+			state->calc_matrix_coefs(&state->ax, surr_mult, state->surr_mult[1]*cur_fade_mult, 0, &m, r_shelf_mult, LENGTH(r_shelf_mult));
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -137,9 +140,10 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			cs_interp_insert(&state->m_interp.rsl, m.rsl);
 			cs_interp_insert(&state->m_interp.rsr, m.rsr);
 
-			cs_interp_insert(&state->m_interp.g_surr_shelf, shape_mult_shelf*r_shelf_mult[1]);
-			cs_interp_insert(&state->m_interp.g_surr_lp, shape_mult_lp);
-			cs_interp_insert(&state->m_interp.g_front_shelf, r_shelf_mult[0]);
+			cs_interp_insert(&state->m_interp.g_surr_shelf, shelf_ct0/shelf_ct1*r_shelf_mult[0].ret.surr);
+			cs_interp_insert(&state->m_interp.g_surr_lp, lp_ct0/lp_ct1*r_shelf_mult[1].ret.surr/MAXIMUM(r_shelf_mult[0].ret.surr, DBL_MIN));
+			cs_interp_insert(&state->m_interp.g_front_shelf, r_shelf_mult[0].ret.front);
+			cs_interp_insert(&state->m_interp.g_front_lp, r_shelf_mult[1].ret.front/r_shelf_mult[0].ret.front);
 
 			if (state->do_phase_flip) {
 				const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
@@ -158,15 +162,16 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		if (state->shelf_mult != 1.0) {
 			const sample_t g_surr_shelf = cs_interp(&state->m_interp.g_surr_shelf, state->s);
 			const sample_t g_front_shelf = cs_interp(&state->m_interp.g_front_shelf, state->s);
-
 			out_l = dyn_shelf_run(&state->front_shelf[0], out_l, g_front_shelf);
 			out_r = dyn_shelf_run(&state->front_shelf[1], out_r, g_front_shelf);
 			out_ls = dyn_shelf_run(&state->surr_shelf[0], out_ls, g_surr_shelf);
 			out_rs = dyn_shelf_run(&state->surr_shelf[1], out_rs, g_surr_shelf);
 		}
-		if (state->do_lowpass) {
+		if (state->lowpass_mult != 1.0) {
 			const sample_t g_surr_lp = cs_interp(&state->m_interp.g_surr_lp, state->s);
-
+			const sample_t g_front_lp = cs_interp(&state->m_interp.g_front_lp, state->s);
+			out_l = dyn_shelf_run(&state->front_lp[0], out_l, g_front_lp);
+			out_r = dyn_shelf_run(&state->front_lp[1], out_r, g_front_lp);
 			out_ls = dyn_shelf_run(&state->surr_lp[0], out_ls, g_surr_lp);
 			out_rs = dyn_shelf_run(&state->surr_lp[1], out_rs, g_surr_lp);
 		}
@@ -203,7 +208,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
 				e->name, (state->disable) ? " [off]" : "",
 				TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
-				state->ev.adj, state->shelf_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
+				state->ev.adj, state->contour_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
 				state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
 		}
 		else {
@@ -314,7 +319,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c1 = config.c1;
 	state->surr_delay_frames = config.surr_delay_frames;
 	state->status_type = config.status_type;
-	state->do_lowpass = (config.lowpass_f0 > 0.0);
 	state->do_phase_flip = (config.do_phase_flip != 0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
@@ -325,6 +329,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		dyn_shelf_init(&state->surr_shelf[i],  istream->fs, config.shelf_f0);
 		dyn_shelf_init(&state->surr_lp[i],     istream->fs, config.lowpass_f0);
 		dyn_shelf_init(&state->front_shelf[i], istream->fs, config.shelf_f0);
+		dyn_shelf_init(&state->front_lp[i],    istream->fs, config.lowpass_f0);
 	}
 	smf_asym_init(&state->bg_cs, DOWNSAMPLED_FS(istream->fs), SMF_RISE_TIME(ACCOM_TIME*2.0), 0.01, 1e-6);
 	smf_set(&state->bg_cs, 1.0);
@@ -346,11 +351,12 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->surr_mult[0] = config.surr_mult[0];
 	state->surr_mult[1] = config.surr_mult[1];
 	state->shelf_mult = config.shelf_mult;
-	state->shelf_pwrcmp = config.shelf_pwrcmp;
-	if (state->do_lowpass) {
+	state->contour_pwrcmp = config.contour_pwrcmp;
+	if (config.lowpass_f0 > 0.0) {
 		const double lp_f = (istream->fs+config.lowpass_f0)/2.0;
 		state->lowpass_mult = sqrt(1.0/(1.0+(lp_f*lp_f/(config.lowpass_f0*config.lowpass_f0))));
 	}
+	else state->lowpass_mult = 1.0;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream);
 

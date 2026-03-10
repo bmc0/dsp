@@ -266,15 +266,19 @@ Example:
 		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
 		four outputs. `v3` adds full steering of sounds encoded to the left and
 		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v3`.
-	* `shelf=gain|none[:f0[k][:pwrcmp]]`  
+	* `shelf=gain|none[:f0[k]]`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
-		-22.5°. `pwrcmp` is the high-frequency power compensation factor. The
-		default values are -3dB, 500Hz, and 1, respectively.
+		-22.5°. The default values are -3dB and 500Hz, respectively.
 	* `lowpass=f0[k]|none`  
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed
 		as C/S goes from 0° to -22.5°. The default is 6kHz.
+	* `contour_pwrcmp=factor`  
+		Dynamic compensation for loss of high-frequency power related to
+		frequency contouring in surround outputs. Attempts to minimize
+		perceived timbral modification of both transient and sustained sounds.
+		The default value is 1.
 	* `phase_flip[=true|false]`  
 		Dynamically flip the relative phase of the right surround output under
 		rear steering so that stongly rear-encoded sounds are in phase. The

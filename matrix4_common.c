@@ -24,9 +24,9 @@
 #include "matrix4_common.h"
 #include "delay.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
-void calc_matrix_coefs_v2(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
-void calc_matrix_coefs_v3(const struct axes *, double, double, int, struct matrix_coefs *, double [2]);
+void calc_matrix_coefs_v1(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v2(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v3(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -138,7 +138,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
-	config->shelf_pwrcmp = (is_mb) ? SHELF_PWRCMP_MB_DEFAULT : SHELF_PWRCMP_DEFAULT;
+	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
@@ -199,9 +199,10 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					CHECK_RANGE(config->shelf_f0 >= 100.0 && config->shelf_f0 <= 6000.0, "shelf: f0", goto fail);
 				}
 				if (*opt_subarg1 != '\0') {
-					config->shelf_pwrcmp = strtod(opt_subarg1, &endptr);
+					config->contour_pwrcmp = strtod(opt_subarg1, &endptr);
 					CHECK_ENDPTR(opt_subarg1, endptr, "shelf: pwrcmp", goto fail);
-					CHECK_RANGE(config->shelf_pwrcmp >= 0.0 && config->shelf_pwrcmp <= 1.0, "shelf: pwrcmp", goto fail);
+					CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, "shelf: pwrcmp", goto fail);
+					LOG_FMT(LL_ERROR, "%s: warning: shelf: pwrcmp argument deprecated; use contour_pwrcmp option instead", argv[0]);
 				}
 			}
 			else if (is_opt(opt, "lowpass=")) {
@@ -213,6 +214,13 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto fail);
 					CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto fail);
 				}
+			}
+			else if (is_opt(opt, "contour_pwrcmp=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0') goto needs_arg;
+				config->contour_pwrcmp = strtod(opt_arg, &endptr);
+				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
+				CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, opt, goto fail);
 			}
 			else if (is_opt(opt, "phase_flip=")) {
 				HANDLE_BOOLEAN_ARG(config->do_phase_flip);
@@ -584,7 +592,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -658,11 +666,13 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
 	const double pdc_s = sqrt(surr_pwr);
 
 	if (r_shelf_mult) {
-		const double surr_mult_hf2 = square(r_shelf_mult[0]);
-		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
-		r_shelf_mult[0] = sqrt(1.0-surr_pwr_hf*MINIMUM(pd_s, 1.0))/pdc_f;
-		r_shelf_mult[1] = sqrt(surr_pwr_hf)/MAXIMUM(pdc_s, DBL_MIN);
+		for (int i = 0; i < n_shelf_mult; ++i) {
+			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
+			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+			const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
+			r_shelf_mult[i].ret.front = sqrt(1.0-surr_pwr_hf*MINIMUM(pd_s, 1.0))/pdc_f;
+			r_shelf_mult[i].ret.surr = sqrt(surr_pwr_hf)/MAXIMUM(pdc_s, DBL_MIN);
+		}
 	}
 
 	m->ll = pdc_f;
@@ -685,7 +695,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
  * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -800,13 +810,15 @@ void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_m
 	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
 
 	if (r_shelf_mult) {
-		const double surr_mult_hf2 = square(r_shelf_mult[0]);
-		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
-		const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
-		const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
-		r_shelf_mult[0] = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
-		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+		for (int i = 0; i < n_shelf_mult; ++i) {
+			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
+			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
+			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
+			const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
+			r_shelf_mult[i].ret.front = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
+			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+		}
 	}
 
 	m->ll *= pdc_f;
@@ -822,7 +834,7 @@ void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_m
 /*
  * Like v2, but with full steering of left-/right-surround-encoded sounds.
 */
-void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, double r_shelf_mult[2])
+void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -962,13 +974,15 @@ void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_m
 	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
 
 	if (r_shelf_mult) {
-		const double surr_mult_hf2 = square(r_shelf_mult[0]);
-		const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-		const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
-		const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
-		const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
-		r_shelf_mult[0] = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
-		r_shelf_mult[1] = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+		for (int i = 0; i < n_shelf_mult; ++i) {
+			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
+			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
+			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
+			const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
+			r_shelf_mult[i].ret.front = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
+			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+		}
 	}
 
 	m->ll *= pdc_f;

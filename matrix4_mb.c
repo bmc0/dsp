@@ -93,8 +93,7 @@ struct matrix4_band {
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
 	struct ewma_state ev_thresh;
-	double ev_thresh_max, ev_thresh_min;
-	double shelf_mult, shape_mult;
+	double ev_thresh_max, ev_thresh_min, contour;
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
 	struct statusline_state statusline;
@@ -112,7 +111,7 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double surr_mult[2], shelf_pwrcmp, freq_mask;
+	double surr_mult[2], contour_pwrcmp, freq_mask;
 	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
 	ssize_t fade_frames, fade_p;
 #ifdef DSP_STATUSLINES
@@ -311,10 +310,11 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
 		for (int k = 0; k < N_BANDS; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			const double norm_mult = CALC_NORM_MULT(state->surr_mult[0]*band->shelf_mult);
+			const double ct1 = (band->contour-1.0)*state->contour_pwrcmp + 1.0;
+			const double norm_mult = CALC_NORM_MULT(state->surr_mult[0]*ct1);
 			out_l += state->fb[0].s[k]*norm_mult;
 			out_r += state->fb[1].s[k]*norm_mult;
-			out_s += state->fb[0].s[k]*norm_mult*state->surr_mult[0]*band->shelf_mult*band->shape_mult;
+			out_s += state->fb[0].s[k]*norm_mult*state->surr_mult[0]*band->contour;
 		}
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
 		out_r = fshape_run(&state->inv_fshape[1], out_r);
@@ -413,23 +413,23 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 
 				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
-				const double shelf_mult_tot = w + (1.0-w)*band->shelf_mult;
-				const double shelf_pwrcmp = state->shelf_pwrcmp * ewma_get_last(&band->ev.pwrcmp_factor);
-				const double shelf_mult = (shelf_mult_tot-1.0)*shelf_pwrcmp + 1.0;
-				const double shape_mult = (w + (1.0-w)*band->shape_mult) * (shelf_mult_tot/shelf_mult);
+				const double ct_pcf = state->contour_pwrcmp * ewma_get_last(&band->ev.pwrcmp_factor);
+				const double ct0 = w + (1.0-w)*band->contour;
+				const double ct1 = (ct0-1.0)*ct_pcf + 1.0;
+				const double ct2 = ct0/ct1;
 
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, surr_mult*shelf_mult, state->surr_mult[1]*cur_fade_mult, 1, &m, NULL);
+				state->calc_matrix_coefs(&band->ax, surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, 1, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
 				cs_interp_insert(&band->m_interp.rl, m.rl);
 				cs_interp_insert(&band->m_interp.rr, m.rr);
 
-				cs_interp_insert(&band->m_interp.lsl, m.lsl*shape_mult);
-				cs_interp_insert(&band->m_interp.lsr, m.lsr*shape_mult);
-				cs_interp_insert(&band->m_interp.rsl, m.rsl*shape_mult);
-				cs_interp_insert(&band->m_interp.rsr, m.rsr*shape_mult);
+				cs_interp_insert(&band->m_interp.lsl, m.lsl*ct2);
+				cs_interp_insert(&band->m_interp.lsr, m.lsr*ct2);
+				cs_interp_insert(&band->m_interp.rsl, m.rsl*ct2);
+				cs_interp_insert(&band->m_interp.rsr, m.rsr*ct2);
 
 				if (state->do_phase_flip) {
 					const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
@@ -490,7 +490,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 					"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
 					e->name, (state->disable) ? " [off]" : "", i,
 					TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
-					band->ev.adj, ewma_get_last(&band->ev_thresh), state->shelf_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
+					band->ev.adj, ewma_get_last(&band->ev_thresh), state->contour_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
 					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
 			}
 		}
@@ -664,18 +664,16 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		struct matrix4_band *band = &state->band[k];
 		const double fc2 = fb_fc[k]*fb_fc[k];
 		const double shelf_norm_f2 = fc2/shelf_f02;
-		band->shelf_mult = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
-		band->shape_mult = 1.0;
+		band->contour = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
-			band->shape_mult *= sqrt(1.0/(1.0+lowpass_norm_f2));
+			band->contour *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
-		/* LOG_FMT(LL_VERBOSE, "%s: band %d: shelf_mult=%.4g shape_mult=%.4g",
-				argv[0], k, band->shelf_mult, band->shape_mult); */
+		/* LOG_FMT(LL_VERBOSE, "%s: band %d: contour=%.4g", argv[0], k, band->contour); */
 	}
 	state->surr_mult[0] = config.surr_mult[0];
 	state->surr_mult[1] = config.surr_mult[1];
-	state->shelf_pwrcmp = config.shelf_pwrcmp;
+	state->contour_pwrcmp = config.contour_pwrcmp;
 	state->freq_mask = config.freq_mask;
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
