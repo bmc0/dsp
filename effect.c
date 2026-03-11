@@ -751,8 +751,9 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sampl
 double get_effects_chain_delay(struct effects_chain *chain)
 {
 	int out_fs = 0;
-	double delay = 0.0;
+	double delay = 0.0, delay_lim = 0.0;
 	struct effect *e = chain->head;
+	if (e) delay_lim = (double) chain->frames / e->istream.fs;
 	while (e) {
 		out_fs = e->ostream.fs;
 		if (e->delay)
@@ -761,7 +762,7 @@ double get_effects_chain_delay(struct effects_chain *chain)
 	}
 	if (out_fs && chain->delay_offset < 0)
 		delay += (double) -chain->delay_offset / out_fs;
-	return delay;
+	return MINIMUM(delay, delay_lim);
 }
 
 void reset_effects_chain(struct effects_chain *chain)
@@ -771,6 +772,7 @@ void reset_effects_chain(struct effects_chain *chain)
 		if (e->reset != NULL) e->reset(e);
 		e = e->next;
 	}
+	chain->frames = 0;
 }
 
 void signal_effects_chain(struct effects_chain *chain)
