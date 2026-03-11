@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2024-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2024-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,8 +23,9 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
-#include "util.h"
 #include "codec_buf.h"
+#include "util.h"
+#include "list_util.h"
 
 #define CMD_QUEUE_LEN 8
 
@@ -35,8 +36,9 @@ struct read_cmd {
 
 struct read_block {
 	sample_t *data;
-	struct codec *codec;
-	int offset, frames;
+	struct read_buf_input *input;
+	ssize_t pos;
+	int repeats, offset, frames;
 };
 
 struct read_state {
@@ -127,7 +129,7 @@ static void read_queue_restore(struct read_state *state)
 	}
 }
 
-ssize_t codec_read_buf_pull(void *state_data, sample_t *data, ssize_t frames, const struct codec *codec, int *r_next)
+ssize_t codec_read_buf_pull(void *state_data, sample_t *data, ssize_t frames, const struct read_buf_input *input, ssize_t *r_pos, int *r_repeats, int *r_next)
 {
 	ssize_t r = 0;
 	struct read_state *state = (struct read_state *) state_data;
@@ -135,20 +137,21 @@ ssize_t codec_read_buf_pull(void *state_data, sample_t *data, ssize_t frames, co
 		while (sem_wait(&state->queue.block.items) != 0);
 		pthread_mutex_lock(&state->queue.lock);
 		struct read_block *block = &state->queue.block.b[state->queue.block.front];
-		if ((r > 0 && block->frames == 0 && state->queue.block.rt_wait) || block->codec != codec) {
-			if (block->codec != codec) *r_next = 1;
+		if ((r > 0 && block->frames == 0 && state->queue.block.rt_wait) || block->input != input) {
+			if (block->input != input) *r_next = 1;
 			sem_post(&state->queue.block.items);  /* did not read block */
 			pthread_mutex_unlock(&state->queue.lock);
 			return r;
 		}
 		if (block->frames > 0) {
 			const int read_frames = MINIMUM(block->frames, frames - r);
-			const int read_samples = read_frames * block->codec->channels;
-			const int block_offset = block->offset * block->codec->channels;
+			const int read_samples = read_frames * block->input->codec->channels;
+			const int block_offset = block->offset * block->input->codec->channels;
 			memcpy(data, block->data + block_offset, read_samples * sizeof(sample_t));
 			data += read_samples;
 			block->frames -= read_frames;
 			block->offset += read_frames;
+			block->pos += read_frames;
 			r += read_frames;
 		}
 		if (block->frames == 0) {
@@ -163,19 +166,21 @@ ssize_t codec_read_buf_pull(void *state_data, sample_t *data, ssize_t frames, co
 			}
 		}
 		else sem_post(&state->queue.block.items);  /* partial read */
+		*r_pos = block->pos;
+		*r_repeats = block->repeats;
 		pthread_mutex_unlock(&state->queue.lock);
 	}
 	return r;
 }
 
-static void read_queue_drop(struct read_state *state, const struct codec *codec, int from_back)
+static void read_queue_drop(struct read_state *state, const struct read_buf_input *input, int from_back)
 {
 	while (state->queue.block.slots < state->queue.block.len) {
 		const int idx = (from_back)
 			? (state->queue.block.back > 0) ? state->queue.block.back-1 : state->queue.block.len-1
 			: state->queue.block.front;
 		struct read_block *block = &state->queue.block.b[idx];
-		if (block->codec != codec)
+		if (block->input != input)
 			break;
 		if (!state->queue.block.suspended)
 			sem_post(&state->queue.pending);
@@ -186,59 +191,65 @@ static void read_queue_drop(struct read_state *state, const struct codec *codec,
 	}
 }
 
-static struct codec * read_queue_seek(struct read_state *state, struct codec *codec, ssize_t *pos)
+static struct read_buf_input * read_queue_seek(struct read_state *state, struct read_buf_input *input, ssize_t *pos)
 {
-	struct codec *prev_codec = codec;
+	struct read_buf_input *prev_input = input;
 	if (state->queue.block.slots == state->queue.block.len) {  /* block queue is empty */
-		if (codec) *pos = codec->seek(codec, *pos);
-		return codec;
+		if (input) *pos = input->codec->seek(input->codec, *pos);
+		return input;
 	}
-	struct codec *sc = state->queue.block.b[state->queue.block.front].codec;
-	if (sc == NULL) goto fail;
+	struct read_buf_input *si = state->queue.block.b[state->queue.block.front].input;
+	if (si == NULL) goto fail;
 	for (;;) {
 		const int idx = (state->queue.block.back > 0) ? state->queue.block.back-1 : state->queue.block.len-1;
 		struct read_block *block = &state->queue.block.b[idx];
-		if (block->codec != sc) {
-			if (block->codec == NULL || block->codec->seek(block->codec, 0) == 0)
-				read_queue_drop(state, block->codec, 1);
+		if (block->input != si) {
+			if (block->input == NULL || block->input->codec->seek(block->input->codec, 0) == 0)
+				read_queue_drop(state, block->input, 1);
 			else {
-				codec = block->codec;
+				input = block->input;
 				goto fail;
 			}
 		}
-		else if (block->codec == sc) {
-			*pos = sc->seek(sc, *pos);
-			if (*pos >= 0) read_queue_drop(state, sc, 0);
-			codec = sc;
+		else if (block->input == si) {
+			*pos = si->codec->seek(si->codec, *pos);
+			if (*pos >= 0) read_queue_drop(state, si, 0);
+			input = si;
 			goto done;
 		}
 	}
 	fail:
 	*pos = -1;
 	done:
-	if (*pos >= 0 && codec != prev_codec)
+	if (*pos >= 0 && input != prev_input)
 		state->queue.block.rt_wait = 0;
 	if (!state->queue.block.paused)
 		read_queue_restore(state);
-	return codec;
+	return input;
 }
 
-static struct codec * read_queue_skip(struct read_state *state, struct codec *codec)
+static struct read_buf_input * read_queue_skip(struct read_state *state, struct read_buf_input *input, ssize_t *pos, int *repeats)
 {
-	read_queue_drop(state, state->queue.block.b[state->queue.block.front].codec, 0);
+	read_queue_drop(state, state->queue.block.b[state->queue.block.front].input, 0);
 	if (state->queue.block.slots == state->queue.block.len) {  /* block queue is empty */
-		if (codec && !state->queue.block.rt_wait) codec = codec->next;
+		if (input && !state->queue.block.rt_wait) {
+			input = input->next;
+			*pos = (input) ? input->start : 0;
+			*repeats = (input) ? input->repeats : 0;
+		}
 		state->queue.block.rt_wait = 0;
 	}
 	if (!state->queue.block.paused) read_queue_restore(state);
-	return codec;
+	return input;
 }
 
 static void * read_worker(void *arg)
 {
 	struct codec_read_buf *rb = (struct codec_read_buf *) arg;
-	struct codec *codec = rb->cur_codec;
+	struct read_buf_input *input = rb->cur_input;
 	struct read_state *state = (struct read_state *) rb->data;
+	ssize_t pos = input->start;
+	int repeats = input->repeats;
 	char done = 0;
 	while (!done) {
 		while (sem_wait(&state->queue.pending) != 0);
@@ -252,22 +263,22 @@ static void * read_worker(void *arg)
 				sem_post(&state->queue.sync);
 				break;
 			case CODEC_READ_BUF_CMD_SEEK:
-				codec = read_queue_seek(state, codec, &cmd.arg);
-				state->queue.cmd.retval = cmd.arg;
+				input = read_queue_seek(state, input, &cmd.arg);
+				state->queue.cmd.retval = pos = cmd.arg;
 				sem_post(&state->queue.sync);
 				break;
 			case CODEC_READ_BUF_CMD_PAUSE:
-				if (codec) codec->pause(codec, 1);
+				if (input) input->codec->pause(input->codec, 1);
 				read_queue_suspend(state);
 				state->queue.block.paused = 1;
 				break;
 			case CODEC_READ_BUF_CMD_UNPAUSE:
-				if (codec) codec->pause(codec, 0);
+				if (input) input->codec->pause(input->codec, 0);
 				read_queue_restore(state);
 				state->queue.block.paused = 0;
 				break;
 			case CODEC_READ_BUF_CMD_SKIP:
-				codec = read_queue_skip(state, codec);
+				input = read_queue_skip(state, input, &pos, &repeats);
 				sem_post(&state->queue.sync);
 				break;
 			case CODEC_READ_BUF_CMD_TERM:
@@ -285,17 +296,37 @@ static void * read_worker(void *arg)
 			state->queue.block.back = (state->queue.block.back+1 < state->queue.block.len) ? state->queue.block.back+1 : 0;
 			pthread_mutex_unlock(&state->queue.lock);
 
-			const ssize_t r = (codec) ? codec->read(codec, block->data, state->queue.block.max_block_frames) : 0;
+			ssize_t r = 0;
+			if (input) {
+				read_restart:
+				r = state->queue.block.max_block_frames;
+				if (input->end >= 0) r = MINIMUM(r, input->end-pos);
+				if (r > 0) r = input->codec->read(input->codec, block->data, r);
+				if (r <= 0 && repeats != 0) {
+					--repeats;
+					ssize_t seek_pos = input->codec->seek(input->codec, input->start);
+					if (seek_pos >= 0) {
+						pos = seek_pos;
+						goto read_restart;
+					}
+					else LOG_S(LL_ERROR, "read_worker: error: seek failed; can't do repeat");
+				}
+			}
+			block->pos = pos;
+			block->repeats = repeats;
 			block->offset = 0;
 			block->frames = MAXIMUM(r, 0);
-			block->codec = codec;
+			block->input = input;
+			pos += block->frames;
 
 			/* note: a block with zero frames and a non-NULL codec field indicates the end of that codec */
-			if (r <= 0 && codec) {
-				codec = codec->next;
+			if (r <= 0 && input) {
+				input = input->next;
+				pos = (input) ? input->start : 0;
+				repeats = (input) ? input->repeats : 0;
 				/* if codec is real time, wait until the block queue empties */
-				if (codec && (codec->hints & CODEC_HINT_REALTIME)) {
-					/* LOG_FMT(LL_VERBOSE, "read_worker: info: suspending queue for \"%s\"...", codec->path); */
+				if (input && (input->codec->hints & CODEC_HINT_REALTIME)) {
+					/* LOG_FMT(LL_VERBOSE, "read_worker: info: suspending queue for \"%s\"...", input->codec->path); */
 					pthread_mutex_lock(&state->queue.lock);
 					read_queue_suspend(state);
 					state->queue.block.rt_wait = 1;
@@ -315,16 +346,16 @@ static void * read_worker(void *arg)
 ssize_t codec_read_buf_delay_nw(struct codec_read_buf *rb)
 {
 	struct read_state *state = (struct read_state *) rb->data;
-	struct codec *codec = rb->cur_codec;
+	struct read_buf_input *input = rb->cur_input;
 	pthread_mutex_lock(&state->queue.lock);
 	ssize_t fill_frames = 0;
 	for (int i = state->queue.block.slots, k = state->queue.block.front; i < state->queue.block.len; ++i) {
 		struct read_block *block = &state->queue.block.b[k];
-		if (block->codec != codec) break;
+		if (block->input != input) break;
 		fill_frames += block->frames;
 		k = (k+1 < state->queue.block.len) ? k+1 : 0;
 	}
-	ssize_t d = fill_frames + ((codec) ? codec->delay(codec) : 0);
+	ssize_t d = fill_frames + ((input) ? input->codec->delay(input->codec) : 0);
 	pthread_mutex_unlock(&state->queue.lock);
 	return d;
 }
@@ -350,18 +381,45 @@ void codec_read_buf_destroy_nw(struct codec_read_buf *rb)
 	read_state_destroy(state);
 }
 
-struct codec_read_buf * codec_read_buf_init(struct codec_list *codecs, int block_frames, int n_blocks, void (*error_cb)(int))
+struct read_buf_input * read_buf_input_list_add(struct read_buf_input_list *list, struct codec *codec, ssize_t start, ssize_t end, int repeats)
+{
+	struct read_buf_input *input = calloc(1, sizeof(struct read_buf_input));
+	input->codec = codec;
+	input->start = start;
+	input->end = end;
+	input->repeats = repeats;
+	LIST_APPEND(list, input);
+	return input;
+}
+
+void read_buf_input_list_destroy_head(struct read_buf_input_list *list)
+{
+	struct read_buf_input *input = list->head;
+	LIST_REMOVE(list, input);
+	free(input);
+}
+
+void read_buf_input_list_destroy(struct read_buf_input_list *list)
+{
+	while (list->head) read_buf_input_list_destroy_head(list);
+}
+
+struct codec_read_buf * codec_read_buf_init(struct read_buf_input_list *list, int block_frames, int n_blocks, void (*error_cb)(int))
 {
 	int do_buf = 0, max_channels = 0;
 	struct codec_read_buf *rb = calloc(1, sizeof(struct codec_read_buf));
-	rb->codecs = codecs;
-	rb->cur_codec = codecs->head;
+	rb->inputs = list;
+	rb->cur_input = list->head;
 	rb->error_cb = error_cb;
+	if (rb->cur_input) {
+		rb->pos = rb->cur_input->start;
+		rb->repeats = rb->cur_input->repeats;
+	}
 
 	if (n_blocks < CODEC_BUF_MIN_BLOCKS) return rb;
-	for (struct codec *c = codecs->head; c; c = c->next) {
-		max_channels = MAXIMUM(max_channels, c->channels);
-		if (!(c->hints & CODEC_HINT_NO_BUF))
+	LIST_FOREACH(list, input) {
+		max_channels = MAXIMUM(max_channels, input->codec->channels);
+		if (!(input->codec->hints & CODEC_HINT_NO_BUF))
 			do_buf = 1;
 	}
 	if (!do_buf) return rb;

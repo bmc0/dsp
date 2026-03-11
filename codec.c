@@ -21,7 +21,6 @@
 #include <string.h>
 #include "codec.h"
 #include "util.h"
-#include "list_util.h"
 
 #include "null.h"
 #include "sgen.h"
@@ -235,23 +234,6 @@ void destroy_codec(struct codec *c)
 		return;
 	c->destroy(c);
 	free(c);
-}
-
-void append_codec(struct codec_list *l, struct codec *c)
-{
-	LIST_APPEND(l, c);
-}
-
-void destroy_codec_list_head(struct codec_list *l)
-{
-	struct codec *c = l->head;
-	LIST_REMOVE(l, c);
-	destroy_codec(c);
-}
-
-void destroy_codec_list(struct codec_list *l)
-{
-	while (l->head) destroy_codec_list_head(l);
 }
 
 void print_all_codecs(void)

@@ -67,6 +67,7 @@ int check_endptr(const char *, const char *, const char *, const char *);
 double parse_freq(const char *, char **);
 ssize_t parse_len(const char *, int, char **);
 double parse_len_frac(const char *, double, char **);
+ssize_t parse_timespec(const char *, int, char **);
 int parse_selector(const char *, char *, int);
 int parse_selector_masked(const char *, char *, const char *, int);
 void print_selector(const char *, int);

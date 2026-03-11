@@ -39,9 +39,9 @@
 #include "list_util.h"
 
 #define CHOOSE_INPUT_FS(x) \
-	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : (x))
+	(((x) == 0) ? (input_list.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : input_list.head->codec->fs : (x))
 #define CHOOSE_INPUT_CHANNELS(x) \
-	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : in_codecs.head->channels : (x))
+	(((x) == 0) ? (input_list.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_CHANNELS : input_list.head->codec->channels : (x))
 #define SHOULD_DITHER(in, out, chain_needs_dither) \
 	(force_dither != -1 && ((out)->hints & CODEC_HINT_CAN_DITHER) && \
 		(force_dither == 1 || ((out)->prec < 24 && ((chain_needs_dither) || (in)->prec > (out)->prec || !((in)->hints & CODEC_HINT_CAN_DITHER)))))
@@ -82,7 +82,7 @@ static ssize_t clip_count = 0;
 static sample_t peak = 0.0, dither_mult = 0.0;
 static struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
 static struct effects_chain_xfade_state xfade_state = EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
-static struct codec_list in_codecs = CODEC_LIST_INITIALIZER;
+static struct read_buf_input_list input_list = READ_BUF_INPUT_LIST_INITIALIZER;
 static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
 static struct codec_write_buf *out_codec_buf = NULL;
@@ -133,6 +133,8 @@ static const char help_text[] =
 	"  -r frequency[k]  sample rate\n"
 	"  -c channels      number of channels\n"
 	"  -R ratio         buffer ratio\n"
+	"  -T time_range    set start and end positions (input only)\n"
+	"  -l[n]            repeat n times or indefinitely (input only)\n"
 	"  -n               equivalent to '-t null null'\n";
 
 static const char interactive_help[] =
@@ -354,7 +356,7 @@ static void cleanup_and_exit(int s)
 		sem_destroy(&ev_queue.items);
 	}
 	codec_read_buf_destroy(in_codec_buf);
-	destroy_codec_list(&in_codecs);
+	read_buf_input_list_destroy(&input_list);
 	codec_write_buf_destroy(out_codec_buf);
 	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
@@ -395,7 +397,7 @@ static void print_help(void)
 	print_all_effects();
 }
 
-static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *const *argv, struct codec_params *p)
+static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *const *argv, struct codec_params *p, const char **r_timespan, ssize_t *r_repeats)
 {
 	int opt;
 	char *endptr;
@@ -405,14 +407,16 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 	p->endian = CODEC_ENDIAN_DEFAULT;
 	p->mode = CODEC_MODE_READ;
 	p->buf_ratio = 0;
+	*r_timespan = NULL;
+	*r_repeats = 0;
 
-	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSot:e:BLNr:c:R:n")) != -1) {
+	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSot:e:BLNr:c:R:T:l::n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help();
 			cleanup_and_exit(0);
 		case 'b':
-			if (in_codecs.head == NULL) {
+			if (input_list.head == NULL) {
 				block_frames = strtol(g->arg, &endptr, 10);
 				if (check_endptr(NULL, g->arg, endptr, "block size")) return 1;
 				if (block_frames <= 1) {
@@ -504,6 +508,16 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 		case 'n':
 			p->path = p->type = "null";
 			return 0;
+		case 'T':
+			*r_timespan = g->arg;
+			break;
+		case 'l':
+			if (g->arg) {
+				*r_repeats = strtol(g->arg, &endptr, 10);
+				if (check_endptr(NULL, g->arg, endptr, "number of repeats")) return 1;
+			}
+			else *r_repeats = READ_BUF_INPUT_REPEAT_INF;
+			break;
 		default:
 			dsp_getopt_print_error(g, opt, NULL);
 			return 1;
@@ -559,7 +573,7 @@ static int has_elapsed(struct timespec *then, double s)
 }
 #endif
 
-static void update_progress(struct codec *in, ssize_t pos, int is_paused, int force)
+static void update_progress(ssize_t pos, ssize_t repeats, int is_paused, int force)
 {
 	if (!show_progress)
 		return;
@@ -567,6 +581,7 @@ static void update_progress(struct codec *in, ssize_t pos, int is_paused, int fo
 	static struct timespec then;
 	if (has_elapsed(&then, 0.1) || force) {
 #endif
+		struct codec *in = input_list.head->codec;
 		double in_delay_s = 0.0, chain_delay_s, out_delay_s;
 		get_delay_sec(&chain_delay_s, &out_delay_s);
 		ssize_t delay = get_delay_frames(in->fs, chain_delay_s, out_delay_s);
@@ -578,6 +593,10 @@ static void update_progress(struct codec *in, ssize_t pos, int is_paused, int fo
 		int pl = snprintf(progress_line, LENGTH(progress_line), "%c  %.1f%%  "TIME_FMT"  -"TIME_FMT,
 			(is_paused) ? '|' : '>', (in->frames != -1) ? (double) p / in->frames * 100.0 : 0,
 			TIME_FMT_ARGS(p, in->fs), TIME_FMT_ARGS(rem, in->fs));
+		if (pl < LENGTH(progress_line)-1 && repeats) {
+			if (repeats < 0) pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "  rep:inf");
+			else pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "  rep:%zd", repeats);
+		}
 		if (pl < LENGTH(progress_line)-1 && verbose_progress) {
 			pl += snprintf(progress_line + pl, LENGTH(progress_line) - pl, "  lat:%.2fms+%.2fms+%.2fms=%.2fms",
 				in_delay_s*1000.0, chain_delay_s*1000.0, out_delay_s*1000.0, (in_delay_s+chain_delay_s+out_delay_s)*1000.0);
@@ -636,9 +655,10 @@ static void finish_xfade(void)
 	effects_chain_xfade_reset(&xfade_state);
 }
 
-static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence, int pause_state)
+static ssize_t do_seek(ssize_t pos, ssize_t offset, int whence, int pause_state)
 {
 	ssize_t s;
+	struct codec *in = input_list.head->codec;
 	if (whence == SEEK_SET)
 		s = offset;
 	else if (whence == SEEK_END)
@@ -657,7 +677,7 @@ static ssize_t do_seek(struct codec *in, ssize_t pos, ssize_t offset, int whence
 	return pos;
 }
 
-static void do_pause(struct codec *in, int pause_state, int sync)
+static void do_pause(int pause_state, int sync)
 {
 	codec_read_buf_pause(in_codec_buf, pause_state, sync);
 	codec_write_buf_pause(out_codec_buf, pause_state, sync);
@@ -721,7 +741,7 @@ static void handle_tstp(int is_paused)
 {
 	sigset_t set;
 	if (interactive && term_attrs_saved) tcsetattr(term_fd, TCSANOW, &term_attrs);
-	if (!is_paused) do_pause(in_codecs.head, 1, 1);
+	if (!is_paused) do_pause(1, 1);
 	sigemptyset(&set);
 	sigaddset(&set, SIGTSTP);
 	if (pthread_sigmask(SIG_UNBLOCK, &set, NULL) != 0) {
@@ -735,7 +755,7 @@ static void handle_tstp(int is_paused)
 		cleanup_and_exit(1);
 	}
 	if (interactive) term_setup();
-	if (!is_paused) do_pause(in_codecs.head, 0, 0);
+	if (!is_paused) do_pause(0, 0);
 	query_term_size();
 }
 
@@ -750,8 +770,8 @@ static void handle_tstp(int is_paused)
 #define REBUILD_EFFECTS_CHAIN \
 	do { \
 		destroy_effects_chain(&chain); \
-		stream.fs = in_codecs.head->fs; \
-		stream.channels = in_codecs.head->channels; \
+		stream.fs = input_list.head->codec->fs; \
+		stream.channels = input_list.head->codec->channels; \
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL)) \
 			cleanup_and_exit(1); \
 	} while (0)
@@ -770,7 +790,7 @@ static void handle_tstp(int is_paused)
 
 #define REALLOC_BUFS(chain) \
 	do { \
-		const int new_buf_len = get_effects_chain_buffer_len(chain, block_frames, in_codecs.head->channels); \
+		const int new_buf_len = get_effects_chain_buffer_len(chain, block_frames, input_list.head->codec->channels); \
 		if (new_buf_len > buf_len) { \
 			buf_len = new_buf_len; \
 			free(buf1); free(buf2); free(xfade_state.buf); \
@@ -783,7 +803,7 @@ static void handle_tstp(int is_paused)
 #define SET_DITHER(chain) \
 	do { \
 		const int chain_needs_dither = effects_chain_needs_dither(chain); \
-		const int do_dither = SHOULD_DITHER(in_codecs.head, out_codec, chain_needs_dither); \
+		const int do_dither = SHOULD_DITHER(input_list.head->codec, out_codec, chain_needs_dither); \
 		add_dither = effects_chain_set_dither_params(chain, out_codec->prec, do_dither); \
 		LOG_FMT(LL_VERBOSE, "info: auto dither %s%s", (do_dither) ? "on" : "off", \
 			(do_dither && !add_dither) ? " (effect)" : ""); \
@@ -794,7 +814,6 @@ int main(int argc, char *argv[])
 	int is_paused = 0, add_dither = 0, read_buf_blocks = 0, term_sig, err;
 	double in_time = 0.0;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
-	struct codec *c = NULL;
 	struct codec_params p, out_p = CODEC_PARAMS_AUTO(NULL, CODEC_MODE_WRITE);
 	sample_t *obuf;
 
@@ -806,17 +825,22 @@ int main(int argc, char *argv[])
 			interactive = 0;
 	}
 	while (g.ind < argc && !IS_EFFECTS_CHAIN_START(argv[g.ind])) {
-		if (parse_codec_params(&g, argc, (const char *const *) argv, &p))
+		const char *start_timespec;
+		ssize_t repeats;
+		if (parse_codec_params(&g, argc, (const char *const *) argv, &p, &start_timespec, &repeats))
 			cleanup_and_exit(1);
-		if (p.mode == CODEC_MODE_WRITE)
+		if (p.mode == CODEC_MODE_WRITE) {
+			if (start_timespec) LOG_FMT(LL_ERROR, "warning: ignoring '-T' option for output: %s", p.path);
+			if (repeats) LOG_FMT(LL_ERROR, "warning: ignoring '-l' option for output: %s", p.path);
 			out_p = p;
+		}
 		else {
 			p.fs = CHOOSE_INPUT_FS(p.fs);
 			p.channels = CHOOSE_INPUT_CHANNELS(p.channels);
 			const int req_blocks = p.buf_ratio;
 			if (p.buf_ratio - CODEC_BUF_MIN_BLOCKS >= 2)
 				p.buf_ratio = 2;
-			c = init_codec(&p);
+			struct codec *c = init_codec(&p);
 			if (c == NULL) {
 				LOG_FMT(LL_ERROR, "error: failed to open input: %s", p.path);
 				cleanup_and_exit(1);
@@ -824,40 +848,79 @@ int main(int argc, char *argv[])
 			read_buf_blocks = MAXIMUM(read_buf_blocks, req_blocks - c->buf_ratio);
 			print_io_info(c, LL_VERBOSE, "input");
 			if (input_mode != INPUT_MODE_SEQUENCE) {
-				if (in_codecs.head != NULL && c->fs != in_codecs.head->fs) {
+				if (input_list.head != NULL && c->fs != input_list.head->codec->fs) {
 					LOG_S(LL_ERROR, "error: all inputs must have the same sample rate in concatenate mode");
 					cleanup_and_exit(1);
 				}
-				if (in_codecs.head != NULL && c->channels != in_codecs.head->channels) {
+				if (input_list.head != NULL && c->channels != input_list.head->codec->channels) {
 					LOG_S(LL_ERROR, "error: all inputs must have the same number of channels in concatenate mode");
 					cleanup_and_exit(1);
 				}
 			}
-			if (c->frames == -1 || in_time < 0.0)
+			ssize_t c_frames = c->frames;
+			ssize_t start_pos = 0, end_pos = READ_BUF_INPUT_END_UNSPECIFIED;
+			if (start_timespec) {
+				char *endptr;
+				start_pos = parse_timespec(start_timespec, c->fs, &endptr);
+				int end_is_rel = (*endptr == '+');
+				if (end_is_rel || *endptr == '-') {
+					char *end_timespec = endptr+1;
+					end_pos = parse_timespec(end_timespec, c->fs, &endptr);
+					if (check_endptr(NULL, end_timespec, endptr, "end timespec"))
+						cleanup_and_exit(1);
+					if (end_pos < 0) {
+						if (end_is_rel) {
+							LOG_FMT(LL_ERROR, "error: %s: end timespec must be positive when relative to start timespec", c->path);
+							cleanup_and_exit(1);
+						}
+						end_pos = MAXIMUM(c_frames+end_pos, 0);
+					}
+				}
+				else if (check_endptr(NULL, start_timespec, endptr, "start timespec"))
+					cleanup_and_exit(1);
+				if (start_pos < 0) start_pos = MAXIMUM(c_frames+start_pos, 0);
+				if (start_pos > 0) {
+					start_pos = c->seek(c, start_pos);
+					if (start_pos < 0) {
+						LOG_FMT(LL_ERROR, "error: %s: seek failed", c->path);
+						cleanup_and_exit(1);
+					}
+				}
+				if (end_pos >= 0) {
+					end_pos = (end_is_rel) ? start_pos+end_pos : end_pos;
+					if (end_pos < start_pos) LOG_FMT(LL_ERROR, "warning: %s: end timespec precedes start timespec", c->path);
+					c_frames = MINIMUM(c_frames, MAXIMUM(end_pos-start_pos, 0));
+				}
+				else if (c_frames >= start_pos) c_frames -= start_pos;
+			}
+			if (c_frames > 0 && repeats > 0)
+				c_frames *= repeats+1;
+			else if (repeats < 0)
+				c_frames = -1;
+			if (c_frames == -1 || in_time < 0.0)
 				in_time = -1.0;
-			else
-				in_time += (double) c->frames / c->fs;
-			append_codec(&in_codecs, c);
+			else in_time += (double) c_frames / c->fs;
+			read_buf_input_list_add(&input_list, c, start_pos, end_pos, repeats);
 		}
 	}
 
 	if (dsp_globals.loglevel == 0)
 		show_progress = 0;  /* disable progress display if in silent mode */
-	if (in_codecs.head == NULL) {
+	if (input_list.head == NULL) {
 		LOG_S(LL_ERROR, "error: no inputs");
 		cleanup_and_exit(1);
 	}
 
 	const int chain_start = g.ind, chain_argc = argc-g.ind;
 	struct stream_info stream = {
-		.fs = in_codecs.head->fs,
-		.channels = in_codecs.head->channels,
+		.fs = input_list.head->codec->fs,
+		.channels = input_list.head->codec->channels,
 	};
 
 	if (plot) {
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 			cleanup_and_exit(1);
-		plot_effects_chain(&chain, in_codecs.head->fs, in_codecs.head->channels, (plot > 1));
+		plot_effects_chain(&chain, input_list.head->codec->fs, input_list.head->codec->channels, (plot > 1));
 	}
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));
@@ -886,7 +949,7 @@ int main(int argc, char *argv[])
 
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
 			cleanup_and_exit(1);
-		if ((in_codec_buf = codec_read_buf_init(&in_codecs, block_frames, read_buf_blocks, NULL)) == NULL)
+		if ((in_codec_buf = codec_read_buf_init(&input_list, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
 
 		ssize_t out_frames = (in_time < 0.0) ? -1 : (ssize_t) llround(in_time * stream.fs);
@@ -912,12 +975,12 @@ int main(int argc, char *argv[])
 		REALLOC_BUFS(&chain);
 		dither_mult = tpdf_dither_get_mult(out_codec->prec);
 
-		while (in_codecs.head != NULL) {
-			ssize_t r, pos = 0;
-			int k = 0;
+		while (input_list.head != NULL) {
+			ssize_t r, pos = input_list.head->start;
+			int k = 0, repeats = input_list.head->repeats;
 			SET_DITHER(&chain);
-			print_io_info(in_codecs.head, LL_NORMAL, "input");
-			update_progress(in_codecs.head, pos, is_paused, 1);
+			print_io_info(input_list.head->codec, LL_NORMAL, "input");
+			update_progress(pos, repeats, is_paused, 1);
 			status_ctrl(STATUS_CTRL_DRAW);
 			do {
 				struct event ev;
@@ -928,11 +991,11 @@ int main(int argc, char *argv[])
 						case SIGINT:
 						case SIGTERM:
 							term_sig = ev.val;
-							update_progress(in_codecs.head, pos, is_paused, 1);
+							update_progress(pos, repeats, is_paused, 1);
 							goto got_term_sig;
 						case SIGTSTP:
 							handle_tstp(is_paused);
-							print_io_info(in_codecs.head, LL_NORMAL, "input");
+							print_io_info(input_list.head->codec, LL_NORMAL, "input");
 							break;
 						case SIGUSR1:
 							goto handle_effects_chain_rebuild_request;
@@ -954,19 +1017,19 @@ int main(int argc, char *argv[])
 							dsp_log_release();
 							break;
 						case ',':
-							pos = do_seek(in_codecs.head, pos, (ssize_t) in_codecs.head->fs * -5, SEEK_CUR, is_paused);
+							pos = do_seek(pos, (ssize_t) input_list.head->codec->fs * -5, SEEK_CUR, is_paused);
 							break;
 						case '.':
-							pos = do_seek(in_codecs.head, pos, (ssize_t) in_codecs.head->fs * 5, SEEK_CUR, is_paused);
+							pos = do_seek(pos, (ssize_t) input_list.head->codec->fs * 5, SEEK_CUR, is_paused);
 							break;
 						case '<':
-							pos = do_seek(in_codecs.head, pos, (ssize_t) in_codecs.head->fs * -30, SEEK_CUR, is_paused);
+							pos = do_seek(pos, (ssize_t) input_list.head->codec->fs * -30, SEEK_CUR, is_paused);
 							break;
 						case '>':
-							pos = do_seek(in_codecs.head, pos, (ssize_t) in_codecs.head->fs * 30, SEEK_CUR, is_paused);
+							pos = do_seek(pos, (ssize_t) input_list.head->codec->fs * 30, SEEK_CUR, is_paused);
 							break;
 						case 'r':
-							pos = do_seek(in_codecs.head, pos, 0, SEEK_SET, is_paused);
+							pos = do_seek(pos, 0, SEEK_SET, is_paused);
 							break;
 						case 'n':
 							codec_write_buf_drop(out_codec_buf, 1, 0);
@@ -975,15 +1038,15 @@ int main(int argc, char *argv[])
 							goto next_input;
 						case 'c':
 							is_paused = !is_paused;
-							do_pause(in_codecs.head, is_paused, 0);
+							do_pause(is_paused, 0);
 							break;
 						case 'e': handle_effects_chain_rebuild_request:
 							status_ctrl(STATUS_CTRL_CLEAR);
 							LOG_S(LL_NORMAL, "info: rebuilding effects chain");
 							if (xfade_state.pos > 0) finish_xfade();
 							if (!is_paused && !drain_effects) {  /* attempt crossfade */
-								stream.fs = in_codecs.head->fs;
-								stream.channels = in_codecs.head->channels;
+								stream.fs = input_list.head->codec->fs;
+								stream.channels = input_list.head->codec->channels;
 								xfade_state.istream = stream;
 								xfade_state.chain[0] = chain;
 								if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL))
@@ -1031,7 +1094,7 @@ int main(int argc, char *argv[])
 							dsp_log_acquire();
 							dsp_log_printf("\033[2J\033[H");
 							dsp_log_release();
-							print_io_info(in_codecs.head, LL_NORMAL, "input");
+							print_io_info(input_list.head->codec, LL_NORMAL, "input");
 							break;
 						}
 						break;
@@ -1041,11 +1104,14 @@ int main(int argc, char *argv[])
 					default:
 						LOG_FMT(LL_ERROR, "%s: BUG: unhandled event type: %d", __func__, (int) ev.type);
 					}
-					update_progress(in_codecs.head, pos, is_paused, 1);
+					update_progress(pos, repeats, is_paused, 1);
 					status_ctrl(STATUS_CTRL_DRAW);
 				}
 				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
-				pos += r;
+				pos = codec_read_buf_get_pos(in_codec_buf);
+				const int prev_repeats = repeats;
+				repeats = codec_read_buf_get_repeats(in_codec_buf);
+				const int did_repeat = (prev_repeats != repeats);
 				if (xfade_state.pos > 0) {
 					obuf = effects_chain_xfade_run(&xfade_state, &w, buf1, buf2);
 					if (xfade_state.pos == 0) {
@@ -1056,18 +1122,18 @@ int main(int argc, char *argv[])
 				else obuf = run_effects_chain(&chain, &w, buf1, buf2);
 				write_out(w, obuf, add_dither);
 				k += w;
-				if (k >= out_codec->fs) {
-					update_progress(in_codecs.head, pos, is_paused, 0);
+				if (k >= out_codec->fs || did_repeat) {
+					update_progress(pos, repeats, is_paused, did_repeat);
 					k -= out_codec->fs;
 				}
 				status_ctrl(STATUS_CTRL_DRAW);
 			} while (r > 0);
 			next_input:
+			stream.fs = input_list.head->codec->fs;
+			stream.channels = input_list.head->codec->channels;
 			codec_read_buf_next(in_codec_buf);
-			stream.fs = in_codecs.head->fs;
-			stream.channels = in_codecs.head->channels;
-			destroy_codec_list_head(&in_codecs);
-			if (in_codecs.head != NULL && (in_codecs.head->fs != stream.fs || in_codecs.head->channels != stream.channels)) {
+			read_buf_input_list_destroy_head(&input_list);
+			if (input_list.head != NULL && (input_list.head->codec->fs != stream.fs || input_list.head->codec->channels != stream.channels)) {
 				status_ctrl(STATUS_CTRL_CLEAR);
 				LOG_S(LL_NORMAL, "info: input sample rate and/or channels changed; rebuilding effects chain");
 				if (!is_paused)

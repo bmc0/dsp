@@ -49,18 +49,14 @@ double parse_freq(const char *s, char **r_endptr)
 			f *= 1000.0;
 			++endptr;
 		}
-		if (*endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
+		if (*endptr != '\0')
+			LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
 	}
 	if (r_endptr) *r_endptr = endptr;
 	return f;
 }
 
-ssize_t parse_len(const char *s, int fs, char **r_endptr)
-{
-	return lround(parse_len_frac(s, fs, r_endptr));
-}
-
-double parse_len_frac(const char *s, double fs, char **r_endptr)
+static double parse_len_frac_2(const char *s, double fs, char **r_endptr, int verbose)
 {
 	char *endptr;
 	double d = strtod(s, &endptr);
@@ -78,10 +74,36 @@ double parse_len_frac(const char *s, double fs, char **r_endptr)
 			++endptr;
 			break;
 		}
-		if (*endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
+		if (verbose && *endptr != '\0')
+			LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
 	}
 	if (r_endptr) *r_endptr = endptr;
 	return samples;
+}
+
+ssize_t parse_len(const char *s, int fs, char **r_endptr)
+{
+	return lround(parse_len_frac_2(s, fs, r_endptr, 1));
+}
+
+double parse_len_frac(const char *s, double fs, char **r_endptr)
+{
+	return parse_len_frac_2(s, fs, r_endptr, 1);
+}
+
+ssize_t parse_timespec(const char *s, int fs, char **r_endptr)
+{
+	char *endptr;
+	if (!strchr(s, ':'))
+		return lround(parse_len_frac_2(s, fs, r_endptr, 0));
+	double v = 0.0;
+	for (int i = 0; i < 3; ++i) {
+		v = v*60.0 + strtod(s, &endptr);
+		if (*endptr != ':') break;
+		s = ++endptr;
+	}
+	if (r_endptr) *r_endptr = endptr;
+	return lround(v * fs);
 }
 
 static void set_range(char *b, int n, int start, int end, int dash)

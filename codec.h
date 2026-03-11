@@ -41,7 +41,6 @@ enum {
 };
 
 struct codec {
-	struct codec *prev, *next;
 	const char *path, *type, *enc;
 	int fs, channels, prec, hints, buf_ratio;
 	ssize_t frames;
@@ -54,12 +53,6 @@ struct codec {
 	void (*destroy)(struct codec *);
 	void *data;
 };
-
-struct codec_list {
-	struct codec *head, *tail;
-};
-
-#define CODEC_LIST_INITIALIZER {0}
 
 struct codec_params {
 	const char *path, *type, *enc;
@@ -78,9 +71,6 @@ struct codec_params {
 
 struct codec * init_codec(const struct codec_params *);
 void destroy_codec(struct codec *);
-void append_codec(struct codec_list *, struct codec *);
-void destroy_codec_list_head(struct codec_list *);
-void destroy_codec_list(struct codec_list *);
 void print_all_codecs(void);
 
 #endif

@@ -68,7 +68,15 @@ Option            | Description
 `-r frequency[k]` | Sample rate.
 `-c channels`     | Number of channels.
 `-R ratio`        | Buffer ratio.
+`-T time_range`   | Set start and end positions (input only).
+`-l[n]`           | Repeat `n` times or indefinitely (input only).
 `-n`              | Equivalent to `-t null null`.
+
+The `time_range` argument has the form `start_timespec[{-,+}end_timespec]`. The
+interpretation of `end_timespec` depends on the joining character: `+` means
+relative to `start_timespec`, while `-` means absolute. Negative timespecs are
+referenced to the end of the associated input. Also see the "Timespec syntax"
+section below.
 
 ### Inputs and Outputs
 
@@ -510,6 +518,12 @@ Example    | Description
 
 **Note:** There is no difference between `1,3` and `3,1`. Order is not
 preserved.
+
+#### Timespec syntax
+
+A timespec may be given in one of two forms: `[[hours:]minutes:]seconds` or
+`offset[s|m|S]`. In the latter form, the suffix specifies whether `offset` is
+in seconds, milliseconds, or samples, respectively.
 
 #### Filter width
 
