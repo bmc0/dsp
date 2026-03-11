@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,60 +40,47 @@ int check_endptr(const char *name, const char *str, const char *endptr, const ch
 	return 0;
 }
 
-double parse_freq(const char *s, char **endptr)
+double parse_freq(const char *s, char **r_endptr)
 {
-	double f = strtod(s, endptr);
-	if (*endptr != NULL && *endptr != s) {
-		if (**endptr == 'k') {
+	char *endptr;
+	double f = strtod(s, &endptr);
+	if (endptr != s) {
+		if (*endptr == 'k') {
 			f *= 1000.0;
-			++(*endptr);
+			++endptr;
 		}
-		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+		if (*endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
 	}
+	if (r_endptr) *r_endptr = endptr;
 	return f;
 }
 
-ssize_t parse_len(const char *s, int fs, char **endptr)
+ssize_t parse_len(const char *s, int fs, char **r_endptr)
 {
-	double d = strtod(s, endptr);
-	ssize_t samples = lround(d * fs);
-	if (*endptr != NULL && *endptr != s) {
-		switch (**endptr) {
-		case 'm':
-			d /= 1000.0;
-		case 's':
-			samples = lround(d * fs);
-			++(*endptr);
-			break;
-		case 'S':
-			samples = lround(d);
-			++(*endptr);
-			break;
-		}
-		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
-	}
-	return samples;
+	return lround(parse_len_frac(s, fs, r_endptr));
 }
 
-double parse_len_frac(const char *s, double fs, char **endptr)
+double parse_len_frac(const char *s, double fs, char **r_endptr)
 {
-	double d = strtod(s, endptr);
+	char *endptr;
+	double d = strtod(s, &endptr);
 	double samples = d * fs;
-	if (*endptr != NULL && *endptr != s) {
-		switch (**endptr) {
+	if (endptr != s) {
+		switch (*endptr) {
 		case 'm':
 			d /= 1000.0;
 		case 's':
 			samples = d * fs;
-			++(*endptr);
+			++endptr;
 			break;
 		case 'S':
 			samples = d;
-			++(*endptr);
+			++endptr;
 			break;
 		}
-		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+		if (*endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
 	}
+	if (r_endptr) *r_endptr = endptr;
 	return samples;
 }
 
