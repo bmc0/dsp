@@ -406,7 +406,7 @@ static void print_help(void)
 	print_all_effects();
 }
 
-static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
+static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *const *argv, struct codec_params *p)
 {
 	int opt;
 	char *endptr;
@@ -417,15 +417,15 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 	p->mode = CODEC_MODE_READ;
 	p->buf_ratio = 0;
 
-	while ((opt = getopt(argc, argv, "+:hb:iIqsvdDEpPVSot:e:BLNr:c:R:n")) != -1) {
+	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSot:e:BLNr:c:R:n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help();
 			cleanup_and_exit(0);
 		case 'b':
 			if (in_codecs.head == NULL) {
-				block_frames = strtol(optarg, &endptr, 10);
-				if (check_endptr(NULL, optarg, endptr, "block size")) return 1;
+				block_frames = strtol(g->arg, &endptr, 10);
+				if (check_endptr(NULL, g->arg, endptr, "block size")) return 1;
 				if (block_frames <= 1) {
 					LOG_S(LL_ERROR, "error: block size must be > 1");
 					return 1;
@@ -474,10 +474,10 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			p->mode = CODEC_MODE_WRITE;
 			break;
 		case 't':
-			p->type = optarg;
+			p->type = g->arg;
 			break;
 		case 'e':
-			p->enc = optarg;
+			p->enc = g->arg;
 			break;
 		case 'B':
 			p->endian = CODEC_ENDIAN_BIG;
@@ -489,24 +489,24 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			p->endian = CODEC_ENDIAN_NATIVE;
 			break;
 		case 'r':
-			p->fs = lround(parse_freq(optarg, &endptr));
-			if (check_endptr(NULL, optarg, endptr, "sample rate")) return 1;
+			p->fs = lround(parse_freq(g->arg, &endptr));
+			if (check_endptr(NULL, g->arg, endptr, "sample rate")) return 1;
 			if (p->fs <= 0) {
 				LOG_S(LL_ERROR, "error: sample rate must be > 0");
 				return 1;
 			}
 			break;
 		case 'c':
-			p->channels = strtol(optarg, &endptr, 10);
-			if (check_endptr(NULL, optarg, endptr, "number of channels")) return 1;
+			p->channels = strtol(g->arg, &endptr, 10);
+			if (check_endptr(NULL, g->arg, endptr, "number of channels")) return 1;
 			if (p->channels <= 0) {
 				LOG_S(LL_ERROR, "error: number of channels must be > 0");
 				return 1;
 			}
 			break;
 		case 'R':
-			p->buf_ratio = strtol(optarg, &endptr, 10);
-			if (check_endptr(NULL, optarg, endptr, "buffer ratio")) return 1;
+			p->buf_ratio = strtol(g->arg, &endptr, 10);
+			if (check_endptr(NULL, g->arg, endptr, "buffer ratio")) return 1;
 			if (p->buf_ratio <= 0) {
 				LOG_S(LL_ERROR, "error: buffer ratio must be > 0");
 				return 1;
@@ -516,10 +516,7 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			p->path = p->type = "null";
 			return 0;
 		default:
-			if (opt == ':')
-				LOG_FMT(LL_ERROR, "error: expected argument to option '%c'", optopt);
-			else
-				LOG_FMT(LL_ERROR, "error: illegal option '%c'", optopt);
+			dsp_getopt_print_error(g, opt, NULL);
 			return 1;
 		}
 	}
@@ -536,8 +533,8 @@ static int parse_codec_params(int argc, char *argv[], struct codec_params *p)
 			input_buf_ratio = p->buf_ratio;
 	}
 	p->block_frames = block_frames;
-	if (optind < argc)
-		p->path = argv[optind++];
+	if (g->ind < argc)
+		p->path = argv[g->ind++];
 	else {
 		LOG_S(LL_ERROR, "error: expected path");
 		return 1;
@@ -805,25 +802,22 @@ static void handle_tstp(int is_paused)
 
 int main(int argc, char *argv[])
 {
-	int is_paused = 0, add_dither = 0, term_sig, err;
-	int chain_start, chain_argc;
-	int read_buf_blocks = 0;
+	int is_paused = 0, add_dither = 0, read_buf_blocks = 0, term_sig, err;
 	double in_time = 0.0;
+	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	struct codec *c = NULL;
-	struct stream_info stream;
 	struct codec_params p, out_p = CODEC_PARAMS_AUTO(NULL, CODEC_MODE_WRITE);
 	sample_t *obuf;
 
 	dsp_globals.prog_name = argv[0];
 
-	opterr = 0;
 	if (!isatty(term_fd)) {
 		term_fd = open(ctermid(NULL), O_RDWR);
 		if (term_fd < 0 || !isatty(term_fd))
 			interactive = 0;
 	}
-	while (optind < argc && !IS_EFFECTS_CHAIN_START(argv[optind])) {
-		if (parse_codec_params(argc, argv, &p))
+	while (g.ind < argc && !IS_EFFECTS_CHAIN_START(argv[g.ind])) {
+		if (parse_codec_params(&g, argc, (const char *const *) argv, &p))
 			cleanup_and_exit(1);
 		if (p.mode == CODEC_MODE_WRITE)
 			out_p = p;
@@ -865,10 +859,11 @@ int main(int argc, char *argv[])
 		cleanup_and_exit(1);
 	}
 
-	chain_start = optind;
-	chain_argc = argc - optind;
-	stream.fs = in_codecs.head->fs;
-	stream.channels = in_codecs.head->channels;
+	const int chain_start = g.ind, chain_argc = argc-g.ind;
+	struct stream_info stream = {
+		.fs = in_codecs.head->fs,
+		.channels = in_codecs.head->channels,
+	};
 
 	if (plot) {
 		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
