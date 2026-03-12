@@ -395,6 +395,7 @@ static int biquad_effect_parse_opts(struct dsp_getopt_state *g, int argc, const 
 			}
 			break;
 		default:
+			dsp_getopt_print_error(g, opt, argv[0]);
 			return 1;
 		}
 	}

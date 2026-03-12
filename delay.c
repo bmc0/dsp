@@ -260,7 +260,9 @@ struct effect * delay_effect_init(const struct effect_info *ei, const struct str
 				CHECK_RANGE(fd_ap_n > 0 && fd_ap_n <= 50, "order", return NULL);
 			}
 			break;
-		default: goto print_usage;
+		default:
+			dsp_getopt_print_error(&g, opt, argv[0]);
+			goto print_usage;
 		}
 	}
 	if (g.ind != argc-1) {

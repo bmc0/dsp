@@ -272,7 +272,9 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	while ((opt = dsp_getopt(&g, argc-1, argv, "e")) != -1) {
 		switch (opt) {
 		case 'e': enforce_eof_marker = 1; break;
-		default: goto print_usage;
+		default:
+			dsp_getopt_print_error(&g, opt, argv[0]);
+			goto print_usage;
 		}
 	}
 	if (g.ind != argc-1) {

@@ -274,10 +274,9 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 		case 'i':
 			do_interp = 1;
 			break;
-		case ':':
-			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
-			return NULL;
-		default: goto print_usage;
+		default:
+			dsp_getopt_print_error(&g, opt, argv[0]);
+			goto print_usage;
 		}
 	}
 

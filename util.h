@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -76,6 +76,7 @@ char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *, const struct stream_info *);
 char * isolate(char *, char);
 int dsp_getopt(struct dsp_getopt_state *, int, const char *const *, const char *);
+void dsp_getopt_print_error(struct dsp_getopt_state *, int, const char *);
 #ifdef HAVE_FFTW3
 ssize_t next_fast_fftw_len(ssize_t);
 void dsp_fftw_acquire(void);

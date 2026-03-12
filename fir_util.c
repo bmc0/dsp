@@ -166,12 +166,9 @@ int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istre
 				return 1;
 			}
 			break;
-		case ':':
-			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", ei->name, g->opt);
-			return 1;
 		default:
-			if (opt == '?' || extra_opts_fn == NULL) {
-				LOG_FMT(LL_ERROR, "%s: error: illegal option '%c'", ei->name, g->opt);
+			if (opt == ':' || (opt == '?' && extra_opts_fn == NULL)) {
+				dsp_getopt_print_error(g, opt, ei->name);
 				return 1;
 			}
 			else if ((err = extra_opts_fn(ei, istream, config, opt, g->arg, extra_opts_data)) != 0)

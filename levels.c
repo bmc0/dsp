@@ -123,10 +123,9 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 			CHECK_ENDPTR(g.arg, endptr, "time constant", return NULL);
 			CHECK_RANGE(tc >= 0.01 && tc <= 10.0, "time constant", return NULL);
 			break;
-		case ':':
-			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
-			return NULL;
-		default: goto print_usage;
+		default:
+			dsp_getopt_print_error(&g, opt, argv[0]);
+			goto print_usage;
 		}
 	}
 	if (g.ind != argc) {

@@ -191,10 +191,9 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 			CHECK_ENDPTR(g.arg, endptr, "rt60_hf", return NULL);
 			CHECK_RANGE(rt60_hf > 0.0, "rt60_hf", return NULL);
 			break;
-		case ':':
-			LOG_FMT(LL_ERROR, "%s: error: expected argument to option '%c'", argv[0], g.opt);
-			return NULL;
-		default: goto print_usage;
+		default:
+			dsp_getopt_print_error(&g, opt, argv[0]);
+			goto print_usage;
 		}
 	}
 	if (delay_max <= delay_min) {

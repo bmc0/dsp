@@ -423,6 +423,15 @@ int dsp_getopt(struct dsp_getopt_state *g, int argc, const char *const *argv, co
 	return c;
 }
 
+void dsp_getopt_print_error(struct dsp_getopt_state *g, int opt, const char *name)
+{
+	const char *errmsg = (opt == ':')
+		? "expected argument to option"
+		: "unrecognized option";
+	if (name) LOG_FMT(LL_ERROR, "%s: %s '%c'", name, errmsg, g->opt);
+	else LOG_FMT(LL_ERROR, "%s '%c'", errmsg, g->opt);
+}
+
 #ifdef HAVE_FFTW3
 ssize_t next_fast_fftw_len(ssize_t min_len)
 {
