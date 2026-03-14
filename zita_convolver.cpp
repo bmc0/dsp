@@ -25,6 +25,7 @@ extern "C" {
 	#include "util.h"
 	#include "codec.h"
 	#include "sampleconv.h"
+	#include "delay.h"
 }
 
 struct zita_convolver_state {
@@ -109,8 +110,9 @@ static void write_buf_floatp(sample_t *in, float **out, int channels, ssize_t s)
 
 struct effect * zita_convolver_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int min_part_len, int max_part_len)
 {
-	struct effect *e;
-	struct zita_convolver_state *state;
+	struct effect *e = NULL;
+	struct zita_convolver_state *state = NULL;
+	float **buf_planar = NULL;
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (n_channels > MINIMUM(Convproc::MAXINP, Convproc::MAXOUT)) {
@@ -150,10 +152,12 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd min_part_len=%d max_part_len=%d", ei->name, filter_frames, min_part_len, max_part_len);
 
 	e = (struct effect *) calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = (char *) NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, e->channel_selector)) goto fail;
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
@@ -164,18 +168,30 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	e->channel_offsets = zita_convolver_effect_channel_offsets;
 
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
+	if (check_alloc(ei->name, state)) goto fail;
+	e->data = (void *) state;
 	state->filter_frames = filter_frames;
 	state->len = min_part_len;
 	state->cproc = cproc;
 	state->buf = (sample_t **) calloc(istream->channels, sizeof(sample_t *));
-	for (int i = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
+	if (check_alloc(ei->name, state->buf)) goto fail;
+	for (int i = 0; i < istream->channels; ++i) {
+		if (GET_BIT(channel_selector, i)) {
 			state->buf[i] = (sample_t *) calloc(state->len, sizeof(sample_t));
-	e->data = (void *) state;
+			if (check_alloc(ei->name, state->buf[i])) goto fail;
+		}
+	}
 
-	float **buf_planar = (float **) calloc(filter_channels, sizeof(float *));
-	for (int i = 0; i < filter_channels; ++i)
+	buf_planar = (float **) calloc(filter_channels, sizeof(float *));
+	if (check_alloc(ei->name, buf_planar)) goto fail;
+	for (int i = 0; i < filter_channels; ++i) {
 		buf_planar[i] = (float *) calloc(filter_frames, sizeof(float));
+		if (check_alloc(ei->name, buf_planar[i])) {
+			while (--i >= 0) free(buf_planar[i]);
+			free(buf_planar);
+			goto fail;
+		}
+	}
 	write_buf_floatp(filter_data, buf_planar, filter_channels, filter_frames);
 	for (int i = 0, k = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
@@ -184,22 +200,26 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 			++k;
 		}
 	}
-	for (int i = 0; i < filter_channels; ++i)
-		free(buf_planar[i]);
+	for (int i = 0; i < filter_channels; ++i) free(buf_planar[i]);
 	free(buf_planar);
 
 	cproc->start_process(0, 0);
 	return e;
+
+	fail:
+	if (state) zita_convolver_effect_destroy(e);
+	else delete cproc;
+	free(e);
+	return NULL;
 }
 
 struct effect * zita_convolver_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels, min_part_len = 0, max_part_len = 0;
-	ssize_t filter_frames;
-	struct effect *e;
-	sample_t *filter_data;
+	ssize_t filter_frames, offset_frames;
 	struct fir_config config;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
+	struct effect *e = NULL, *e_align = NULL;
 	char *endptr;
 
 	int err = fir_parse_opts(ei, istream, &config, &g, argc, argv, NULL, NULL, NULL);
@@ -218,11 +238,21 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 		++g.ind;
 	}
 	config.p.path = argv[g.ind];
-	filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
-	if (filter_data == NULL)
-		return NULL;
+	sample_t *filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
+	if (!filter_data) return NULL;
 	e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, min_part_len, max_part_len);
-	effect_list_append(e, fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames));
+	if (!e) goto fail;
+	offset_frames = fir_get_offset(&config, filter_data, filter_channels, filter_frames);
+	if (offset_frames) {
+		e_align = delay_effect_init_int(ei->name, istream, channel_selector, -offset_frames);
+		if (!e_align) goto fail;
+		effect_list_append(e, e_align);
+	}
 	free(filter_data);
 	return e;
+
+	fail:
+	destroy_effect(e);
+	free(filter_data);
+	return NULL;
 }

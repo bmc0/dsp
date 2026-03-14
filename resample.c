@@ -204,11 +204,13 @@ static void resample_effect_destroy(struct effect *e)
 	fftw_free(state->tmp_fr);
 	fftw_free(state->tmp_fr_2);
 	for (int i = 0; i < e->ostream.channels; ++i) {
-		fftw_free(state->input[i]);
-		fftw_free(state->output[i]);
-		fftw_free(state->overlap[i]);
-		fftw_destroy_plan(state->r2c_plan[i]);
-		fftw_destroy_plan(state->c2r_plan[i]);
+		if (state->input) fftw_free(state->input[i]);
+		if (state->output) fftw_free(state->output[i]);
+		if (state->overlap) fftw_free(state->overlap[i]);
+		if (state->r2c_plan && state->r2c_plan[i])
+			fftw_destroy_plan(state->r2c_plan[i]);
+		if (state->c2r_plan && state->c2r_plan[i])
+			fftw_destroy_plan(state->c2r_plan[i]);
 	}
 	free(state->input);
 	free(state->output);
@@ -223,6 +225,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	char *endptr;
 	int rate;
 	double bw = DEFAULT_BANDWIDTH;
+	sample_t *sinc = NULL;
 
 	if (argc < 2 || argc > 3) {
 		print_effect_usage(ei);
@@ -242,6 +245,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 
 	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	if (rate == istream->fs) {
 		LOG_FMT(LL_VERBOSE, "%s: info: sample rates match; no proccessing will be done", argv[0]);
 		return e;  /* Note: the effect will not be used because run() is unset */
@@ -258,6 +262,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	e->destroy = resample_effect_destroy;
 
 	struct resample_state *state = calloc(1, sizeof(struct resample_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
 
 	const int max_rate = MAXIMUM(rate, istream->fs);
@@ -312,23 +317,36 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	state->c2r_plan = calloc(e->ostream.channels, sizeof(fftw_plan));
 	state->tmp_fr = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
 	state->tmp_fr_2 = fftw_malloc(state->tmp_fr_len * sizeof(fftw_complex));
-	sample_t *sinc = fftw_malloc(sinc_len * 2 * sizeof(sample_t));
+	sinc = fftw_malloc(sinc_len * 2 * sizeof(sample_t));
 	state->sinc_fr = fftw_malloc(state->sinc_fr_len * sizeof(fftw_complex));
+	if (!state->input || !state->output || !state->overlap || !state->r2c_plan || !state->c2r_plan
+			|| !state->tmp_fr || !state->tmp_fr_2 || !sinc || !state->sinc_fr) {
+		dsp_perror(DSP_ENOMEM, ei->name, NULL);
+		goto fail;
+	}
 
 	dsp_fftw_acquire();
 	const int planner_flags = (dsp_fftw_load_wisdom()) ? FFTW_MEASURE : FFTW_ESTIMATE;
 	fftw_plan sinc_plan = fftw_plan_dft_r2c_1d(sinc_len * 2, sinc, state->sinc_fr, FFTW_ESTIMATE);
+	dsp_fftw_release();
+	if (check_alloc(ei->name, sinc_plan)) goto fail;
 	for (int i = 0; i < e->ostream.channels; ++i) {
 		state->input[i] = fftw_malloc(state->in_len * 2 * sizeof(sample_t));
 		state->output[i] = fftw_malloc(state->out_len * 2 * sizeof(sample_t));
 		state->overlap[i] = fftw_malloc(state->out_len * sizeof(sample_t));
+		dsp_fftw_acquire();
 		state->r2c_plan[i] = fftw_plan_dft_r2c_1d(state->in_len * 2, state->input[i], state->tmp_fr, planner_flags);
 		state->c2r_plan[i] = fftw_plan_dft_c2r_1d(state->out_len * 2, state->tmp_fr_2, state->output[i], planner_flags);
+		dsp_fftw_release();
+		if (!state->input[i] || !state->output[i] || !state->overlap[i] || !state->r2c_plan[i] || !state->c2r_plan[i]) {
+			fftw_destroy_plan(sinc_plan);
+			dsp_perror(DSP_ENOMEM, ei->name, NULL);
+			goto fail;
+		}
 		memset(state->input[i], 0, state->in_len * 2 * sizeof(sample_t));
 		memset(state->output[i], 0, state->out_len * 2 * sizeof(sample_t));
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 	}
-	dsp_fftw_release();
 	memset(sinc, 0, sinc_len * 2 * sizeof(sample_t));
 	memset(state->sinc_fr, 0, state->sinc_fr_len * sizeof(fftw_complex));
 	memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
@@ -353,4 +371,10 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, m1+1, state->in_len, state->out_len, sinc_os);
 
 	return e;
+
+	fail:
+	fftw_free(sinc);
+	if (state) resample_effect_destroy(e);
+	free(e);
+	return NULL;
 }

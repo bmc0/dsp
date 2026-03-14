@@ -361,16 +361,17 @@ static void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, s
 
 struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct matrix4_state *state;
+	struct effect *e = NULL;
+	struct matrix4_state *state = NULL;
 	struct matrix4_config config = {0};
 
 	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
 		return NULL;
 	if (parse_effect_opts(argv, dir, istream, 0, &config))
-		return NULL;
+		goto fail;  /* may need to free config.pwr_err_file */
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
@@ -383,6 +384,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->channel_offsets = matrix4_effect_channel_offsets;
 
 	state = calloc(1, sizeof(struct matrix4_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
@@ -417,7 +419,8 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	cs_interp_set(&state->m_surr_amb, 1.0);
 	cs_interp_set(&state->m_surr_dir, 0.0);
 	smooth_state_init(&state->sm, istream);
-	event_state_init(&state->ev, istream, 1.0);
+	if (event_state_init(&state->ev, istream, 1.0))
+		goto fail;
 #if DEBUG_POWER_ERROR
 	for (int i = 0; i < 6; ++i) {
 		biquad_init_using_type(&state->pwr_err_bp.lp[i], BIQUAD_LOWPASS, istream->fs, 14000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
@@ -433,7 +436,9 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->len += CS_INTERP_DELAY_FRAMES;
 #endif
 	state->bufs[0] = calloc(state->len, sizeof(sample_t));
+	if (check_alloc(ei->name, state->bufs[0])) goto fail;
 	state->bufs[1] = calloc(state->len, sizeof(sample_t));
+	if (check_alloc(ei->name, state->bufs[1])) goto fail;
 	state->surr_mult[0] = config.surr_mult[0];
 	state->surr_mult[1] = config.surr_mult[1];
 	state->shelf_mult = config.shelf_mult;
@@ -447,4 +452,13 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	event_config_init(&state->evc, istream, config.rear_ev_mask);
 
 	return e;
+
+	fail:
+#if DEBUG_POWER_ERROR
+	if (!state && config.pwr_err_file)
+		fclose(state->pwr_err_file);
+#endif
+	if (state) e->destroy(e);
+	free(e);
+	return NULL;
 }

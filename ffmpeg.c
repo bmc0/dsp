@@ -254,12 +254,16 @@ static void ffmpeg_dl_cleanup(void)
 
 static void ffmpeg_destroy(struct codec *c)
 {
-	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
-	sym_av_frame_free(&state->frame);
-	sym_avcodec_free_context(&state->cc);
-	sym_avformat_close_input(&state->container);
-	free(state);
-	free((char *) c->type);
+	if (c) {
+		struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
+		if (state) {
+			if (state->frame) sym_av_frame_free(&state->frame);
+			if (state->cc) sym_avcodec_free_context(&state->cc);
+			if (state->container) sym_avformat_close_input(&state->container);
+			free(state);
+		}
+		free((char *) c->type);
+	}
 	pthread_mutex_lock(&ffmpeg_init_lock);
 	--ffmpeg_open_count;
 	if (ffmpeg_open_count == 0)
@@ -329,6 +333,7 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
+	if (check_alloc(p->type, state)) goto fail;
 	if ((err = sym_avformat_open_input(&state->container, p->path, NULL, NULL)) < 0) {
 		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open input: %s: %s", p->type, p->path, FFMPEG_ERRSTR(err));
 		goto fail;
@@ -375,9 +380,11 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 	state->bytes = sym_av_get_bytes_per_sample(state->cc->sample_fmt);
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	i = strlen(codec->name) + 8;
 	c->path = p->path;
 	c->type = calloc(1, i);
+	if (check_alloc(p->type, (char *) c->type)) goto fail;
 	snprintf((char *) c->type, i, "ffmpeg/%s", codec->name);
 	c->enc = sym_av_get_sample_fmt_name(state->cc->sample_fmt);
 	c->fs = state->cc->sample_rate;
@@ -441,14 +448,8 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 	return c;
 
 	fail:
+	ffmpeg_destroy(c);
 	free(c);
-	if (state->frame)
-		sym_av_frame_free(&state->frame);
-	if (state->cc)
-		sym_avcodec_free_context(&state->cc);
-	if (state->container)
-		sym_avformat_close_input(&state->container);
-	free(state);
 	return NULL;
 }
 

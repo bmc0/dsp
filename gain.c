@@ -80,8 +80,8 @@ static int add_effect_merge(struct effect *dest, struct effect *src)
 
 struct effect * gain_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	sample_t *state;
+	struct effect *e = NULL;
+	sample_t *state = NULL;
 	double v;
 	char *endptr;
 
@@ -110,6 +110,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	}
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -129,9 +130,12 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 		e->merge = gain_effect_merge;
 	}
 	e->destroy = gain_effect_destroy;
-	state = calloc(istream->channels, sizeof(sample_t));
+	e->data = state = calloc(istream->channels, sizeof(sample_t));
+	if (check_alloc(ei->name, state)) {
+		free(e);
+		return NULL;
+	}
 	for (int k = 0; k < istream->channels; ++k)
 		state[k] = (GET_BIT(channel_selector, k)) ? v : v_noop;
-	e->data = state;
 	return e;
 }

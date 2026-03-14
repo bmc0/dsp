@@ -112,11 +112,13 @@ static void delay_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 static void delay_effect_destroy(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
-	for (int k = 0; k < e->istream.channels; ++k) {
-		struct delay_channel_state *cs = &state->cs[k];
-		if (cs->fd_ap_n > 2) free(cs->fd_ap.nth);
+	if (state->cs) {
+		for (int k = 0; k < e->istream.channels; ++k) {
+			struct delay_channel_state *cs = &state->cs[k];
+			if (cs->fd_ap_n > 2) free(cs->fd_ap.nth);
+		}
+		free(state->cs);
 	}
-	free(state->cs);
 	free(state);
 }
 
@@ -203,7 +205,11 @@ static int delay_effect_prepare(struct effect *e)
 
 static struct effect * delay_effect_init_common(const char *name, const struct stream_info *istream, const char *channel_selector, ssize_t samples_int, double samples_frac, int fd_ap_n)
 {
-	struct effect *e = calloc(1, sizeof(struct effect));
+	struct effect *e = NULL;
+	struct delay_state *state = NULL;
+
+	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(name, e)) goto fail;
 	e->name = name;
 	if (samples_int == 0 && samples_frac == 0.0)
 		return e;  /* nothing to do */
@@ -220,9 +226,10 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 	e->merge = delay_effect_merge;
 	e->channel_offsets = delay_effect_channel_offsets;
 
-	struct delay_state *state = calloc(1, sizeof(struct delay_state));
-	e->data = state;
+	e->data = state = calloc(1, sizeof(struct delay_state));
+	if (check_alloc(name, state)) goto fail;
 	state->cs = calloc(e->istream.channels, sizeof(struct delay_channel_state));
+	if (check_alloc(name, state->cs)) goto fail;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		if (GET_BIT(channel_selector, k)) {
 			state->cs[k].samples_int = samples_int;
@@ -230,8 +237,12 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 			state->cs[k].fd_ap_n = fd_ap_n;
 		}
 	}
-
 	return e;
+
+	fail:
+	if (state) delay_effect_destroy(e);
+	free(e);
+	return NULL;
 }
 
 struct effect * delay_effect_init_int(const char *name, const struct stream_info *istream, const char *channel_selector, ssize_t samples_int)

@@ -64,6 +64,7 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 		return NULL;
 	}
 	sample_t *h = calloc(taps, sizeof(sample_t));
+	if (check_alloc(ei->name, h)) return NULL;
 	const double w_h = sin(-angle), w_d = cos(-angle);
 	for (ssize_t i = 0, k = -taps / 2; i < taps; ++i, ++k) {
 		if (k == 0)
@@ -87,7 +88,14 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	}
 	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
 	free(h);
-	if (do_align)
-		effect_list_append(e, delay_effect_init_int(ei->name, istream, channel_selector, -taps/2));
+	if (!e) return NULL;
+	if (do_align) {
+		struct effect *e_align = delay_effect_init_int(ei->name, istream, channel_selector, -taps/2);
+		if (!e_align) {
+			destroy_effect(e);
+			return NULL;
+		}
+		effect_list_append(e, e_align);
+	}
 	return e;
 }

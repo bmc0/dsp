@@ -25,6 +25,7 @@
 #include "fir.h"
 #include "util.h"
 #include "codec.h"
+#include "delay.h"
 
 #define MAX_DIRECT_LEN (1<<4)
 
@@ -185,18 +186,18 @@ static void fir_effect_destroy(struct effect *e)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
-		fftw_free(state->buf[k]);
-		fftw_free(state->olap[k]);
-		if (state->filter_fr_1ch == NULL)
+		if (!state->filter_fr_1ch && state->filter_fr)
 			fftw_free(state->filter_fr[k]);
+		if (state->buf) fftw_free(state->buf[k]);
+		if (state->olap) fftw_free(state->olap[k]);
 	}
 	free(state->buf);
 	free(state->olap);
 	free(state->filter_fr);
 	fftw_free(state->filter_fr_1ch);
 	fftw_free(state->tmp_fr);
-	fftw_destroy_plan(state->r2c_plan);
-	fftw_destroy_plan(state->c2r_plan);
+	if (state->r2c_plan) fftw_destroy_plan(state->r2c_plan);
+	if (state->c2r_plan) fftw_destroy_plan(state->c2r_plan);
 	free(state);
 }
 
@@ -209,8 +210,6 @@ static void fir_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize
 
 struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
 {
-	struct effect *e;
-
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
 		LOG_FMT(LL_ERROR, "%s: error: channels mismatch: channels=%d filter_channels=%d", ei->name, n_channels, filter_channels);
@@ -221,7 +220,8 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		return NULL;
 	}
 
-	e = calloc(1, sizeof(struct effect));
+	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -236,6 +236,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->destroy = fir_direct_effect_destroy;
 
 		struct fir_direct_state *state = calloc(1, sizeof(struct fir_direct_state));
+		if (check_alloc(ei->name, state)) goto fail;
 		e->data = state;
 
 		state->filter_frames = filter_frames;
@@ -248,6 +249,11 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		sample_t *l_buf_p = l_filter_p + (state->len * filter_channels);
 		state->filter = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->buf = calloc(e->ostream.channels, sizeof(sample_t *));
+		if (!state->lbuf || !state->filter || !state->buf) {
+			fir_direct_effect_destroy(e);
+			dsp_perror(DSP_ENOMEM, ei->name, NULL);
+			goto fail;
+		}
 		if (filter_channels == 1)
 			memcpy(l_filter_p, filter_data, filter_frames * sizeof(sample_t));
 		for (int i = 0, k = 0; i < e->ostream.channels; ++i) {
@@ -263,6 +269,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 				l_buf_p += state->len;
 			}
 		}
+		return e;
 	}
 	else {
 		e->run = fir_effect_run;
@@ -273,6 +280,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->channel_offsets = fir_effect_channel_offsets;
 
 		struct fir_state *state = calloc(1, sizeof(struct fir_state));
+		if (check_alloc(ei->name, state)) goto fail;
 		e->data = state;
 
 		state->filter_frames = filter_frames;
@@ -283,6 +291,10 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		state->buf = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->olap = calloc(e->ostream.channels, sizeof(sample_t *));
 		state->filter_fr = calloc(e->ostream.channels, sizeof(fftw_complex *));
+		if (!state->tmp_fr || !state->buf || !state->olap || !state->filter_fr) {
+			dsp_perror(DSP_ENOMEM, ei->name, NULL);
+			goto fail_fft;
+		}
 
 		if (filter_channels == 1)
 			state->filter_fr_1ch = fftw_malloc(state->fr_len * sizeof(fftw_complex));
@@ -294,6 +306,10 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 				state->olap[k] = fftw_malloc(state->len * sizeof(sample_t));
 				state->filter_fr[k] = (filter_channels == 1) ?
 					state->filter_fr_1ch : fftw_malloc(state->fr_len * sizeof(fftw_complex));
+				if (!state->buf[k] || !state->olap[k] || !state->filter_fr[k]) {
+					dsp_perror(DSP_ENOMEM, ei->name, NULL);
+					goto fail_fft;
+				}
 			}
 		}
 
@@ -302,6 +318,10 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		state->r2c_plan = fftw_plan_dft_r2c_1d(state->len * 2, tmp_buf, state->tmp_fr, planner_flags);
 		state->c2r_plan = fftw_plan_dft_c2r_1d(state->len * 2, state->tmp_fr, tmp_buf, planner_flags);
 		dsp_fftw_release();
+		if (!state->r2c_plan || !state->c2r_plan) {
+			dsp_perror(DSP_ENOMEM, ei->name, NULL);
+			goto fail_fft;
+		}
 		for (int k = 0; k < e->ostream.channels; ++k) {
 			if (GET_BIT(channel_selector, k)) {
 				memset(state->buf[k], 0, state->len * 2 * sizeof(sample_t));
@@ -325,17 +345,20 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 			}
 		}
 		memset(tmp_buf, 0, state->len * 2 * sizeof(sample_t));
-	}
+		return e;
 
-	return e;
+		fail_fft:
+		fir_effect_destroy(e);
+	}
+	fail:
+	free(e);
+	return NULL;
 }
 
 struct effect * fir_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	int filter_channels;
 	ssize_t filter_frames;
-	struct effect *e;
-	sample_t *filter_data;
 	struct fir_config config;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 
@@ -345,11 +368,21 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 		return NULL;
 	}
 	config.p.path = argv[g.ind];
-	filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
-	if (filter_data == NULL)
-		return NULL;
-	e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
-	effect_list_append(e, fir_init_align(ei, istream, channel_selector, &config, filter_data, filter_channels, filter_frames));
+	sample_t *filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
+	if (!filter_data) return NULL;
+	struct effect *e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
+	if (!e) goto fail;
+	const ssize_t offset_frames = fir_get_offset(&config, filter_data, filter_channels, filter_frames);
+	if (offset_frames) {
+		struct effect *e_align = delay_effect_init_int(ei->name, istream, channel_selector, -offset_frames);
+		if (!e_align) goto fail;
+		effect_list_append(e, e_align);
+	}
 	free(filter_data);
 	return e;
+
+	fail:
+	destroy_effect(e);
+	free(filter_data);
+	return NULL;
 }

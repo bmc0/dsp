@@ -167,10 +167,7 @@ static int ec_lex_word(struct ec_token_list *tokens, const char *s, int line, in
 	default: break;
 	}
 	struct ec_token *tok = calloc(1, sizeof(struct ec_token)+slen+1);
-	if (!tok) {
-		dsp_perror(DSP_ENOMEM, NULL, NULL);
-		return 1;
-	}
+	if (check_alloc(__func__, tok)) return 1;
 	tok->id = id;
 	tok->line = line;
 	tok->col = col;
@@ -246,6 +243,10 @@ static int ec_split_and_lex_string(struct ec_token_list *tokens, const char *s, 
 	int line = *r_lines, sep = 1, esc = 0, quo = 0, cont = 0;
 	int i = 0, k = 0, l = 0, bp = 0, bsz = 1024, done = 0;
 	char *buf = malloc(bsz*sizeof(char));
+	if (check_alloc(__func__, buf)) {
+		*r_lines = 0;
+		return 1;
+	}
 	while (!done) {
 		int sp = 1;
 		const char c = s[k];
@@ -282,7 +283,9 @@ static int ec_split_and_lex_string(struct ec_token_list *tokens, const char *s, 
 			buf[bp++] = c;
 			if (bp == bsz) {
 				bsz += 1024;
-				buf = realloc(buf, bsz*sizeof(char));
+				char *buf_tmp = realloc(buf, bsz*sizeof(char));
+				if (check_alloc(__func__, buf_tmp)) break;
+				buf = buf_tmp;
 			}
 		}
 		if (s[k] == '\n') {
@@ -329,8 +332,15 @@ static struct ec_token * ec_parse(struct ec_parser_state *, struct ec_token *, e
 
 static int ec_parser_state_ch_sel_mask(struct ec_parser_state *state, const char *initial_ch_mask)
 {
+	state->ch_sel = state->ch_mask = NULL;
 	state->ch_sel = NEW_SELECTOR(state->stream->channels);
+	if (check_alloc(__func__, state->ch_sel)) return 1;
 	state->ch_mask = NEW_SELECTOR(state->stream->channels);
+	if (check_alloc(__func__, state->ch_mask)) {
+		free(state->ch_sel);
+		state->ch_sel = NULL;
+		return 1;
+	}
 	if (initial_ch_mask) COPY_SELECTOR(state->ch_mask, initial_ch_mask, state->stream->channels);
 	else SET_SELECTOR(state->ch_mask, state->stream->channels);
 	COPY_SELECTOR(state->ch_sel, state->ch_mask, state->stream->channels);
@@ -352,9 +362,8 @@ static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_pa
 		.dir = parent_state->dir,
 		.last_stream_ch = parent_state->last_stream_ch,
 	};
-	if (ec_parser_state_ch_sel_mask(&state, parent_state->ch_sel))
-		return tok;
-	tok = ec_parse(&state, tok, EC_NEST_BLOCK, rdepth+1);
+	if (ec_parser_state_ch_sel_mask(&state, parent_state->ch_sel) == 0)
+		tok = ec_parse(&state, tok, EC_NEST_BLOCK, rdepth+1);
 	ec_parser_state_cleanup(&state);
 	return tok;
 }
@@ -362,11 +371,9 @@ static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_pa
 static int ec_parse_string(char *s, const char *path, const char *dir, struct effects_chain *chain,
 	struct stream_info *stream, const char *initial_ch_mask, int rdepth)
 {
-	int lines = 0;
+	int lines = 0, ret = 0;
+	struct ec_token *tok = NULL;
 	struct ec_token_list tokens = {0};
-	if (ec_split_and_lex_string(&tokens, s, path, &lines))
-		return 1;
-
 	struct ec_parser_state state = {
 		.chain = chain,
 		.stream = stream,
@@ -374,10 +381,12 @@ static int ec_parse_string(char *s, const char *path, const char *dir, struct ef
 		.dir = dir,
 		.last_stream_ch = stream->channels,
 	};
-	if (ec_parser_state_ch_sel_mask(&state, initial_ch_mask))
-		return 1;
+
+	if (ec_split_and_lex_string(&tokens, s, path, &lines)) goto fail;
+	if (ec_parser_state_ch_sel_mask(&state, initial_ch_mask)) goto fail;
 	if (lines > 0) {
 		state.line_strs = calloc(lines, sizeof(const char *));
+		if (check_alloc(__func__, state.line_strs)) goto fail;
 		char *line = s;
 		for (int i = 0; i < lines && *line != '\0'; ++i) {
 			state.line_strs[i] = line;
@@ -385,11 +394,17 @@ static int ec_parse_string(char *s, const char *path, const char *dir, struct ef
 		}
 	}
 
-	struct ec_token *tok = ec_parse(&state, tokens.head, EC_NEST_NONE, rdepth+1);
+	tok = ec_parse(&state, tokens.head, EC_NEST_NONE, rdepth+1);
+
+	done:
 	ec_token_list_destroy(&tokens);
 	free(state.line_strs);
 	ec_parser_state_cleanup(&state);
-	return (tok == NULL) ? 0 : 1;
+	return (ret || tok);
+
+	fail:
+	ret = 1;
+	goto done;
 }
 
 static int ec_parse_file(const char *path, const char *dir, struct effects_chain *chain,
@@ -440,13 +455,13 @@ static int ec_parse_argv(int argc, const char *const *argv, const char *dir, str
 	struct ec_token_list tokens = {0};
 	struct ec_parser_state state = {0};
 	char *line = malloc(s * sizeof(char));
-	if (!line) goto fail_nomem;
+	if (check_alloc(__func__, line)) goto fail;
 	for (int i = 0; i < argc; ++i) {
 		const int len = strlen(argv[i]);
 		if (p+len >= s) {
 			while (p+len >= s) s += 2048;
 			char *line_tmp = realloc(line, s * sizeof(char));
-			if (!line_tmp) goto fail_nomem;
+			if (check_alloc(__func__, line_tmp)) goto fail;
 			line = line_tmp;
 		}
 		if (ec_lex_word(&tokens, argv[i], 0, p, len))
@@ -474,8 +489,6 @@ static int ec_parse_argv(int argc, const char *const *argv, const char *dir, str
 	free(line);
 	return ret;
 
-	fail_nomem:
-	dsp_perror(DSP_ENOMEM, NULL, NULL);
 	fail:
 	ret = 1;
 	goto done;
@@ -520,6 +533,7 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 		if (state->last_stream_ch != state->stream->channels) {  /* construct new channel mask */
 			const int delta = state->stream->channels - state->last_stream_ch;
 			char *tmp_mask = NEW_SELECTOR(state->stream->channels);
+			if (check_alloc(__func__, tmp_mask)) return tok;
 			if (delta > 0) {
 				/* additional channels are appended */
 				COPY_SELECTOR(tmp_mask, state->ch_mask, state->last_stream_ch);
@@ -544,6 +558,7 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 			if (state->last_stream_ch != state->stream->channels) {
 				free(state->ch_sel);
 				state->ch_sel = NEW_SELECTOR(state->stream->channels);
+				if (check_alloc(__func__, state->ch_sel)) return tok;
 				state->last_stream_ch = state->stream->channels;
 			}
 			if (parse_selector_masked(tok->str, state->ch_sel, state->ch_mask, state->stream->channels)) {
@@ -555,6 +570,7 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 		}
 		if (state->last_stream_ch != state->stream->channels) {  /* re-parse the channel selector */
 			char *tmp_ch_sel = NEW_SELECTOR(state->stream->channels);
+			if (check_alloc(__func__, tmp_ch_sel)) return tok;
 			if (!state->last_ch_sel)
 				COPY_SELECTOR(tmp_ch_sel, state->ch_mask, state->stream->channels);
 			else if (parse_selector_masked(state->last_ch_sel->str, tmp_ch_sel, state->ch_mask, state->stream->channels)) {
@@ -606,9 +622,15 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 		else {
 			/* build argument vector */
 			char **argv = calloc(argc, sizeof(char *));
+			if (check_alloc(__func__, argv)) return tok;
 			struct ec_token *arg = tok;
 			for (int i = 0; i < argc; ++i) {
 				argv[i] = strdup(arg->str);
+				if (check_alloc(__func__, argv[i])) {
+					while (--i >= 0) free(argv[i]);
+					free(argv);
+					return tok;
+				}
 				arg = arg->next;
 			}
 			if (LOGLEVEL(LL_VERBOSE)) {
@@ -701,23 +723,6 @@ struct effects_chain_postproc_state {
 	int max_in_ch, max_out_ch, max_ch;
 };
 
-static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
-{
-	LIST_FOREACH(chain, e) {
-		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
-		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
-	}
-	state->max_ch = MAXIMUM(state->max_in_ch, state->max_out_ch);
-
-	state->ch_deps = calloc(state->max_out_ch, sizeof(char *));
-	for (int i = 0; i < state->max_out_ch; ++i)
-		state->ch_deps[i] = NEW_SELECTOR(state->max_in_ch);
-	for (int i = 0; i < LENGTH(state->samples); ++i)
-		state->samples[i] = calloc(state->max_ch, sizeof(ssize_t));
-
-	return 0;
-}
-
 static void effects_chain_postproc_state_cleanup(struct effects_chain_postproc_state *state)
 {
 	if (state->ch_deps) {
@@ -727,6 +732,33 @@ static void effects_chain_postproc_state_cleanup(struct effects_chain_postproc_s
 	}
 	for (int i = 0; i < LENGTH(state->samples); ++i)
 		free(state->samples[i]);
+	memset(state, 0, sizeof(struct effects_chain_postproc_state));
+}
+
+static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+{
+	memset(state, 0, sizeof(struct effects_chain_postproc_state));
+	LIST_FOREACH(chain, e) {
+		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
+		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
+	}
+	state->max_ch = MAXIMUM(state->max_in_ch, state->max_out_ch);
+
+	state->ch_deps = calloc(state->max_out_ch, sizeof(char *));
+	if (check_alloc(__func__, state->ch_deps)) goto fail;
+	for (int i = 0; i < state->max_out_ch; ++i) {
+		state->ch_deps[i] = NEW_SELECTOR(state->max_in_ch);
+		if (check_alloc(__func__, state->ch_deps[i])) goto fail;
+	}
+	for (int i = 0; i < LENGTH(state->samples); ++i) {
+		state->samples[i] = calloc(state->max_ch, sizeof(ssize_t));
+		if (check_alloc(__func__, state->samples[i])) goto fail;
+	}
+	return 0;
+
+	fail:
+	effects_chain_postproc_state_cleanup(state);
+	return 1;
 }
 
 static int query_channel_deps(struct effects_chain_postproc_state *state, struct effects_chain *chain, struct effect *e)
@@ -774,6 +806,10 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 	int ret = 0;
 	char *in_deps = NEW_SELECTOR(state->max_ch);
 	char *in_deps_all = NEW_SELECTOR(state->max_ch);
+	if (!in_deps || !in_deps_all) {
+		dsp_perror(DSP_ENOMEM, __func__, NULL);
+		goto fail;
+	}
 
 	chain->delay_offset = 0;
 	ssize_t *offsets = state->samples[0], *delays = state->samples[1];
@@ -967,19 +1003,18 @@ static int effects_chain_prepare(struct effects_chain *chain)
 static int build_effects_chain_finish(struct effects_chain *chain)
 {
 	if (chain->head == NULL) return 0;
-	struct effects_chain_postproc_state state = {0};
+	struct effects_chain_postproc_state state;
 
 	effects_chain_optimize(chain);
-	if (effects_chain_prepare(chain)) goto fail;
-	if (effects_chain_postproc_state_init(&state, chain)) goto fail;
-	if (effects_chain_align_channels(&state, chain)) goto fail;
+	if (effects_chain_prepare(chain)) return 1;
+	if (effects_chain_postproc_state_init(&state, chain)) return 1;
+	if (effects_chain_align_channels(&state, chain)) {
+		effects_chain_postproc_state_cleanup(&state);
+		return 1;
+	}
 	effects_chain_set_drain_frames(&state, chain);
 	effects_chain_postproc_state_cleanup(&state);
 	return 0;
-
-	fail:
-	effects_chain_postproc_state_cleanup(&state);
-	return 1;
 }
 
 int build_effects_chain_from_argv(int argc, const char *const *argv, struct effects_chain *chain,
@@ -994,10 +1029,7 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 	struct stream_info *stream, const char *ch_mask, const char *dir)
 {
 	char *s = strdup(cs);
-	if (!s) {
-		dsp_perror(DSP_ENOMEM, NULL, NULL);
-		return 1;
-	}
+	if (check_alloc(__func__, s)) return 1;
 	if (ec_parse_string(s, path, dir, chain, stream, ch_mask, 0)) {
 		free(s);
 		return 1;

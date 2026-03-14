@@ -168,13 +168,12 @@ static void sgen_prepare_generator(struct sgen_generator *g, struct codec *c)
 
 struct codec * sgen_codec_init(const struct codec_params *p)
 {
-	char *args = NULL, *arg, *gen_type, *len_str, *next_arg, *next_type, *value, *endptr;
-	int parse_ret;
-	struct codec *c;
-	struct sgen_state *state;
-	struct sgen_generator *g;
+	char *args = NULL, *endptr;
+	struct codec *c = NULL;
+	struct sgen_state *state = NULL;
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = "sample_t";
@@ -190,12 +189,12 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 	c->pause = codec_pause_noop;
 	c->destroy = sgen_destroy;
 
-	state = calloc(1, sizeof(struct sgen_state));
-	state->n = 0;
-	c->data = state;
+	c->data = state = calloc(1, sizeof(struct sgen_state));
+	if (check_alloc(p->type, state)) goto fail;
 
-	args = arg = strdup(p->path);
-	len_str = isolate(arg, '+');
+	char *arg = args = strdup(p->path);
+	if (check_alloc(p->type, args)) goto fail;
+	char *len_str = isolate(arg, '+');
 	if (*len_str != '\0') {
 		c->frames = parse_timespec(len_str, p->fs, &endptr);
 		if (check_endptr(p->type, len_str, endptr, "length"))
@@ -206,17 +205,20 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 		}
 	}
 	while (*arg != '\0') {
-		next_type = isolate(arg, '/');
-		next_arg = isolate(arg, ':');
-		value = isolate(arg, '@');
-		state->g = realloc(state->g, (state->n + 1) * sizeof(struct sgen_generator));
-		g = &state->g[state->n];
+		char *next_type = isolate(arg, '/');
+		char *next_arg = isolate(arg, ':');
+		char *value = isolate(arg, '@');
+		struct sgen_generator *sg_tmp = realloc(state->g, (state->n+1)*sizeof(struct sgen_generator));
+		if (check_alloc(p->type, sg_tmp)) goto fail;
+		state->g = sg_tmp;
+		struct sgen_generator *g = &state->g[state->n];
 		memset(g, 0, sizeof(struct sgen_generator));
 		g->channel_selector = NEW_SELECTOR(p->channels);
+		if (check_alloc(p->type, g->channel_selector)) goto fail;
 		SET_SELECTOR(g->channel_selector, p->channels);
 		++state->n;
 
-		gen_type = arg;
+		char *gen_type = arg;
 		if (strcmp(gen_type, "delta") == 0)     g->type = SGEN_TYPE_DELTA;
 		else if (strcmp(gen_type, "sine") == 0) g->type = SGEN_TYPE_SINE;
 		else {
@@ -231,7 +233,7 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 		while (*arg != '\0') {
 			next_arg = isolate(arg, ':');
 			value = isolate(arg, '=');
-			parse_ret = sgen_parse_param(g, c, p->type, arg, value);
+			const int parse_ret = sgen_parse_param(g, c, p->type, arg, value);
 			if (parse_ret == 1) {
 				LOG_FMT(LL_ERROR, "%s: %s: error: illegal parameter: %s", p->type, gen_type, arg);
 				goto fail;
@@ -243,16 +245,15 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 		sgen_prepare_generator(g, c);
 		arg = next_type;
 	}
-
-	done:
 	free(args);
 	return c;
 
 	fail:
-	sgen_destroy(c);
+	free(args);
+	if (c && c->data) sgen_destroy(c);
+	else free(state);
 	free(c);
-	c = NULL;
-	goto done;
+	return NULL;
 }
 
 void sgen_codec_print_encodings(const char *type)

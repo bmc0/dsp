@@ -23,9 +23,10 @@
 #include "decorrelate.h"
 #include "util.h"
 
-/* This is an implementation of the allpass decorrelator described in
- * "Frequency-Dependent Schroeder Allpass Filters" by Sebastian J. Schlecht
- * (doi:10.3390/app10010187) https://www.mdpi.com/2076-3417/10/1/187
+/*
+ * Reference:
+ *   Sebastian J. Schlecht, "Frequency-Dependent Schroeder Allpass Filters"
+ *   (doi:10.3390/app10010187) https://www.mdpi.com/2076-3417/10/1/187
 */
 
 struct sch_ap_state {
@@ -39,12 +40,13 @@ struct decorrelate_state {
 	struct sch_ap_state **ap;
 };
 
-static void sch_ap_init(struct sch_ap_state *ap, int fs, ssize_t delay_samples, double fc, double rt60_lf, double rt60_hf)
+static int sch_ap_init(struct sch_ap_state *ap, int fs, ssize_t delay_samples, double fc, double rt60_lf, double rt60_hf)
 {
 	ap->len = delay_samples+1;
 	ap->p = 0;
 	ap->mx = calloc(ap->len, sizeof(sample_t));
 	ap->my = calloc(ap->len, sizeof(sample_t));
+	if (!ap->mx || !ap->my) return DSP_ENOMEM;
 
 	const double gain_lf = -60.0/(rt60_lf * fs) * delay_samples;
 	const double gain_hf = -60.0/(rt60_hf * fs) * delay_samples;
@@ -58,6 +60,7 @@ static void sch_ap_init(struct sch_ap_state *ap, int fs, ssize_t delay_samples, 
 	ap->b0 = (gd*t - sgd) / ap->a0 * g_hf;
 	ap->b1 = (gd*t + sgd) / ap->a0 * g_hf;
 	ap->a0 = 1.0;
+	return 0;
 }
 
 static sample_t sch_ap_run(struct sch_ap_state *ap, sample_t x)
@@ -86,24 +89,22 @@ static void sch_ap_destroy(struct sch_ap_state *ap)
 
 static sample_t * decorrelate_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, samples = *frames * e->ostream.channels;
-	int k, j;
+	ssize_t samples = *frames * e->ostream.channels;
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
-	for (i = 0; i < samples; i += e->ostream.channels)
-		for (k = 0; k < e->ostream.channels; ++k)
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels)
+		for (int k = 0; k < e->ostream.channels; ++k)
 			if (state->ap[k])
-				for (j = 0; j < state->n_stages; ++j)
+				for (int j = 0; j < state->n_stages; ++j)
 					ibuf[i + k] = sch_ap_run(&state->ap[k][j], ibuf[i + k]);
 	return ibuf;
 }
 
 static void decorrelate_effect_reset(struct effect *e)
 {
-	int k, j;
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
-	for (k = 0; k < e->ostream.channels; ++k)
+	for (int k = 0; k < e->ostream.channels; ++k)
 		if (state->ap[k])
-			for (j = 0; j < state->n_stages; ++j)
+			for (int j = 0; j < state->n_stages; ++j)
 				sch_ap_reset(&state->ap[k][j]);
 }
 
@@ -127,16 +128,17 @@ static void decorrelate_effect_plot(struct effect *e, int i)
 
 static void decorrelate_effect_destroy(struct effect *e)
 {
-	int k, j;
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
-	for (k = 0; k < e->ostream.channels; ++k) {
-		if (state->ap[k]) {
-			for (j = 0; j < state->n_stages; ++j)
-				sch_ap_destroy(&state->ap[k][j]);
-			free(state->ap[k]);
+	if (state->ap) {
+		for (int k = 0; k < e->ostream.channels; ++k) {
+			if (state->ap[k]) {
+				for (int j = 0; j < state->n_stages; ++j)
+					sch_ap_destroy(&state->ap[k][j]);
+				free(state->ap[k]);
+			}
 		}
+		free(state->ap);
 	}
-	free(state->ap);
 	free(state);
 }
 
@@ -147,8 +149,8 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	static pthread_mutex_t rand_lock = PTHREAD_MUTEX_INITIALIZER;
 	static uint32_t seed = 1;
 
-	struct decorrelate_state *state;
-	struct effect *e;
+	struct effect *e = NULL;
+	struct decorrelate_state *state = NULL;
 	char *endptr;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int mono = 0, n_stages = 5, opt;
@@ -212,6 +214,7 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	}
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -221,22 +224,36 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	e->reset = decorrelate_effect_reset;
 	e->plot = decorrelate_effect_plot;
 	e->destroy = decorrelate_effect_destroy;
-	state = calloc(1, sizeof(struct decorrelate_state));
+	e->data = state = calloc(1, sizeof(struct decorrelate_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	state->n_stages = n_stages;
 	state->ap = calloc(istream->channels, sizeof(struct sch_ap_state *));
+	if (check_alloc(ei->name, state->ap)) goto fail;
 	for (int k = 0; k < istream->channels; ++k) {
-		if (GET_BIT(channel_selector, k))
+		if (GET_BIT(channel_selector, k)) {
 			state->ap[k] = calloc(n_stages, sizeof(struct sch_ap_state));
+			if (check_alloc(ei->name, state->ap[k])) goto fail;
+		}
 	}
 	pthread_mutex_lock(&rand_lock);
 	for (int j = 0; j < n_stages; ++j) {
 		const ssize_t d = (mono) ? RANDOM_FILTER_DELAY : 0;
 		for (int k = 0; k < istream->channels; ++k) {
-			if (GET_BIT(channel_selector, k))
-				sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY, filter_fc, rt60_lf, rt60_hf);
+			if (GET_BIT(channel_selector, k)) {
+				int err = sch_ap_init(&state->ap[k][j], istream->fs, (mono) ? d : RANDOM_FILTER_DELAY, filter_fc, rt60_lf, rt60_hf);
+				if (err) {
+					pthread_mutex_unlock(&rand_lock);
+					dsp_perror(err, ei->name, NULL);
+					goto fail;
+				}
+			}
 		}
 	}
 	pthread_mutex_unlock(&rand_lock);
-	e->data = state;
 	return e;
+
+	fail:
+	if (state) decorrelate_effect_destroy(e);
+	free(e);
+	return NULL;
 }

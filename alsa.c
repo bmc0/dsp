@@ -300,11 +300,13 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	#endif
 
 	state = calloc(1, sizeof(struct alsa_state));
+	if (check_alloc(p->type, state)) goto fail;
 	state->dev = dev;
 	state->enc_info = enc_info;
 	state->delay = 0;
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = enc_info->name;
@@ -331,6 +333,8 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	if (hw_p) snd_pcm_hw_params_free(hw_p);
 	if (sw_p) snd_pcm_sw_params_free(sw_p);
 	if (dev) snd_pcm_close(dev);
+	free(state);
+	free(c);
 	return NULL;
 }
 

@@ -192,6 +192,7 @@ int parse_selector_masked(const char *s, char *b, const char *mask, int n)
 	CLEAR_SELECTOR(b, n);
 	const int nb = num_bits_set(mask, n);
 	char *b_tmp = NEW_SELECTOR(nb);
+	if (check_alloc(__func__, b_tmp)) return 1;
 	if ((r = parse_selector(s, b_tmp, nb))) {
 		free(b_tmp);
 		return r;
@@ -200,7 +201,8 @@ int parse_selector_masked(const char *s, char *b, const char *mask, int n)
 		while (k < n && !GET_BIT(mask, k)) ++k;
 		if (k == n) {
 			LOG_FMT(LL_ERROR, "%s(): BUG: too many channels", __func__);
-			break;
+			free(b_tmp);
+			return 1;
 		}
 		if (GET_BIT(b_tmp, i))
 			SET_BIT(b, k);
@@ -245,16 +247,18 @@ char * get_file_contents(const char *path)
 {
 	ssize_t s = 2048, p = 0, r;
 	int fd;
-	char *c;
 
 	if ((fd = open(path, O_RDONLY)) < 0)
 		return NULL;
-	if (!(c = malloc(s * sizeof(char)))) goto fail;
+	char *c = malloc(s * sizeof(char));
+	if (check_alloc(__func__, c)) goto fail;
 	while ((r = read(fd, &c[p], s - p)) > -1) {
 		p += r;
 		if (p >= s) {
 			s += 2048;
-			if (!(c = realloc(c, s * sizeof(char)))) goto fail;
+			char *c_tmp = realloc(c, s * sizeof(char));
+			if (check_alloc(__func__, c_tmp)) goto fail;
+			c = c_tmp;
 		}
 		if (r == 0) {
 			c[p] = '\0';
@@ -262,13 +266,9 @@ char * get_file_contents(const char *path)
 			return c;
 		}
 	}
+	fail:
 	free(c);
 	close(fd);
-	return NULL;
-
-	fail:
-	close(fd);
-	dsp_perror(DSP_ENOMEM, NULL, NULL);
 	return NULL;
 }
 
@@ -282,6 +282,7 @@ char * construct_full_path(const char *dir, const char *path, int fs, int channe
 		if (env) {
 			len += strlen(env);
 			fp = calloc(len, sizeof(char));
+			if (check_alloc(__func__, fp)) return NULL;
 			pos = snprintf(fp, len, "%s", env);
 		}
 		else LOG_FMT(LL_ERROR, "%s(): warning: $HOME is unset", __func__);
@@ -289,10 +290,13 @@ char * construct_full_path(const char *dir, const char *path, int fs, int channe
 	else if (dir != NULL && path[0] != '/') {
 		len += strlen(dir) + 1;
 		fp = calloc(len, sizeof(char));
+		if (check_alloc(__func__, fp)) return NULL;
 		pos = snprintf(fp, len, "%s/", dir);
 	}
-	if (fp == NULL)
+	if (!fp) {
 		fp = calloc(len, sizeof(char));
+		if (check_alloc(__func__, fp)) return NULL;
+	}
 	while (*path != '\0') {
 		int w = 1, has_subst = (path[0] == '%' && path[1] != '\0');
 		if (has_subst) {
@@ -320,7 +324,13 @@ char * construct_full_path(const char *dir, const char *path, int fs, int channe
 		else if (pos+1 < len) fp[pos] = *path;
 		if (pos+w >= len) {
 			while (len <= pos+w) len += 32;
-			fp = realloc(fp, len);
+			char *fp_tmp = realloc(fp, len);
+			/* useless !fp_tmp silences GCC warning... */
+			if (!fp_tmp && check_alloc(__func__, fp_tmp)) {
+				free(fp);
+				return NULL;
+			}
+			fp = fp_tmp;
 			if (has_subst) goto write_subst;
 			else fp[pos] = *path;
 		}

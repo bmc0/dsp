@@ -95,21 +95,21 @@ static sample_t * ladspa_host_effect_run(struct effect *e, ssize_t *frames, samp
 static void ladspa_host_effect_destroy(struct effect *e)
 {
 	struct ladspa_host_state *state = (struct ladspa_host_state *) e->data;
-	if (state->handles != NULL) {
+	if (state->handles) {
 		for (int i = 0; i < state->n_handles; ++i) {
-			if (state->handles[i] != NULL) {
+			if (state->handles[i]) {
 				if (state->desc->deactivate != NULL) state->desc->deactivate(state->handles[i]);
 				state->desc->cleanup(state->handles[i]);
 			}
 		}
 	}
 	free(state->handles);
-	if (state->in != NULL) for (int i = 0; i < state->n_in; ++i) free(state->in[i]);
+	if (state->in) for (int i = 0; i < state->n_in; ++i) free(state->in[i]);
 	free(state->in);
-	if (state->out != NULL) for (int i = 0; i < state->n_out; ++i) free(state->out[i]);
+	if (state->out) for (int i = 0; i < state->n_out; ++i) free(state->out[i]);
 	free(state->out);
 	free(state->control);
-	if (state->dl != NULL) dlclose(state->dl);
+	if (state->dl) dlclose(state->dl);
 	free(state);
 	free(e->channel_selector);
 }
@@ -161,20 +161,24 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	}
 
 	const int selected_channel_count = num_bits_set(channel_selector, istream->channels);
-	state = calloc(1, sizeof(struct ladspa_host_state));
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
+	state = calloc(1, sizeof(struct ladspa_host_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
 
 	/* Build paths and dlopen() the plugin */
 	if ((argv[1][0] == '.' || argv[1][0] == '~') && argv[1][1] == '/') {
 		char *full_path = construct_full_path(dir, argv[1], istream->fs, selected_channel_count);
+		if (!full_path) goto fail;
 		state->dl = dlopen(full_path, dlopen_flags);
 		free(full_path);
 	}
 	else {
 		char *search_path = getenv("LADSPA_PATH");
 		search_path = strdup((search_path) ? search_path : "/usr/local/lib/ladspa:/usr/lib/ladspa");
-		if (search_path == NULL || *search_path == '\0') {
+		if (check_alloc(ei->name, search_path)) goto fail;
+		if (*search_path == '\0') {
 			LOG_FMT(LL_ERROR, "%s: error: failed to open LADSPA plugin: empty search path", argv[0]);
 			free(search_path);
 			goto fail;
@@ -187,15 +191,26 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 		if (strstr(plugin_basename, ".so") == NULL) {
 			const size_t len = strlen(argv[1]);
 			plugin_soname = calloc(len + 4, sizeof(char));
-			memcpy(plugin_soname, argv[1], len);
-			memcpy(plugin_soname+len, ".so", 4);
+			if (plugin_soname) {
+				memcpy(plugin_soname, argv[1], len);
+				memcpy(plugin_soname+len, ".so", 4);
+			}
 		}
 		else plugin_soname = strdup(argv[1]);
+		if (check_alloc(ei->name, plugin_soname)) {
+			free(search_path);
+			goto fail;
+		}
 
 		char *dir = search_path, *next_dir;
 		while (dir && *dir != '\0') {
 			next_dir = isolate(dir, ':');
 			char *full_path = construct_full_path(dir, plugin_soname, istream->fs, selected_channel_count);
+			if (!full_path) {
+				free(search_path);
+				free(plugin_soname);
+				goto fail;
+			}
 			state->dl = dlopen(full_path, dlopen_flags);
 			free(full_path);
 			if (state->dl) break;
@@ -263,15 +278,26 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	}
 
 	state->handles = calloc(state->n_handles, sizeof(LADSPA_Handle));
+	if (check_alloc(ei->name, state->handles)) goto fail;
 	state->buf_size = DEFAULT_BLOCK_FRAMES;
 	if (state->n_in > 0) {
 		state->in = calloc(state->n_in, sizeof(LADSPA_Data *));
-		for (int i = 0; i < state->n_in; ++i) state->in[i] = calloc(state->buf_size, sizeof(LADSPA_Data));
+		if (check_alloc(ei->name, state->in)) goto fail;
+		for (int i = 0; i < state->n_in; ++i) {
+			state->in[i] = calloc(state->buf_size, sizeof(LADSPA_Data));
+			if (check_alloc(ei->name, state->in[i])) goto fail;
+		}
 	}
 	state->out = calloc(state->n_out, sizeof(LADSPA_Data *));
-	for (int i = 0; i < state->n_out; ++i) state->out[i] = calloc(state->buf_size, sizeof(LADSPA_Data));
-	if (in_control_port_count + out_control_port_count > 0)
+	if (check_alloc(ei->name, state->out)) goto fail;
+	for (int i = 0; i < state->n_out; ++i) {
+		state->out[i] = calloc(state->buf_size, sizeof(LADSPA_Data));
+		if (check_alloc(ei->name, state->out[i])) goto fail;
+	}
+	if (in_control_port_count + out_control_port_count > 0) {
 		state->control = calloc(in_control_port_count + out_control_port_count, sizeof(LADSPA_Data));
+		if (check_alloc(ei->name, state->control)) goto fail;
+	}
 	const int total_output_channels = istream->channels + state->n_out - ((state->n_in == 0) ? state->n_handles : state->n_in);
 
 	/* Set input control port values */
@@ -372,6 +398,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	e->istream.channels = istream->channels;
 	e->ostream.channels = total_output_channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, e->channel_selector)) goto fail;
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->run = ladspa_host_effect_run;
 	e->destroy = ladspa_host_effect_destroy;
@@ -380,7 +407,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	return e;
 
 	fail:
-	ladspa_host_effect_destroy(e);
+	if (state) ladspa_host_effect_destroy(e);
 	free(e);
 	return NULL;
 }

@@ -96,32 +96,28 @@ static void crossfeed_effect_channel_deps(struct effect *e, char **deps)
 
 struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct crossfeed_state *state;
+	struct effect *e = NULL;
+	struct crossfeed_state *state = NULL;
 	char *endptr;
-	double freq, sep_db, sep;
-	int i, n_channels = 0;
 
 	if (argc != 3) {
 		print_effect_usage(ei);
 		return NULL;
 	}
-	for (i = 0; i < istream->channels; ++i)
-		if (GET_BIT(channel_selector, i))
-			++n_channels;
-	if (n_channels != 2) {
+	if (num_bits_set(channel_selector, istream->channels) != 2) {
 		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
 		return NULL;
 	}
 
-	freq = parse_freq(argv[1], &endptr);
+	const double freq = parse_freq(argv[1], &endptr);
 	CHECK_ENDPTR(argv[1], endptr, "f0", return NULL);
 	CHECK_FREQ(freq, istream->fs, "f0", return NULL);
-	sep_db = strtod(argv[2], &endptr);
+	const double sep_db = strtod(argv[2], &endptr);
 	CHECK_ENDPTR(argv[2], endptr, "separation", return NULL);
 	CHECK_RANGE(sep_db >= 0.0, "separation", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -131,18 +127,16 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	e->plot = crossfeed_effect_plot;
 	e->destroy = crossfeed_effect_destroy;
 	e->channel_deps = crossfeed_effect_channel_deps;
-	state = calloc(1, sizeof(struct crossfeed_state));
-
+	e->data = state = calloc(1, sizeof(struct crossfeed_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	state->c0 = state->c1 = -1;
-	for (i = 0; i < istream->channels; ++i) {  /* find input channel numbers */
+	for (int i = 0; i < istream->channels; ++i) {  /* find input channel numbers */
 		if (GET_BIT(channel_selector, i)) {
-			if (state->c0 == -1)
-				state->c0 = i;
-			else
-				state->c1 = i;
+			if (state->c0 == -1) state->c0 = i;
+			else state->c1 = i;
 		}
 	}
-	sep = pow(10, sep_db / 20);
+	const double sep = pow(10, sep_db / 20);
 	state->direct_gain = sep / (1 + sep);
 	state->cross_gain = 1 / (1 + sep);
 
@@ -150,7 +144,10 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	biquad_init_using_type(&state->lp[1], BIQUAD_LOWPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
 	biquad_init_using_type(&state->hp[0], BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
 	biquad_init_using_type(&state->hp[1], BIQUAD_HIGHPASS_1, istream->fs, freq, 0, 0, 0, BIQUAD_WIDTH_Q);
-	e->data = state;
-
 	return e;
+
+	fail:
+	free(state);
+	free(e);
+	return NULL;
 }

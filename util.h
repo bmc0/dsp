@@ -114,6 +114,15 @@ enum {
 const char * dsp_strerror(int);
 void dsp_perror(int, const char *, const char *);
 
+static inline int check_alloc(const char *name, void *ptr)
+{
+	if (!ptr) {
+		dsp_perror(DSP_ENOMEM, name, NULL);
+		return 1;
+	}
+	return 0;
+}
+
 #ifdef INT64_MAX
 #define PM_RAND_R_DEFINE_FUNC(func_name, A) \
 	static inline uint32_t func_name(uint32_t *s) \

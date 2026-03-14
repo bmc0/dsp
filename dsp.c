@@ -364,7 +364,7 @@ static void status_ctrl(enum status_ctrl_action action)
 	pthread_mutex_unlock(&log_lock);
 }
 
-static void cleanup_and_exit(int s)
+static void __attribute__((noreturn)) cleanup_and_exit(int s)
 {
 	status_ctrl((s) ? STATUS_CTRL_KEEP : STATUS_CTRL_CLEAR);
 	if (have_key_thread) {
@@ -870,10 +870,14 @@ static void run_abx_loop(void)
 	buf2 = calloc(buf_len, sizeof(sample_t));
 	ibufs[ABX_IBUF_A] = calloc(block_frames, sizeof(sample_t)*in_channels);
 	ibufs[ABX_IBUF_B] = calloc(block_frames, sizeof(sample_t)*in_channels);
+	char *seq = calloc(n_trials, sizeof(char));
+	if (!buf1 || !buf2 || !ibufs[ABX_IBUF_A] || !ibufs[ABX_IBUF_B] || !seq) {
+		dsp_perror(DSP_ENOMEM, __func__, NULL);
+		goto fail;
+	}
 
 	uint32_t seed = ((uint32_t) time(NULL)) & PM_RAND_MAX;
 	pm_rand2_r(&seed);
-	char *seq = calloc(n_trials, sizeof(char));
 	const int na = n_trials/2+(seed&(n_trials&1));
 	memset(seq, 'A', na);
 	memset(seq+na, 'B', n_trials-na);
@@ -883,7 +887,6 @@ static void run_abx_loop(void)
 	}
 
 	SET_DITHER(&chain, abx_inputs[0].head->codec);
-	ibufs[ABX_IBUF_X] = ibufs[abx_ibuf(seq[trial])];
 	while (trial < n_trials) {
 		ibufs[ABX_IBUF_X] = ibufs[abx_ibuf(seq[trial])];
 		LOG_FMT(LL_NORMAL, "info: starting ABX trial %d of %d", trial+1, n_trials);
@@ -1050,6 +1053,10 @@ static void run_abx_loop(void)
 			buf1 = calloc(buf_len, sizeof(sample_t)); \
 			buf2 = calloc(buf_len, sizeof(sample_t)); \
 			xfade_state.buf = (!drain_effects) ? calloc(buf_len, sizeof(sample_t)) : NULL; \
+			if (!buf1 || !buf2 || (!drain_effects && !xfade_state.buf)) { \
+				dsp_perror(DSP_ENOMEM, __func__, NULL); \
+				cleanup_and_exit(1); \
+			} \
 		} \
 	} while (0)
 

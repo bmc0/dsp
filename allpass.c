@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2025-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,13 +19,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "allpass.h"
+#include "util.h"
 
 struct thiran_ap_state * thiran_ap_new(int n, double delay)
 {
 	if (n < 1 || delay <= n-1)  /* unstable if delay <= n-1 */
 		return NULL;
-	struct thiran_ap_state * state = calloc(1, sizeof(struct thiran_ap_state) + n*sizeof(state->fb[0]));
-	if (!state) return NULL;
+	struct thiran_ap_state *state = calloc(1, sizeof(struct thiran_ap_state) + n*sizeof(state->fb[0]));
+	if (check_alloc(__func__, state)) return NULL;
 	state->n = n;
 	for (int k = 0; k < n; ++k) {
 		state->fb[k].c0 = delay - k;

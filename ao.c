@@ -70,10 +70,8 @@ static void ao_destroy(struct codec *c)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
 	ao_close(state->dev);
-	--ao_open_count;
-	if (ao_open_count == 0)
-		ao_shutdown();
 	free(state);
+	if (--ao_open_count == 0) ao_shutdown();
 }
 
 struct codec * ao_codec_init(const struct codec_params *p)
@@ -112,15 +110,18 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	ao_append_option(&opts, "buffer_time", buf_time_str);
 	if ((dev = ao_open_live(driver, &format, opts)) == NULL) {
 		LOG_FMT(LL_OPEN_ERROR, "%s: error: could not open device", p->type);
+		ao_free_options(opts);
 		goto fail;
 	}
 	ao_free_options(opts);
 
 	state = calloc(1, sizeof(struct ao_state));
+	if (check_alloc(p->type, state)) goto fail;
 	state->dev = dev;
 	state->enc_info = enc_info;
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = enc_info->name;
@@ -145,9 +146,10 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	return c;
 
 	fail:
-	ao_free_options(opts);
-	if (ao_open_count == 0)
-		ao_shutdown();
+	if (dev) ao_close(dev);
+	free(state);
+	free(c);
+	if (ao_open_count == 0) ao_shutdown();
 	return NULL;
 }
 

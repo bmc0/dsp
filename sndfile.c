@@ -220,6 +220,7 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 	struct sndfile_enc_info *enc_info = NULL;
 
 	info = calloc(1, sizeof(SF_INFO));
+	if (check_alloc(p->type, info)) goto fail;
 	info->samplerate = p->fs;
 	info->channels = p->channels;
 	info->format = ((p->type == NULL) ? 0 : sndfile_get_type(p->type)) | sndfile_get_sf_enc(p->enc) | sndfile_get_endian(p->endian);
@@ -235,16 +236,18 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 
 	enc_info = sndfile_get_enc_info(info->format);
 	state = calloc(1, sizeof(struct sndfile_state));
+	if (check_alloc(p->type, state)) goto fail;
 	state->f = f;
 	state->info = info;
 #if BIT_PERFECT
-	if (p->mode == CODEC_MODE_WRITE && enc_info->do_scale) {
+	if (p->mode == CODEC_MODE_WRITE && enc_info && enc_info->do_scale) {
 		state->scale = (sample_t) (((uint32_t) 1) << (enc_info->prec - 1));
 		sf_command(f, SFC_SET_NORM_DOUBLE, NULL, SF_FALSE);
 	}
 #endif
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = sndfile_get_type_name(info->format);
 	c->enc = (enc_info) ? enc_info->name : "unknown";
@@ -265,9 +268,10 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 	return c;
 
 	fail:
-	if (f)
-		sf_close(f);
+	if (f) sf_close(f);
 	free(info);
+	free(state);
+	free(c);
 	return NULL;
 }
 

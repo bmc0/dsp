@@ -21,7 +21,6 @@
 #include <string.h>
 #include <math.h>
 #include "fir_util.h"
-#include "delay.h"
 
 sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
@@ -50,7 +49,12 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 		if (i > filter_frames) filter_frames = i;
 
 		sample_t *ch_data = data = calloc(filter_frames * filter_channels, sizeof(sample_t));
+		if (check_alloc(ei->name, data)) return NULL;
 		char *coefs_str = strdup(path);
+		if (check_alloc(ei->name, coefs_str)) {
+			free(data);
+			return NULL;
+		}
 		char *ch = coefs_str;
 		while (*ch != '\0') {
 			char *next_ch = isolate(ch, '/');
@@ -78,6 +82,7 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
 			path += LENGTH(file_str_prefix)-1;
 		char *fp = construct_full_path(dir, path, istream->fs, num_bits_set(channel_selector, istream->channels));
+		if (!fp) return NULL;
 		struct codec_params c_params = *p;
 		c_params.path = fp;
 		c_params.mode = CODEC_MODE_READ;
@@ -102,8 +107,8 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 			else LOG_FMT(LL_VERBOSE, "%s: info: ignoring sample rate mismatch: fs=%d filter_fs=%d", ei->name, istream->fs, c->fs);
 		}
 		data = calloc(c->frames * c->channels, sizeof(sample_t));
-		if (c->read(c, data, c->frames) != c->frames) {
-			LOG_FMT(LL_ERROR, "%s: error: short read", ei->name);
+		if (!data || c->read(c, data, c->frames) != c->frames) {
+			dsp_perror((data) ? DSP_ENOMEM : DSP_EREAD, ei->name, NULL);
 			destroy_codec(c);
 			free(data);
 			return NULL;
@@ -178,10 +183,9 @@ int fir_parse_opts(const struct effect_info *ei, const struct stream_info *istre
 	return 0;
 }
 
-struct effect * fir_init_align(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector,
-	const struct fir_config *config, const sample_t *filter_data, int filter_channels, ssize_t filter_frames)
+ssize_t fir_get_offset(const struct fir_config *config, const sample_t *filter_data, int filter_channels, ssize_t filter_frames)
 {
-	if (!config->do_align) return NULL;
+	if (!config->do_align) return 0;
 	ssize_t offset = 0;
 	if (config->offset > 0)
 		offset = config->offset;
@@ -196,6 +200,5 @@ struct effect * fir_init_align(const struct effect_info *ei, const struct stream
 			}
 		}
 	}
-	if (offset == 0) return NULL;
-	return delay_effect_init_int(ei->name, istream, channel_selector, -offset);
+	return offset;
 }

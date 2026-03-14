@@ -384,6 +384,7 @@ void codec_read_buf_destroy_nw(struct codec_read_buf *rb)
 struct read_buf_input * read_buf_input_list_add(struct read_buf_input_list *list, struct codec *codec, ssize_t start, ssize_t end, int repeats)
 {
 	struct read_buf_input *input = calloc(1, sizeof(struct read_buf_input));
+	if (check_alloc(__func__, input)) return NULL;
 	input->codec = codec;
 	input->start = start;
 	input->end = end;
@@ -409,6 +410,7 @@ struct codec_read_buf * codec_read_buf_init(struct read_buf_input_list *list, in
 {
 	int do_buf = 0, max_channels = 0;
 	struct codec_read_buf *rb = calloc(1, sizeof(struct codec_read_buf));
+	if (check_alloc(__func__, rb)) return NULL;
 	rb->inputs = list;
 	rb->cur_input = list->head;
 	rb->error_cb = error_cb;
@@ -426,6 +428,7 @@ struct codec_read_buf * codec_read_buf_init(struct read_buf_input_list *list, in
 	if (!do_buf) return rb;
 
 	struct read_state *state = calloc(1, sizeof(struct read_state));
+	if (check_alloc(__func__, state)) goto fail;
 	pthread_mutex_init(&state->queue.lock, NULL);
 	sem_init(&state->queue.pending, 0, n_blocks);
 	sem_init(&state->queue.sync, 0, 0);
@@ -433,8 +436,10 @@ struct codec_read_buf * codec_read_buf_init(struct read_buf_input_list *list, in
 	state->queue.block.len = n_blocks;
 	state->queue.block.max_block_frames = MAXIMUM(block_frames, 8);
 	state->queue.block.b = calloc(n_blocks, sizeof(struct read_block));
+	if (check_alloc(__func__, state->queue.block.b)) goto fail;
 	const size_t block_samples = state->queue.block.max_block_frames * max_channels;
 	state->queue.block.b[0].data = calloc(block_samples * n_blocks, sizeof(sample_t));
+	if (check_alloc(__func__, state->queue.block.b[0].data)) goto fail;
 	for (int i = 1; i < n_blocks; ++i)
 		state->queue.block.b[i].data = state->queue.block.b[0].data + (block_samples * i);
 	sem_init(&state->queue.block.items, 0, 0);
@@ -443,13 +448,16 @@ struct codec_read_buf * codec_read_buf_init(struct read_buf_input_list *list, in
 
 	if ((errno = pthread_create(&state->thread, NULL, read_worker, rb)) != 0) {
 		LOG_FMT(LL_ERROR, "%s(): error: pthread_create() failed: %s", __func__, strerror(errno));
-		read_state_destroy(state);
-		free(rb);
-		return NULL;
+		goto fail;
 	}
 
 	LOG_S(LL_VERBOSE, "info: read buffer enabled");
 	return rb;
+
+	fail:
+	if (state) read_state_destroy(state);
+	free(rb);
+	return NULL;
 }
 
 void codec_write_buf_cmd_push(void *state_data, enum codec_write_buf_cmd cmd)
@@ -640,6 +648,7 @@ void codec_write_buf_destroy_nw(struct codec_write_buf *wb)
 struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_frames, int n_blocks, void (*error_cb)(int))
 {
 	struct codec_write_buf *wb = calloc(1, sizeof(struct codec_write_buf));
+	if (check_alloc(__func__, wb)) return NULL;
 	wb->codec = codec;
 	wb->error_cb = error_cb;
 
@@ -647,6 +656,7 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 		return wb;
 
 	struct write_state *state = calloc(1, sizeof(struct write_state));
+	if (check_alloc(__func__, state)) goto fail;
 	pthread_mutex_init(&state->queue.lock, NULL);
 	sem_init(&state->queue.pending, 0, 0);
 	sem_init(&state->queue.sync, 0, 0);
@@ -656,8 +666,10 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 	state->queue.block.channels = codec->channels;
 	state->queue.block.max_block_frames = MAXIMUM(block_frames, 8);
 	state->queue.block.b = calloc(n_blocks, sizeof(struct write_block));
+	if (check_alloc(__func__, state->queue.block.b)) goto fail;
 	const size_t block_samples = state->queue.block.max_block_frames * codec->channels;
 	state->queue.block.b[0].data = calloc(block_samples * n_blocks, sizeof(sample_t));
+	if (check_alloc(__func__, state->queue.block.b[0].data)) goto fail;
 	for (int i = 1; i < n_blocks; ++i)
 		state->queue.block.b[i].data = state->queue.block.b[0].data + (block_samples * i);
 	sem_init(&state->queue.block.slots, 0, n_blocks);
@@ -665,11 +677,14 @@ struct codec_write_buf * codec_write_buf_init(struct codec *codec, int block_fra
 
 	if ((errno = pthread_create(&state->thread, NULL, write_worker, wb)) != 0) {
 		LOG_FMT(LL_ERROR, "%s(): error: pthread_create() failed: %s", __func__, strerror(errno));
-		write_state_destroy(state);
-		free(wb);
-		return NULL;
+		goto fail;
 	}
 
 	LOG_S(LL_VERBOSE, "info: write buffer enabled");
 	return wb;
+
+	fail:
+	if (state) write_state_destroy(state);
+	free(wb);
+	return NULL;
 }

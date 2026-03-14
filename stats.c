@@ -46,7 +46,7 @@ struct stats_state {
 
 static sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t samples = *frames * e->ostream.channels;
+	const ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
 	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
 		for (int k = 0; k < state->n_cs; ++k) {
@@ -140,7 +140,7 @@ static void stats_interp_peak(struct stats_state *state, struct stats_ch_state *
 
 static sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t samples = *frames * e->ostream.channels;
+	const ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
 	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
 		for (int k = 0; k < state->n_cs; ++k) {
@@ -291,6 +291,7 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	}
 
 	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -301,14 +302,22 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	e->plot = effect_plot_noop;
 	e->destroy = stats_effect_destroy;
 	struct stats_state *state = calloc(1, sizeof(struct stats_state));
+	if (check_alloc(ei->name, state)) goto fail;
+	e->data = state;
 	state->ref = ref;
 	state->width = width;
 	state->n_cs = num_bits_set(channel_selector, istream->channels);
 	state->cs = calloc(state->n_cs, sizeof(struct stats_ch_state));
+	if (check_alloc(ei->name, state->cs)) goto fail;
 	for (int i = 0, k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(channel_selector, k))
 			state->cs[i++].ch = k;
 	}
-	e->data = state;
 	return e;
+
+	fail:
+	if (state) free(state->cs);
+	free(state);
+	free(e);
+	return NULL;
 }

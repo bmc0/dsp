@@ -135,6 +135,7 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 	}
 
 	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -145,11 +146,15 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 	e->plot = effect_plot_noop;
 	e->destroy = levels_effect_destroy;
 
+	struct levels_ch_state *cs_all = NULL;
 	struct levels_state *state = calloc(1, sizeof(struct levels_state));
 	e->data = state;
+	if (check_alloc(ei->name, state)) goto fail;
 	state->cs = calloc(istream->channels, sizeof(struct levels_ch_state *));
+	if (check_alloc(ei->name, state->cs)) goto fail;
 	const int n_ch = num_bits_set(channel_selector, istream->channels);
-	struct levels_ch_state *cs_all = calloc(n_ch, sizeof(struct levels_ch_state));
+	cs_all = calloc(n_ch, sizeof(struct levels_ch_state));
+	if (check_alloc(ei->name, cs_all)) goto fail;
 	for (int k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(channel_selector, k)) {
 			struct levels_ch_state *cs = state->cs[k] = cs_all++;
@@ -157,6 +162,14 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 			ewma_init(&cs->peak, e->istream.fs, tc);
 		}
 	}
-
 	return e;
+
+	fail:
+	if (state) {
+		free(state->cs);
+		free(cs_all);
+		free(state);
+	}
+	free(e);
+	return NULL;
 }

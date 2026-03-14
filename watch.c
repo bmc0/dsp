@@ -220,6 +220,7 @@ static ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 		node->buf_len = buf_len;
 		free(node->xfade.buf);
 		node->xfade.buf = calloc(node->buf_len, sizeof(sample_t));
+		if (!node->xfade.buf) node->xfade.frames = 0;
 	}
 	pthread_mutex_unlock(&node->lock);
 	return buf_frames;
@@ -237,8 +238,8 @@ static void watch_effect_channel_deps(struct effect *e, char **deps)
 struct effect * watch_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
-	struct watch_node *node;
-	struct effect *e;
+	struct watch_node *node = NULL;
+	struct effect *e = NULL;
 	struct stat sb;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	int enforce_eof_marker = 0, opt;
@@ -259,7 +260,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 
 	struct stream_info stream = *istream;
 	char *path = construct_full_path(dir, argv[g.ind], istream->fs, num_bits_set(channel_selector, istream->channels));
-	if (build_effects_chain_from_file(path, &chain, &stream, channel_selector, NULL, enforce_eof_marker))
+	if (!path || build_effects_chain_from_file(path, &chain, &stream, channel_selector, NULL, enforce_eof_marker))
 		goto open_fail;
 	if (stat(path, &sb) < 0) {
 		LOG_FMT(LL_ERROR, "%s: error: stat() failed: %s: %s", argv[0], path, strerror(errno));
@@ -267,10 +268,12 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	}
 
 	node = calloc(1, sizeof(struct watch_node));
+	if (check_alloc(ei->name, node)) goto fail;
 	node->last_mtime = sb.st_mtim;
 	pthread_mutex_init(&node->lock, NULL);
 	node->path = path;
 	node->channel_mask = NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, node->channel_mask)) goto fail;
 	COPY_SELECTOR(node->channel_mask, channel_selector, istream->channels);
 	node->chain = chain;
 	node->enforce_eof_marker = enforce_eof_marker;
@@ -280,6 +283,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	node->xfade.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream = *istream;
 	e->ostream = stream;
@@ -301,10 +305,8 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 		/* LOG_FMT(LL_VERBOSE, "%s: info: starting worker thread", argv[0]); */
 		if ((errno = pthread_create(&watch_state.thread, NULL, watch_worker, NULL)) != 0) {
 			LOG_FMT(LL_ERROR, "%s: error: pthread_create() failed: %s", argv[0], strerror(errno));
-			watch_node_destroy(node);
-			free(e);
 			pthread_mutex_unlock(&watch_state.init_lock);
-			return NULL;
+			goto fail;
 		}
 	}
 	++watch_state.init_count;
@@ -312,11 +314,15 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	pthread_mutex_lock(&watch_state.lock);
 	LIST_APPEND(&watch_state.list, node);
 	pthread_mutex_unlock(&watch_state.lock);
-
 	return e;
 
 	open_fail:
 	destroy_effects_chain(&chain);
 	free(path);
+	return NULL;
+
+	fail:
+	if (node) watch_node_destroy(node);
+	free(e);
 	return NULL;
 }

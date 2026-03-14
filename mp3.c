@@ -136,12 +136,14 @@ static ssize_t mp3_seek(struct codec *c, ssize_t pos)
 static void mp3_destroy(struct codec *c)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
-	close(state->fd);
-	mad_stream_finish(&state->stream);
-	mad_frame_finish(&state->frame);
-	mad_synth_finish(&state->synth);
-	free(state->buf);
-	free(state);
+	if (state) {
+		if (state->fd != -1) close(state->fd);
+		mad_stream_finish(&state->stream);
+		mad_frame_finish(&state->frame);
+		mad_synth_finish(&state->synth);
+		free(state->buf);
+		free(state);
+	}
 }
 
 static ssize_t mp3_get_nframes(struct mp3_state *state, const char *type)
@@ -189,12 +191,26 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 	struct codec *c = NULL;
 	ssize_t nframes;
 
-	state = calloc(1, sizeof(struct mp3_state));
+	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
+	c->path = p->path;
+	c->type = p->type;
+	c->enc = "mad_f";
+	c->prec = 24;
+	c->read = mp3_read;
+	c->seek = mp3_seek;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
+	c->destroy = mp3_destroy;
+	c->data = state = calloc(1, sizeof(struct mp3_state));
+	if (check_alloc(p->type, state)) goto fail;
 	if ((state->fd = open(p->path, O_RDONLY)) == -1) {
 		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", p->type, p->path, strerror(errno));
 		goto fail;
 	}
 	state->buf = calloc(MP3_BUF_SIZE, 1);
+	if (check_alloc(p->type, state->buf)) goto fail;
 
 	if ((nframes = mp3_get_nframes(state, p->type)) < 0)
 		goto fail;
@@ -223,32 +239,15 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 	}
 	mad_synth_frame(&state->synth, &state->frame);
 
-	c = calloc(1, sizeof(struct codec));
-	c->path = p->path;
-	c->type = p->type;
-	c->enc = "mad_f";
 	c->fs = state->frame.header.samplerate;
 	c->channels = MAD_NCHANNELS(&state->frame.header);
-	c->prec = 24;
 	c->frames = nframes;
-	c->read = mp3_read;
-	c->seek = mp3_seek;
-	c->delay = codec_delay_noop;
-	c->drop = codec_drop_noop;
-	c->pause = codec_pause_noop;
-	c->destroy = mp3_destroy;
-	c->data = state;
 
 	return c;
 
 	fail:
-	if (state->fd != -1)
-		close(state->fd);
-	mad_stream_finish(&state->stream);
-	mad_frame_finish(&state->frame);
-	mad_synth_finish(&state->synth);
-	free(state->buf);
-	free(state);
+	if (c) mp3_destroy(c);
+	free(c);
 	return NULL;
 }
 

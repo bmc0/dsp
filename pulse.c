@@ -116,8 +116,8 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 {
 	int err;
 	pa_simple *s;
-	struct codec *c;
-	struct pulse_state *state;
+	struct codec *c = NULL;
+	struct pulse_state *state = NULL;
 	struct pulse_enc_info *enc_info;
 
 	if ((enc_info = pulse_get_enc_info(p->enc)) == NULL) {
@@ -144,10 +144,12 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	}
 
 	state = calloc(1, sizeof(struct pulse_state));
+	if (check_alloc(p->type, state)) goto fail;
 	state->s = s;
 	state->enc_info = enc_info;
 
 	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = enc_info->name;
@@ -169,6 +171,12 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	c->data = state;
 
 	return c;
+
+	fail:
+	pa_simple_free(s);
+	free(state);
+	free(c);
+	return NULL;
 }
 
 void pulse_codec_print_encodings(const char *type)

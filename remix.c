@@ -116,9 +116,11 @@ static void remix_effect_plot(struct effect *e, int i)
 static void remix_effect_destroy(struct effect *e)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
-	for (int k = 0; k < e->ostream.channels; ++k)
-		free(state->channel_selectors[k]);
-	free(state->channel_selectors);
+	if (state->channel_selectors) {
+		for (int k = 0; k < e->ostream.channels; ++k)
+			free(state->channel_selectors[k]);
+		free(state->channel_selectors);
+	}
 	free(state->fast_sel.s1);
 	free(state);
 }
@@ -132,8 +134,8 @@ static void remix_effect_channel_deps(struct effect *e, char **deps)
 
 struct effect * remix_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct remix_state *state;
+	struct effect *e = NULL;
+	struct remix_state *state = NULL;
 
 	if (argc <= 1) {
 		print_effect_usage(ei);
@@ -144,11 +146,25 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	const int delta = n_selectors - mask_bits;
 	const int out_channels = istream->channels + delta;
 
-	state = calloc(1, sizeof(struct remix_state));
+	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
+	e->name = ei->name;
+	e->istream.fs = e->ostream.fs = istream->fs;
+	e->istream.channels = istream->channels;
+	e->ostream.channels = out_channels;
+	e->flags |= EFFECT_FLAG_PLOT_MIX;
+	e->plot = remix_effect_plot;
+	e->destroy = remix_effect_destroy;
+	e->channel_deps = remix_effect_channel_deps;
+
+	e->data = state = calloc(1, sizeof(struct remix_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
+	if (check_alloc(ei->name, state->channel_selectors)) goto fail;
 	int use_run_1a = 1, use_run_4 = 1, set_no_dither = 1;
 	for (int k = 0, i = 0, ch = 0; k < out_channels; ++k, ++ch) {
 		state->channel_selectors[k] = NEW_SELECTOR(istream->channels);
+		if (check_alloc(ei->name, state->channel_selectors[k])) goto fail;
 		if (ch >= istream->channels || GET_BIT(channel_selector, ch)) {
 			if (i < n_selectors) {
 				if (strcmp(argv[i+1], ".") != 0 && parse_selector_masked(argv[i+1], state->channel_selectors[k], channel_selector, istream->channels))
@@ -173,15 +189,10 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 		#endif
 	}
 
-	e = calloc(1, sizeof(struct effect));
-	e->name = ei->name;
-	e->istream.fs = e->ostream.fs = istream->fs;
-	e->istream.channels = istream->channels;
-	e->ostream.channels = out_channels;
-	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	if (set_no_dither) e->flags |= EFFECT_FLAG_NO_DITHER;
 	if (use_run_1a) {
 		state->fast_sel.s1 = calloc(out_channels, sizeof(int));
+		if (check_alloc(ei->name, state->fast_sel.s1)) goto fail;
 		for (int k = 0; k < out_channels; ++k) {
 			int ch = 0;
 			while (ch < istream->channels && !GET_BIT(state->channel_selectors[k], ch)) ++ch;
@@ -191,6 +202,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	}
 	else if (use_run_4) {
 		state->fast_sel.s4 = calloc(out_channels, sizeof(struct fast_sel_4));
+		if (check_alloc(ei->name, state->fast_sel.s4)) goto fail;
 		for (int k = 0; k < out_channels; ++k) {
 			int n = 0;
 			for (int ch = 0; ch < istream->channels; ++ch)
@@ -201,18 +213,10 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 		e->run = remix_effect_run_4;
 	}
 	else e->run = remix_effect_run_generic;
-	e->plot = remix_effect_plot;
-	e->destroy = remix_effect_destroy;
-	e->channel_deps = remix_effect_channel_deps;
-	e->data = state;
 	return e;
 
 	fail:
-	if (state->channel_selectors)
-		for (int k = 0; k < out_channels; ++k)
-			free(state->channel_selectors[k]);
-	free(state->channel_selectors);
-	free(state->fast_sel.s1);
-	free(state);
+	if (state) remix_effect_destroy(e);
+	free(e);
 	return NULL;
 }

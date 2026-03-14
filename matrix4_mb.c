@@ -644,16 +644,17 @@ static void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency
 
 struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct matrix4_mb_state *state;
+	struct effect *e = NULL;
+	struct matrix4_mb_state *state = NULL;
 	struct matrix4_config config = {0};
 
 	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
 		return NULL;
 	if (parse_effect_opts(argv, dir, istream, 1, &config))
-		return NULL;
+		goto fail;  /* may need to free config.pwr_err_file */
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 #if DO_FILTER_BANK_TEST
@@ -673,6 +674,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #endif
 
 	state = calloc(1, sizeof(struct matrix4_mb_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
@@ -697,7 +699,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double ev_thresh_mult = 1.0-(x/(x+1.0))*1.46*0.6;
 		band->ev_thresh_max = EVENT_THRESH_MAX * ev_thresh_mult;
 		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
-		event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH));
+		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH)))
+			goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
 		const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
@@ -719,7 +722,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fb_buf_len += CS_INTERP_DELAY_FRAMES;
 #endif
 	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
+	if (check_alloc(ei->name, state->fb_buf[0])) goto fail;
 	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
+	if (check_alloc(ei->name, state->fb_buf[1])) goto fail;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream, config.rear_ev_mask);
 #endif
@@ -753,6 +758,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));
+	if (check_alloc(ei->name, filter)) goto fail;
 	for (int i = phase_lin_frames-1; i >= 0; --i) {
 		filter_bank_run(&state->fb[1], (i == phase_lin_frames-1) ? 1.0 : 0.0);
 		for (int k = 0; k < N_BANDS; ++k)
@@ -774,11 +780,19 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fb[1] = state->fb[0];  /* reset */
 	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */
 	if (e_fir == NULL) {
-		e->destroy(e);
-		free(e);
+		destroy_effect(e);
 		return NULL;
 	}
 
 	effect_list_append(e_fir, e);
 	return e_fir;
+
+	fail:
+#if DEBUG_POWER_ERROR
+	if (!state && config.pwr_err_file)
+		fclose(state->pwr_err_file);
+#endif
+	if (state) e->destroy(e);
+	free(e);
+	return NULL;
 }

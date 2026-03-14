@@ -151,6 +151,7 @@ int parse_effect_opts(const char *const *argv, const char *dir, const struct str
 	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
+		if (check_alloc(__func__, opt_str)) goto fail;
 		char *opt = opt_str, *next_opt, *endptr;
 		while (*opt != '\0') {
 			next_opt = isolate(opt, ',');
@@ -370,7 +371,7 @@ void smooth_state_init(struct smooth_state *sm, const struct stream_info *istrea
 	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
-void event_state_init_priv(struct event_state *ev, double fs, double base_thresh_scale)
+int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_scale)
 {
 	for (int i = 0; i < 6; ++i) ewma_init(&ev->accom[i], fs, EWMA_RISE_TIME(ACCOM_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->norm[i], fs, EWMA_RISE_TIME(NORM_TIME));
@@ -402,12 +403,21 @@ void event_state_init_priv(struct event_state *ev, double fs, double base_thresh
 	#endif
 	ev->ds_ord_buf = calloc(ev->buf_len, sizeof(double));
 	ev->max_buf = calloc(ev->buf_len, sizeof(double));
+	if (!ev->ord_buf || !ev->ord_lp_buf || !ev->ds_ord_buf || !ev->max_buf
+	#if ENABLE_LOOKBACK
+			|| !ev->diff_buf || !ev->slope_buf
+	#endif
+			) {
+		dsp_perror(DSP_ENOMEM, __func__, NULL);
+		return 1;
+	}
 	ev->clip_thresh = EVENT_THRESH * base_thresh_scale * 100.0;
 	ev->pcf_sens = PWRCMP_FACTOR_SENS / base_thresh_scale;
 	#if DEBUG_PRINT_MIN_RISE_TIME
 		ev->max_diff_scale = ev->max_ord_scale = 1.0;
 		ev->fs = fs;
 	#endif
+	return 0;
 }
 
 void event_state_cleanup(struct event_state *ev)

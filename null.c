@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "null.h"
+#include "util.h"
 
 static ssize_t null_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
@@ -40,6 +41,7 @@ static ssize_t null_seek(struct codec *c, ssize_t pos)
 struct codec * null_codec_init(const struct codec_params *p)
 {
 	struct codec *c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) return NULL;
 	c->path = "null";
 	c->type = p->type;
 	c->enc = "sample_t";

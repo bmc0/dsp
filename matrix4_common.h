@@ -217,7 +217,7 @@ void draw_steering_bar(double, int, struct steering_bar *);
 #endif
 
 /* private functions */
-void event_state_init_priv(struct event_state *, double, double);
+int event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double, double, double);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *, struct axes *);
 
@@ -234,9 +234,10 @@ static inline double smoothstep(double x)
 }
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
-static void event_state_init(struct event_state *ev, const struct stream_info *istream, double base_thresh_scale)
+/* note: must call event_state_cleanup() even on failure */
+static int event_state_init(struct event_state *ev, const struct stream_info *istream, double base_thresh_scale)
 {
-	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale);
+	return event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale);
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream, double rear_ev_mask)

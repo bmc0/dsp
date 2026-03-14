@@ -284,8 +284,8 @@ void dither_effect_set_params(struct effect *e, int bits, int enabled)
 struct effect * dither_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	char *endptr;
-	struct effect *e;
-	struct dither_state *state;
+	struct effect *e = NULL;
+	struct dither_state *state = NULL;
 	enum dither_type d_type = DITHER_TYPE_FLAT;
 	enum dither_flags d_flags = DITHER_FLAG_ENABLE;
 	double noise_bits = HUGE_VAL;
@@ -365,10 +365,12 @@ struct effect * dither_effect_init(const struct effect_info *ei, const struct st
 	if (noise_bits == HUGE_VAL) noise_bits = 16.0;
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, e->channel_selector)) goto fail;
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = dither_effect_run;
@@ -376,11 +378,16 @@ struct effect * dither_effect_init(const struct effect_info *ei, const struct st
 	e->destroy = dither_effect_destroy;
 	e->merge = dither_effect_merge;
 
-	state = calloc(istream->channels, sizeof(struct dither_state));
-	for (int k = 0; k < istream->channels; ++k)
+	e->data = state = calloc(istream->channels, sizeof(struct dither_state));
+	if (check_alloc(ei->name, state)) goto fail;
+	for (int k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(e->channel_selector, k))
 			dither_init(&state[k], quantize_bits, noise_bits, d_type, d_flags);
-
-	e->data = state;
+	}
 	return e;
+
+	fail:
+	if (e) dither_effect_destroy(e);
+	free(e);
+	return NULL;
 }

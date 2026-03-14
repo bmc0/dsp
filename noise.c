@@ -81,8 +81,8 @@ struct effect * noise_effect_init(const struct effect_info *ei, const struct str
 {
 	double mult;
 	char *endptr;
-	struct effect *e;
-	struct noise_state *state;
+	struct effect *e = NULL;
+	struct noise_state *state = NULL;
 
 	if (argc != 2) {
 		print_effect_usage(ei);
@@ -93,18 +93,25 @@ struct effect * noise_effect_init(const struct effect_info *ei, const struct str
 	CHECK_ENDPTR(argv[1], endptr, "level", return NULL);
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, e->channel_selector)) goto fail;
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = noise_effect_run;
 	e->plot = noise_effect_plot;
 	e->destroy = noise_effect_destroy;
-	state = calloc(1, sizeof(struct noise_state));
+	e->data = state = calloc(1, sizeof(struct noise_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	state->mult = mult;
-	e->data = state;
 	return e;
+
+	fail:
+	if (e) noise_effect_destroy(e);
+	free(e);
+	return NULL;
 }

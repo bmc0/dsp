@@ -443,8 +443,8 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	int type, width_type = BIQUAD_WIDTH_Q;
 	double arg0 = 0.0, arg1 = 0.0, arg2 = 0.0, arg3 = 0.0;
 	double b0 = 0.0, b1 = 0.0, b2 = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
-	struct biquad_state *state, b = {0};
-	struct effect *e;
+	struct biquad_state *state = NULL, b = {0};
+	struct effect *e = NULL;
 	char *endptr;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	struct biquad_effect_opts o = { .reverse = 0, .thresh = 80.0 };
@@ -533,10 +533,12 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 		return reverse_iir_effect_init_from_biquad(ei, istream, channel_selector, &b, o.thresh);
 
 	e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
 	e->channel_selector = NEW_SELECTOR(istream->channels);
+	if (check_alloc(ei->name, e->channel_selector)) goto fail;
 	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
@@ -545,11 +547,16 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->plot = biquad_effect_plot;
 	e->destroy = biquad_effect_destroy;
 	e->merge = biquad_effect_merge;
-	state = calloc(istream->channels, sizeof(struct biquad_state));
+	e->data = state = calloc(istream->channels, sizeof(struct biquad_state));
+	if (check_alloc(ei->name, state)) goto fail;
 	for (int i = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i))
 			memcpy(&state[i], &b, sizeof(struct biquad_state));
 	}
-	e->data = state;
 	return e;
+
+	fail:
+	if (e) biquad_effect_destroy(e);
+	free(e);
+	return NULL;
 }

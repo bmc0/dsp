@@ -27,9 +27,9 @@
 #include "util.h"
 
 /*
- * References:
- *     [1] M. Vicanek, "A New Reverse IIR Filtering Algorithm," Oct. 2015,
- *         rev. Jan. 2022
+ * Reference:
+ *   M. Vicanek, "A New Reverse IIR Filtering Algorithm," Oct. 2015,
+ *   rev. Jan. 2022
 */
 
 #define RIIR_POLE_CMP_TOL  1e-4
@@ -217,25 +217,25 @@ static void reverse_iir_effect_drain_samples(struct effect *e, ssize_t *drain_sa
 		if (state[k].N > 0) drain_samples[k] += state[k].latency;
 }
 
+#define DESTROY_FILTER_STAGES(s, n, N) do { \
+	if ((N) > 3 && (s)) { \
+		for (int i = 0; i < (n); ++i) { \
+			if ((s)[i].sn) { \
+				for (int j = 0; j < (N)-3; ++j) \
+					free((s)[i].sn[j].m); \
+				free((s)[i].sn); \
+			} \
+		} \
+	} \
+	free(s); \
+} while(0)
 static void reverse_iir_effect_destroy(struct effect *e)
 {
 	struct riir_state *state = (struct riir_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		for (struct riir_state *cs = &state[k]; cs; cs = cs->cascade) {
-			if (cs->N > 3) {
-				for (int i = 0; i < cs->n_real; ++i) {
-					for (int j = 0; j < cs->N-3; ++j)
-						free(cs->real[i].sn[j].m);
-					free(cs->real[i].sn);
-				}
-				for (int i = 0; i < cs->n_cc; ++i) {
-					for (int j = 0; j < cs->N-3; ++j)
-						free(cs->cc[i].sn[j].m);
-					free(cs->cc[i].sn);
-				}
-			}
-			free(cs->real);
-			free(cs->cc);
+			DESTROY_FILTER_STAGES(cs->real, cs->n_real, cs->N);
+			DESTROY_FILTER_STAGES(cs->cc, cs->n_cc, cs->N);
 			free(cs->fir.buf);
 		}
 		while (state[k].cascade) {
@@ -254,16 +254,19 @@ static void reverse_iir_effect_channel_offsets(struct effect *e, ssize_t *latenc
 		if (state[k].N > 0) req_delay[k] -= state[k].latency;
 }
 
-static void riir_init_state_append(struct riir_init_state *v, const struct riir_init_sec *sec, int n)
+static int riir_init_state_append(struct riir_init_state *v, const struct riir_init_sec *sec, int n)
 {
-	if (n <= 0) return;
+	if (n <= 0) return 0;
 	if (v->len < v->n+n) {
 		if (v->len <= 0) v->len = 4;
 		while (v->len < v->n+n) v->len *= 2;
-		v->sec = realloc(v->sec, v->len*sizeof(struct riir_init_sec));
+		struct riir_init_sec *vs_tmp = realloc(v->sec, v->len*sizeof(struct riir_init_sec));
+		if (check_alloc(__func__, vs_tmp)) return 1;
+		v->sec = vs_tmp;
 	}
 	memcpy(v->sec+v->n, sec, n*sizeof(struct riir_init_sec));
 	v->n += n;
+	return 0;
 }
 
 static void riir_init_state_remove(struct riir_init_state *v, int idx)
@@ -286,7 +289,8 @@ static int reverse_iir_effect_merge(struct effect *dest, struct effect *src)
 		struct riir_init_state *dest_state = (struct riir_init_state *) dest->data;
 		struct riir_init_state *src_state = (struct riir_init_state *) src->data;
 		for (int k = 0; k < dest->istream.channels; ++k) {
-			riir_init_state_append(&dest_state[k], src_state[k].sec, src_state[k].n);
+			if (riir_init_state_append(&dest_state[k], src_state[k].sec, src_state[k].n))
+				return 0;
 			riir_init_state_clear(&src_state[k]);
 		}
 		return 1;
@@ -358,25 +362,29 @@ static double riir_pq_max_abs(const qroots *pq, enum riir_pq_type type)
 }
 
 #define RIIR_POLE_MIN_STAGES(thresh, abs_p) lrint(ceil(log2(-((thresh)+6.02)/(20.0*log10(abs_p)))))
-#define INIT_FILTER_STAGES(s, n, N) \
-	do { for (int i = 0; i < (n); ++i) { \
+#define INIT_FILTER_STAGES(s, n, N, e, fail_action) do { \
+	for (int i = 0; i < (n); ++i) { \
 		typeof((s)->res) p2n = (s)[i].s0.p; \
 		(s)[i].s1.p = (p2n *= p2n); \
 		(s)[i].s2.p = (p2n *= p2n); \
 		if ((N) > 3) { \
 			(s)[i].sn = calloc((N)-3, sizeof(*(s)->sn)); \
+			if (check_alloc((e)->name, (s)[i].sn)) fail_action; \
 			for (int j = 3; j < (N); ++j) { \
 				(s)[i].sn[j-3].p = (p2n *= p2n); \
 				(s)[i].sn[j-3].m = calloc(1<<j, sizeof(*(s)->sn->m)); \
+				if (check_alloc((e)->name, (s)[i].sn[j-3].m)) fail_action; \
 			} \
 		} \
-	} } while(0)
+	} \
+} while(0)
 static int reverse_iir_effect_prepare(struct effect *e)
 {
 	struct riir_init_state *init_state = (struct riir_init_state *) e->data;
 	struct riir_state *state = calloc(e->istream.channels, sizeof(struct riir_state));
-	e->data = state;
+	if (check_alloc(e->name, state)) return 1;
 	e->destroy = reverse_iir_effect_destroy;
+	e->data = state;
 
 	for (int k = 0; k < e->istream.channels; ++k) {
 		struct riir_init_state *v = &init_state[k], cascade_v = {0};
@@ -397,7 +405,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 					split.g = sec->g = sqrt(sec->g);
 				}
 				else split.g = 1.0;
-				riir_init_state_append(&cascade_v, &split, 1);
+				if (riir_init_state_append(&cascade_v, &split, 1)) goto fail2;
 			}
 		}
 
@@ -407,7 +415,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 			if (v->sec[i].pt == RIIR_PQ_TYPE_NONE) continue;
 			for (int j = i+1; j < v->n;) {
 				if (riir_pq_close(&v->sec[i].p, v->sec[i].pt, &v->sec[j].p, v->sec[j].pt)) {
-					riir_init_state_append(&cascade_v, &v->sec[j], 1);
+					if (riir_init_state_append(&cascade_v, &v->sec[j], 1)) goto fail2;
 					riir_init_state_remove(v, j);
 				}
 				else ++j;
@@ -444,8 +452,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 		cs->mask = (1<<cs->N)-1;
 		if (nq-np+1 > (int) LENGTH(cs->fir.c)) {
 			LOG_FMT(LL_ERROR, "%s: error: channel %d: too many zeros: %d-%d+1 > %zd", e->name, k, nq, np, LENGTH(cs->fir.c));
-			riir_init_state_clear(&cascade_v);
-			goto fail;
+			goto fail2;
 		}
 
 		/* compute partial fraction residues */
@@ -476,8 +483,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 		if (do_cascade) {
 			if (v->n < 2) {
 				LOG_FMT(LL_ERROR, "%s: error: something has gone terribly wrong; aborting...", e->name);
-				riir_init_state_clear(&cascade_v);
-				goto fail;
+				goto fail2;
 			}
 			/* move section with largest residue */
 			int rm_idx = 0;
@@ -489,7 +495,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 					max_res = res;
 				}
 			}
-			riir_init_state_append(&cascade_v, &v->sec[rm_idx], 1);
+			if (riir_init_state_append(&cascade_v, &v->sec[rm_idx], 1)) goto fail2;
 			riir_init_state_remove(v, rm_idx);
 			goto recalc_cs;
 		}
@@ -550,10 +556,14 @@ static int reverse_iir_effect_prepare(struct effect *e)
 		LOG_FMT(LL_VERBOSE, "%s: info: channel %d: nq=%d; np=%d; N=%d", e->name, k, nq, np, cs->N);
 
 		/* alloc filter structures */
-		if (cs->n_real > 0)
+		if (cs->n_real > 0) {
 			cs->real = calloc(cs->n_real, sizeof(struct riir_real));
-		if (cs->n_cc > 0)
+			if (check_alloc(e->name, cs->real)) goto fail2;
+		}
+		if (cs->n_cc > 0) {
 			cs->cc = calloc(cs->n_cc, sizeof(struct riir_cc));
+			if (check_alloc(e->name, cs->cc)) goto fail2;
+		}
 
 		/* copy poles and residues */
 		int idx_cc = 0, idx_real = 0;
@@ -583,11 +593,14 @@ static int reverse_iir_effect_prepare(struct effect *e)
 		}
 
 		/* initialize filter stages */
-		INIT_FILTER_STAGES(cs->real, cs->n_real, cs->N);
-		INIT_FILTER_STAGES(cs->cc, cs->n_cc, cs->N);
+		INIT_FILTER_STAGES(cs->real, cs->n_real, cs->N, e, goto fail2);
+		INIT_FILTER_STAGES(cs->cc, cs->n_cc, cs->N, e, goto fail2);
 
 		/* initialize FIR delay buffer */
-		if (cs->fir.n > 0) cs->fir.buf = calloc(1<<cs->N, sizeof(double));
+		if (cs->fir.n > 0) {
+			cs->fir.buf = calloc(1<<cs->N, sizeof(double));
+			if (check_alloc(e->name, cs->fir.buf)) goto fail2;
+		}
 
 		riir_init_state_clear(v);
 		if (cascade_v.n) {
@@ -597,12 +610,19 @@ static int reverse_iir_effect_prepare(struct effect *e)
 			memcpy(v, &cascade_v, sizeof(struct riir_init_state));
 			memset(&cascade_v, 0, sizeof(struct riir_init_state));
 			cs = cs->cascade = calloc(1, sizeof(struct riir_state));
+			if (check_alloc(e->name, cs)) goto fail;
 			goto recalc_cs;
 		}
 
 		/* compute total latency */
 		for (cs = &state[k]; cs; cs = cs->cascade)
 			state[k].latency += (1<<cs->N) + cs->fir.n - 1;
+
+		continue;
+
+		fail2:
+		riir_init_state_clear(&cascade_v);
+		goto fail;
 	}
 	free(init_state);
 	return 0;
@@ -625,6 +645,7 @@ static void reverse_iir_effect_destroy_init(struct effect *e)
 static struct effect * reverse_iir_effect_init_common(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const struct riir_init_sec *sec, int n)
 {
 	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -640,12 +661,18 @@ static struct effect * reverse_iir_effect_init_common(const struct effect_info *
 	e->channel_offsets = reverse_iir_effect_channel_offsets;
 
 	struct riir_init_state *state = calloc(e->istream.channels, sizeof(struct riir_init_state));
+	if (check_alloc(ei->name, state)) goto fail;
+	e->data = state;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		if (GET_BIT(channel_selector, k))
-			riir_init_state_append(&state[k], sec, n);
+			if (riir_init_state_append(&state[k], sec, n)) goto fail;
 	}
-	e->data = state;
 	return e;
+
+	fail:
+	if (state) reverse_iir_effect_destroy_init(e);
+	free(e);
+	return NULL;
 }
 
 static int calc_qroots(double b, double c, qroots *r_roots)

@@ -90,9 +90,11 @@ static void align_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 static void align_effect_destroy(struct effect *e)
 {
 	struct align_state *state = (struct align_state *) e->data;
-	for (int k = 0; k < e->istream.channels; ++k)
-		free(state->cs[k].buf);
-	free(state->cs);
+	if (state->cs) {
+		for (int k = 0; k < e->istream.channels; ++k)
+			free(state->cs[k].buf);
+		free(state->cs);
+	}
 	free(state);
 }
 
@@ -100,6 +102,7 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 {
 	int do_align = 0;
 	const char *next_name = (prev->next) ? prev->next->name : "[end of chain]";
+
 	if (align_refs) {
 		for (int k = 0; k < prev->ostream.channels; ++k)
 			if (offsets[k] != align_refs[k]) { do_align = 1; break; }
@@ -114,6 +117,7 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	}
 
 	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc("align", e)) return 1;
 	e->name = "align";
 	e->istream.fs = e->ostream.fs = prev->ostream.fs;
 	e->istream.channels = e->ostream.channels = prev->ostream.channels;
@@ -126,8 +130,10 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	e->destroy = align_effect_destroy;
 
 	struct align_state *state = calloc(1, sizeof(struct align_state));
+	if (check_alloc(e->name, state)) goto fail;
 	e->data = state;
 	state->cs = calloc(e->istream.channels, sizeof(struct align_channel_state));
+	if (check_alloc(e->name, state->cs)) goto fail;
 	ssize_t max_offset = offsets[0];
 	for (int k = 1; k < e->istream.channels; ++k)
 		max_offset = MAXIMUM(max_offset, offsets[k]);
@@ -139,6 +145,7 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 		if (offsets[k] != ref) {
 			cs->len = ref-offsets[k];
 			cs->buf = calloc(cs->len, sizeof(sample_t));
+			if (check_alloc(e->name, cs->buf)) goto fail;
 			LOG_FMT(LL_VERBOSE, "%s (%s): info: channel %d: %zd", e->name, next_name, k, cs->len);
 		}
 		else cs->len = 0;
@@ -154,4 +161,9 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 
 	LIST_INSERT(chain, e, prev);
 	return 0;
+
+	fail:
+	if (state) align_effect_destroy(e);
+	free(e);
+	return 1;
 }

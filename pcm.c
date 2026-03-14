@@ -181,6 +181,8 @@ static void pcm_destroy(struct codec *c)
 struct codec * pcm_codec_init(const struct codec_params *p)
 {
 	int fd = -1;
+	struct codec *c = NULL;
+	struct pcm_state *state = NULL;
 #ifdef __BYTE_ORDER__
 	const int is_wavpipe = IS_WAVPIPE(p->type);
 	const struct pcm_enc_info *enc_info = (is_wavpipe)
@@ -204,11 +206,13 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 		goto fail;
 	}
 
-	struct pcm_state *state = calloc(1, sizeof(struct pcm_state));
+	state = calloc(1, sizeof(struct pcm_state));
+	if (check_alloc(p->type, state)) goto fail;
 	state->fd = fd;
 	state->enc_info = enc_info;
 
-	struct codec *c = calloc(1, sizeof(struct codec));
+	c = calloc(1, sizeof(struct codec));
+	if (check_alloc(p->type, c)) goto fail;
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = enc_info->name;
@@ -237,6 +241,9 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 	return c;
 
 	fail:
+	if (fd != -1) close(fd);
+	free(state);
+	free(c);
 	return NULL;
 }
 

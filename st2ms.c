@@ -27,13 +27,12 @@ struct st2ms_state {
 
 static sample_t * st2ms_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, samples = *frames * e->ostream.channels;
-	sample_t s0, s1;
+	const ssize_t samples = *frames * e->ostream.channels;
 	struct st2ms_state *state = (struct st2ms_state *) e->data;
 
-	for (i = 0; i < samples; i += e->ostream.channels) {
-		s0 = ibuf[i + state->c0];
-		s1 = ibuf[i + state->c1];
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
+		sample_t s0 = ibuf[i + state->c0];
+		sample_t s1 = ibuf[i + state->c1];
 		ibuf[i + state->c0] = (s0 + s1) * 0.5;
 		ibuf[i + state->c1] = (s0 - s1) * 0.5;
 	}
@@ -42,13 +41,12 @@ static sample_t * st2ms_effect_run(struct effect *e, ssize_t *frames, sample_t *
 
 static sample_t * ms2st_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t i, samples = *frames * e->ostream.channels;
-	sample_t s0, s1;
+	const ssize_t samples = *frames * e->ostream.channels;
 	struct st2ms_state *state = (struct st2ms_state *) e->data;
 
-	for (i = 0; i < samples; i += e->ostream.channels) {
-		s0 = ibuf[i + state->c0];
-		s1 = ibuf[i + state->c1];
+	for (ssize_t i = 0; i < samples; i += e->ostream.channels) {
+		sample_t s0 = ibuf[i + state->c0];
+		sample_t s1 = ibuf[i + state->c1];
 		ibuf[i + state->c0] = (s0 + s1);
 		ibuf[i + state->c1] = (s0 - s1);
 	}
@@ -85,21 +83,17 @@ static void st2ms_effect_channel_deps(struct effect *e, char **deps)
 
 struct effect * st2ms_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
-	struct effect *e;
-	struct st2ms_state *state;
-	int i;
-
 	if (argc != 1) {
 		print_effect_usage(ei);
 		return NULL;
 	}
-	const int n_channels = num_bits_set(channel_selector, istream->channels);
-	if (n_channels != 2) {
+	if (num_bits_set(channel_selector, istream->channels) != 2) {
 		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
 		return NULL;
 	}
 
-	e = calloc(1, sizeof(struct effect));
+	struct effect *e = calloc(1, sizeof(struct effect));
+	if (check_alloc(ei->name, e)) return NULL;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
@@ -120,17 +114,18 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	e->destroy = st2ms_effect_destroy;
 	e->channel_deps = st2ms_effect_channel_deps;
 
-	state = calloc(1, sizeof(struct st2ms_state));
-	state->c0 = state->c1 = -1;
-	for (i = 0; i < istream->channels; ++i) {
-		if (GET_BIT(channel_selector, i)) {
-			if (state->c0 == -1)
-				state->c0 = i;
-			else
-				state->c1 = i;
-		}
+	struct st2ms_state *state = calloc(1, sizeof(struct st2ms_state));
+	if (check_alloc(ei->name, state)) {
+		free(e);
+		return NULL;
 	}
 	e->data = state;
-
+	state->c0 = state->c1 = -1;
+	for (int i = 0; i < istream->channels; ++i) {
+		if (GET_BIT(channel_selector, i)) {
+			if (state->c0 == -1) state->c0 = i;
+			else state->c1 = i;
+		}
+	}
 	return e;
 }
