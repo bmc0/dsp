@@ -77,7 +77,7 @@ void dsp_log_release(void);
 #define DSP_STATUSLINES
 #define DSP_STATUSLINE_MAX_LEN 256
 struct statusline_state {
-	struct statusline_state *next, *prev;
+	struct statusline_state *prev, *next;
 	char s[DSP_STATUSLINE_MAX_LEN];
 };
 

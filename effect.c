@@ -23,6 +23,7 @@
 #include <errno.h>
 #include "effect.h"
 #include "util.h"
+#include "list_util.h"
 
 #include "biquad.h"
 #include "gain.h"
@@ -103,12 +104,7 @@ void effect_list_append(struct effect *list, struct effect *e)
 
 void effects_chain_append(struct effects_chain *chain, struct effect *e)
 {
-	if (chain->tail == NULL)
-		chain->head = e;
-	else
-		chain->tail->next = e;
-	chain->tail = e;
-	e->next = NULL;
+	LIST_APPEND(chain, e);
 }
 
 static int build_effects_chain_block(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
@@ -326,11 +322,10 @@ static void effects_chain_optimize(struct effects_chain *chain)
 {
 #if DO_EFFECTS_CHAIN_OPTIMIZE
 	ssize_t chain_len = 0, chain_len_opt = 0;
-	for (struct effect *e = chain->head; e; e = e->next) ++chain_len;
+	LIST_FOREACH(chain, e) ++chain_len;
 	struct effect *m_dest = chain->head;
 	while (m_dest) {
 		if (m_dest->merge) {
-			struct effect *prev = m_dest;
 			struct effect *m_src = m_dest->next;
 			while (m_src) {
 				if (m_src->istream.fs != m_dest->istream.fs
@@ -344,21 +339,20 @@ static void effects_chain_optimize(struct effects_chain *chain)
 				}
 				if (m_dest->merge(m_dest, m_src)) {
 					/* LOG_FMT(LL_VERBOSE, "optimize: merged effect: %s <- %s", m_dest->name, m_src->name); */
-					struct effect *tmp = m_src->next;
-					destroy_effect(m_src);
-					if (tmp == NULL) chain->tail = prev;
-					prev->next = m_src = tmp;
+					struct effect *tmp = m_src;
+					m_src = m_src->next;
+					LIST_REMOVE(chain, tmp);
+					destroy_effect(tmp);
 				}
 				else {
 					skip:
-					prev = m_src;
 					m_src = m_src->next;
 				}
 			}
 		}
 		m_dest = m_dest->next;
 	}
-	for (struct effect *e = chain->head; e; e = e->next) ++chain_len_opt;
+	LIST_FOREACH(chain, e) ++chain_len_opt;
 	if (chain_len_opt < chain_len)
 		LOG_FMT(LL_VERBOSE, "optimize: info: reduced number of effects from %zd to %zd", chain_len, chain_len_opt);
 #else
@@ -374,7 +368,7 @@ struct effects_chain_postproc_state {
 
 static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
 {
-	for (struct effect *e = chain->head; e; e = e->next) {
+	LIST_FOREACH(chain, e) {
 		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
 		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
 	}
@@ -459,7 +453,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 		if (prev) {
 			/* align channels */
 			if (e->flags & EFFECT_FLAG_ALIGN_BARRIER) {
-				if (align_effect_insert(e, prev, offsets, NULL))
+				if (align_effect_insert(chain, prev, offsets, NULL))
 					goto fail;
 			}
 			else if (have_ch_deps) {
@@ -480,17 +474,17 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 					for (int i = 0; i < e->istream.channels; ++i)
 						if (GET_BIT(in_deps, i)) align_refs[i] = max_offset;
 				}
-				if (align_effect_insert(e, prev, offsets, align_refs))
+				if (align_effect_insert(chain, prev, offsets, align_refs))
 					goto fail;
 			}
 			else if (e->istream.fs != e->ostream.fs) {
 				LOG_FMT(LL_VERBOSE, "info: %s: sample rate changed; doing full alignment", e->name);
-				if (align_effect_insert(e, prev, offsets, NULL))
+				if (align_effect_insert(chain, prev, offsets, NULL))
 					goto fail;
 			}
 			else if (!is_passthrough) {
 				LOG_FMT(LL_VERBOSE, "warning: %s: channel deps unknown; doing full alignment", e->name);
-				if (align_effect_insert(e, prev, offsets, NULL))
+				if (align_effect_insert(chain, prev, offsets, NULL))
 					goto fail;
 			}
 		}
@@ -565,7 +559,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 		prev = e;
 		e = e->next;
 	}
-	if (prev && align_effect_insert(e, prev, offsets, NULL))
+	if (prev && align_effect_insert(chain, prev, offsets, NULL))
 		goto fail;
 
 	done:
@@ -582,7 +576,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 {
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
-	for (struct effect *e = chain->head; e; e = e->next) {
+	LIST_FOREACH(chain, e) {
 		if (query_channel_deps(state, chain, e)) {
 			ssize_t *tmp_samples = state->samples[1];
 			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
@@ -628,8 +622,10 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 
 static int effects_chain_prepare(struct effects_chain *chain)
 {
-	for (struct effect *e = chain->head; e; e = e->next)
-		if (e->prepare && e->prepare(e)) return 1;
+	LIST_FOREACH(chain, e) {
+		if (e->prepare && e->prepare(e))
+			return 1;
+	}
 	return 0;
 }
 
@@ -679,12 +675,10 @@ static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
 ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames, int in_channels)
 {
 	ssize_t frames = in_frames, len, max_len = in_frames * in_channels;
-	struct effect *e = chain->head;
-	while (e != NULL) {
+	LIST_FOREACH(chain, e) {
 		frames = effect_max_out_frames(e, frames);
 		len = frames * e->ostream.channels;
 		if (len  > max_len) max_len = len;
-		e = e->next;
 	}
 	return max_len;
 }
@@ -692,36 +686,28 @@ ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_fra
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *chain, ssize_t in_frames)
 {
 	ssize_t frames = in_frames;
-	struct effect *e = chain->head;
-	while (e != NULL) {
-		frames = effect_max_out_frames(e, frames);
-		e = e->next;
-	}
+	LIST_FOREACH(chain, e) frames = effect_max_out_frames(e, frames);
 	return frames;
 }
 
 int effects_chain_needs_dither(struct effects_chain *chain)
 {
-	struct effect *e = chain->head;
-	while (e != NULL) {
+	LIST_FOREACH(chain, e) {
 		if (!(e->flags & EFFECT_FLAG_NO_DITHER) && !effect_is_dither(e))
 			return 1;
-		e = e->next;
 	}
 	return 0;
 }
 
 int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int enabled)
 {
-	struct effect *e = chain->head;
 	int r = 1;
-	while (e != NULL) {
+	LIST_FOREACH(chain, e) {
 		if (effect_is_dither(e)) {
 			dither_effect_set_params(e, prec, enabled);
 			r = 0;
 		}
 		else if (!(e->flags & EFFECT_FLAG_NO_DITHER)) r = 1;
-		e = e->next;
 	}
 	return r && enabled;  /* note: non-zero return value means dither should be added */
 }
@@ -767,21 +753,15 @@ double get_effects_chain_delay(struct effects_chain *chain)
 
 void reset_effects_chain(struct effects_chain *chain)
 {
-	struct effect *e = chain->head;
-	while (e != NULL) {
+	LIST_FOREACH(chain, e)
 		if (e->reset != NULL) e->reset(e);
-		e = e->next;
-	}
 	chain->frames = 0;
 }
 
 void signal_effects_chain(struct effects_chain *chain)
 {
-	struct effect *e = chain->head;
-	while (e != NULL) {
+	LIST_FOREACH(chain, e)
 		if (e->signal != NULL) e->signal(e);
-		e = e->next;
-	}
 }
 
 static const char gnuplot_header[] =
@@ -907,13 +887,11 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sam
 
 void destroy_effects_chain(struct effects_chain *chain)
 {
-	struct effect *e;
-	while (chain->head != NULL) {
-		e = chain->head;
-		chain->head = e->next;
+	while (chain->head) {
+		struct effect *e = chain->head;
+		LIST_REMOVE(chain, e);
 		destroy_effect(e);
 	}
-	chain->tail = NULL;
 }
 
 void print_all_effects(void)
@@ -930,8 +908,8 @@ void print_effect_usage(const struct effect_info *ei)
 
 void effects_chain_xfade_reset(struct effects_chain_xfade_state *state)
 {
-	state->chain[0] = EFFECTS_CHAIN_INITIALIZER;
-	state->chain[1] = EFFECTS_CHAIN_INITIALIZER;
+	state->chain[0] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
+	state->chain[1] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 	state->pos = 0;
 	state->has_output = 0;
 }

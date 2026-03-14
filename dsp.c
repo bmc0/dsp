@@ -36,6 +36,7 @@
 #include "codec.h"
 #include "codec_buf.h"
 #include "util.h"
+#include "list_util.h"
 
 #define CHOOSE_INPUT_FS(x) \
 	(((x) == 0) ? (in_codecs.head == NULL || input_mode == INPUT_MODE_SEQUENCE) ? DEFAULT_FS : in_codecs.head->fs : (x))
@@ -188,7 +189,7 @@ static void statuslines_draw(int cr, int force)
 		const int w = term_size.cols - 1;
 		if (!cr && show_progress)
 			dsp_log_printf("\r%s\033[K\033[2C", trunc_line(progress_line, w));
-		for (struct statusline_state *line = status_list.head; line; line = line->next)
+		LIST_FOREACH(&status_list, line)
 			dsp_log_printf("\n%s\033[K", trunc_line(line->s, w));
 		dsp_log_putc((cr) ? '\r' : '\n');
 		if (cr) {
@@ -229,25 +230,13 @@ void dsp_statuslines_release(void)
 
 void dsp_statusline_register(struct statusline_state *line)
 {
-	if (status_list.head) {
-		line->prev = status_list.tail;
-		status_list.tail = line->prev->next = line;
-	}
-	else {
-		line->prev = NULL;
-		status_list.head = status_list.tail = line;
-	}
-	line->next = NULL;
+	LIST_APPEND(&status_list, line);
 	++status_list.len;
 }
 
 void dsp_statusline_unregister(struct statusline_state *line)
 {
-	if (line->next) line->next->prev = line->prev;
-	else            status_list.tail = line->prev;
-	if (line->prev) line->prev->next = line->next;
-	else            status_list.head = line->next;
-	line->next = line->prev = NULL;
+	LIST_REMOVE(&status_list, line);
 	pthread_mutex_lock(&log_lock);
 	if (!status_cleared)  /* clear last line */
 		dsp_log_printf("\033[%dB\033[2K\033[%dA", status_list.len, status_list.len);

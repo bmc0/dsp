@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -41,7 +41,7 @@ enum {
 };
 
 struct codec {
-	struct codec *next;
+	struct codec *prev, *next;
 	const char *path, *type, *enc;
 	int fs, channels, prec, hints, buf_ratio;
 	ssize_t frames;
@@ -56,11 +56,10 @@ struct codec {
 };
 
 struct codec_list {
-	struct codec *head;
-	struct codec *tail;
+	struct codec *head, *tail;
 };
 
-#define CODEC_LIST_INITIALIZER ((struct codec_list) { NULL, NULL })
+#define CODEC_LIST_INITIALIZER {0}
 
 struct codec_params {
 	const char *path, *type, *enc;

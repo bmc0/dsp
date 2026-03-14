@@ -20,6 +20,7 @@
 #include <string.h>
 #include "align.h"
 #include "util.h"
+#include "list_util.h"
 
 struct align_channel_state {
 	sample_t *buf;
@@ -95,10 +96,10 @@ void align_effect_destroy(struct effect *e)
 	free(state);
 }
 
-int align_effect_insert(struct effect *next, struct effect *prev, ssize_t *offsets, ssize_t *align_refs)
+int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_t *offsets, ssize_t *align_refs)
 {
 	int do_align = 0;
-	const char *next_name = (next) ? next->name : "[end of chain]";
+	const char *next_name = (prev->next) ? prev->next->name : "[end of chain]";
 	if (align_refs) {
 		for (int k = 0; k < prev->ostream.channels; ++k)
 			if (offsets[k] != align_refs[k]) { do_align = 1; break; }
@@ -151,7 +152,6 @@ int align_effect_insert(struct effect *next, struct effect *prev, ssize_t *offse
 	}
 	state->frames = -state->discard_frames;
 
-	prev->next = e;
-	e->next = next;
+	LIST_INSERT(chain, e, prev);
 	return 0;
 }

@@ -26,15 +26,12 @@
 #include <pthread.h>
 #include "watch.h"
 #include "util.h"
+#include "list_util.h"
 
 #define POLL_INTERVAL 1000  /* milliseconds */
 
-struct watch_list {
-	struct watch_node *head, *tail;
-};
-
 struct watch_node {
-	struct watch_node *next;
+	struct watch_node *prev, *next;
 	struct timespec last_mtime;
 	pthread_mutex_t lock;
 	char *path, *channel_mask;
@@ -43,6 +40,10 @@ struct watch_node {
 	struct effects_chain_xfade_state xfade;
 	ssize_t in_frames, buf_len;
 	int update_chain, enforce_eof_marker;
+};
+
+struct watch_list {
+	struct watch_node *head, *tail;
 };
 
 static struct {
@@ -54,29 +55,6 @@ static struct {
 	.init_lock = PTHREAD_MUTEX_INITIALIZER,
 	.lock = PTHREAD_MUTEX_INITIALIZER,
 };
-
-static void watch_list_append(struct watch_list *list, struct watch_node *node)
-{
-	if (list->tail == NULL) list->head = node;
-	else list->tail->next = node;
-	list->tail = node;
-	node->next = NULL;
-}
-
-static void watch_list_remove(struct watch_list *list, struct watch_node *node)
-{
-	if (node == list->head) {
-		if (node == list->tail)
-			list->head = list->tail = NULL;
-		else list->head = node->next;
-	}
-	else {
-		struct watch_node *prev = list->head;
-		while (prev->next != node) prev = prev->next;
-		if (node == list->tail) list->tail = prev;
-		prev->next = node->next;
-	}
-}
 
 static void watch_reload(struct watch_node *node)
 {
@@ -126,7 +104,7 @@ static void * watch_worker(void *arg)
 		struct watch_list reload_list = watch_state.list;
 		watch_state.list.tail = watch_state.list.head = NULL;
 		pthread_mutex_unlock(&watch_state.lock);
-		for (struct watch_node *node = reload_list.head; node; node = node->next) {
+		LIST_FOREACH(&reload_list, node) {
 			struct stat sb;
 			if (stat(node->path, &sb) < 0)
 				LOG_FMT(LL_VERBOSE, "%s: warning: stat() failed: %s: %s", node->e->name, node->path, strerror(errno));
@@ -136,11 +114,7 @@ static void * watch_worker(void *arg)
 			}
 		}
 		pthread_mutex_lock(&watch_state.lock);
-		if (watch_state.list.tail == NULL) watch_state.list = reload_list;
-		else {
-			watch_state.list.tail->next = reload_list.head;
-			watch_state.list.tail = reload_list.tail;
-		}
+		LIST_CONCAT(&watch_state.list, &reload_list);
 		pthread_mutex_unlock(&watch_state.lock);
 		pthread_setcancelstate(old_cs, &old_cs);
 	}
@@ -164,7 +138,7 @@ sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 		node->xfade.pos = node->xfade.frames;
 		if (node->buf_len == 0 || node->xfade.pos == 0)
 			watch_finish_xfade(node);  /* no crossfade */
-		node->new_chain = EFFECTS_CHAIN_INITIALIZER;
+		node->new_chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 		node->update_chain = 0;
 	}
 	pthread_mutex_unlock(&node->lock);
@@ -222,7 +196,7 @@ void watch_effect_destroy(struct effect *e)
 	struct watch_node *node = (struct watch_node *) e->data;
 
 	pthread_mutex_lock(&watch_state.lock);
-	watch_list_remove(&watch_state.list, node);
+	LIST_REMOVE(&watch_state.list, node);
 	pthread_mutex_unlock(&watch_state.lock);
 
 	watch_node_destroy(node);
@@ -300,7 +274,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	COPY_SELECTOR(node->channel_mask, channel_selector, istream->channels);
 	node->chain = chain;
 	node->enforce_eof_marker = enforce_eof_marker;
-	node->xfade = EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
+	node->xfade = (struct effects_chain_xfade_state) EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
 	node->xfade.istream = *istream;
 	node->xfade.ostream = stream;
 	node->xfade.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
@@ -336,7 +310,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	++watch_state.init_count;
 	pthread_mutex_unlock(&watch_state.init_lock);
 	pthread_mutex_lock(&watch_state.lock);
-	watch_list_append(&watch_state.list, node);
+	LIST_APPEND(&watch_state.list, node);
 	pthread_mutex_unlock(&watch_state.lock);
 
 	return e;

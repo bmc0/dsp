@@ -38,7 +38,7 @@ enum {
 };
 
 struct effect {
-	struct effect *next;
+	struct effect *prev, *next;
 	const char *name;
 	struct stream_info istream, ostream;
 	char *channel_selector;  /* for use *only* by the effect */
@@ -61,13 +61,11 @@ struct effect {
 };
 
 struct effects_chain {
-	struct effect *head;
-	struct effect *tail;
+	struct effect *head, *tail;
 	ssize_t frames, drain_frames, delay_offset;
 };
 
-#define EFFECTS_CHAIN_INITIALIZER_BARE { NULL, NULL, 0, 0 }  /* needed for GCC 12 and earlier */
-#define EFFECTS_CHAIN_INITIALIZER ((struct effects_chain) EFFECTS_CHAIN_INITIALIZER_BARE)
+#define EFFECTS_CHAIN_INITIALIZER {0}
 #define IS_EFFECTS_CHAIN_START(x) ( \
 	get_effect_info(x) != NULL \
 	|| (x)[0] == ':' \
@@ -107,10 +105,10 @@ struct effects_chain_xfade_state {
 };
 
 #define EFFECTS_CHAIN_XFADE_TIME 100  /* milliseconds */
-#define EFFECTS_CHAIN_XFADE_STATE_INITIALIZER ((struct effects_chain_xfade_state) { \
-	.chain[0] = EFFECTS_CHAIN_INITIALIZER_BARE, \
-	.chain[1] = EFFECTS_CHAIN_INITIALIZER_BARE, \
-})
+#define EFFECTS_CHAIN_XFADE_STATE_INITIALIZER { \
+	.chain[0] = EFFECTS_CHAIN_INITIALIZER, \
+	.chain[1] = EFFECTS_CHAIN_INITIALIZER, \
+}
 
 void effects_chain_xfade_reset(struct effects_chain_xfade_state *);
 sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *, ssize_t *, sample_t *, sample_t *);

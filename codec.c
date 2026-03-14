@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,8 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util.h"
 #include "codec.h"
+#include "util.h"
+#include "list_util.h"
 
 #include "null.h"
 #include "sgen.h"
@@ -238,27 +239,19 @@ void destroy_codec(struct codec *c)
 
 void append_codec(struct codec_list *l, struct codec *c)
 {
-	if (l->tail == NULL)
-		l->head = c;
-	else
-		l->tail->next = c;
-	l->tail = c;
-	c->next = NULL;
+	LIST_APPEND(l, c);
 }
 
 void destroy_codec_list_head(struct codec_list *l)
 {
-	struct codec *h = l->head;
-	if (h == NULL)
-		return;
-	l->head = h->next;
-	destroy_codec(h);
+	struct codec *c = l->head;
+	LIST_REMOVE(l, c);
+	destroy_codec(c);
 }
 
 void destroy_codec_list(struct codec_list *l)
 {
-	while (l->head != NULL)
-		destroy_codec_list_head(l);
+	while (l->head) destroy_codec_list_head(l);
 }
 
 void print_all_codecs(void)

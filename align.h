@@ -22,6 +22,6 @@
 #include "dsp.h"
 #include "effect.h"
 
-int align_effect_insert(struct effect *, struct effect *, ssize_t *, ssize_t *);
+int align_effect_insert(struct effects_chain *, struct effect *, ssize_t *, ssize_t *);
 
 #endif
