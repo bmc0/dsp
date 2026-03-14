@@ -97,19 +97,21 @@ void align_effect_destroy(struct effect *e)
 
 int align_effect_insert(struct effect *next, struct effect *prev, ssize_t *offsets, ssize_t *align_refs)
 {
+	int do_align = 0;
 	const char *next_name = (next) ? next->name : "[end of chain]";
 	if (align_refs) {
 		for (int k = 0; k < prev->ostream.channels; ++k)
-			if (offsets[k] != align_refs[k]) goto do_align;
+			if (offsets[k] != align_refs[k]) { do_align = 1; break; }
 	}
 	else {
 		for (int k = 0; k < prev->ostream.channels; ++k)
-			if (offsets[k] != 0) goto do_align;
+			if (offsets[k] != 0) { do_align = 1; break; }
 	}
-	LOG_FMT(LL_VERBOSE, "info: no alignment needed: %s", next_name);
-	return 0;
+	if (!do_align) {
+		LOG_FMT(LL_VERBOSE, "info: no alignment needed: %s", next_name);
+		return 0;
+	}
 
-	do_align:
 	struct effect *e = calloc(1, sizeof(struct effect));
 	e->name = "align";
 	e->istream.fs = e->ostream.fs = prev->ostream.fs;

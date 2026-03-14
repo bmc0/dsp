@@ -309,7 +309,7 @@ static void riir_expand_pq(const qroots *pq, enum riir_pq_type type, double r[2]
 	case RIIR_PQ_TYPE_1R:
 		r[0] = -pq->r[0];
 		break;
-	case RIIR_PQ_TYPE_NONE:
+	case RIIR_PQ_TYPE_NONE: break;
 	}
 }
 
@@ -322,7 +322,7 @@ static double complex riir_eval_pq(const qroots *pq, enum riir_pq_type type, int
 		return (z-pq->r[(i)?1:0])/z;
 	case RIIR_PQ_TYPE_1R:
 		return (i)?1.0:(z-pq->r[0])/z;
-	case RIIR_PQ_TYPE_NONE:
+	case RIIR_PQ_TYPE_NONE: break;
 	}
 	return 1.0;
 }
@@ -340,7 +340,7 @@ static int riir_pq_close(const qroots *pq0, enum riir_pq_type t0, const qroots *
 		case RIIR_PQ_TYPE_1R:
 			if (cabs(riir_eval_pq(pq0, t0, i, pq1->r[0])) < RIIR_POLE_CMP_TOL) return 1;
 			break;
-		case RIIR_PQ_TYPE_NONE:
+		case RIIR_PQ_TYPE_NONE: break;
 		}
 	}
 	return 0;
@@ -352,7 +352,7 @@ static double riir_pq_max_abs(const qroots *pq, enum riir_pq_type type)
 	case RIIR_PQ_TYPE_CC: return cabs(pq->c);
 	case RIIR_PQ_TYPE_2R: return MAXIMUM(fabs(pq->r[0]), fabs(pq->r[1]));
 	case RIIR_PQ_TYPE_1R: return fabs(pq->r[0]);
-	case RIIR_PQ_TYPE_NONE:
+	case RIIR_PQ_TYPE_NONE: break;
 	}
 	return 0.0;
 }
@@ -437,7 +437,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 				++cs->n_real;
 				p0N = RIIR_POLE_MIN_STAGES(sec->thresh, fabs(sec->p.r[0]));
 				break;
-			case RIIR_PQ_TYPE_NONE: /* no poles */
+			case RIIR_PQ_TYPE_NONE: break; /* no poles */
 			}
 			cs->N = MAXIMUM(cs->N, MAXIMUM(p0N, p1N));
 		}
@@ -507,7 +507,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 				case RIIR_PQ_TYPE_CC: sec_sum += 2.0*creal(sec->res.c); break;
 				case RIIR_PQ_TYPE_2R: sec_sum += sec->res.r[1]; /* fallthrough */
 				case RIIR_PQ_TYPE_1R: sec_sum += sec->res.r[0]; break;
-				case RIIR_PQ_TYPE_NONE: /* does not contribute */
+				case RIIR_PQ_TYPE_NONE: break; /* does not contribute */
 				}
 				if (fabs(sec_sum) < fabs(min_sum)) {
 					min_sum = sec_sum;
@@ -659,9 +659,8 @@ static int calc_qroots(double b, double c, qroots *r_roots)
 		return 1;
 	}
 	force_real:
-	const double sd = sqrt(MAXIMUM(d, 0.0));
-	r_roots->r[0] = (sd-b)/2.0;
-	r_roots->r[1] = (-sd-b)/2.0;
+	r_roots->r[0] = (sqrt(MAXIMUM(d, 0.0))-b)/2.0;
+	r_roots->r[1] = (-sqrt(MAXIMUM(d, 0.0))-b)/2.0;
 	return 0;
 }
 

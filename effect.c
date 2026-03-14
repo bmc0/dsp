@@ -422,13 +422,13 @@ static void find_input_deps(int ch, char **ch_deps, int n_in, int n_out, char *r
 	SET_BIT(r_deps, ch);
 	restart:
 	for (int i = 0; i < n_out; ++i) {
+		int mod = 0;
 		for (int k = 0; k < n_in; ++k) {
 			if (GET_BIT(r_deps, k) && GET_BIT(ch_deps[i], k))
 				goto has_dep;
 		}
 		continue;
 		has_dep:
-		int mod = 0;
 		for (int k = 0; k < n_in; ++k) {
 			if (GET_BIT(r_deps, k)) continue;
 			if (GET_BIT(ch_deps[i], k)) {
