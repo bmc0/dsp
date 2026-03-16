@@ -256,18 +256,23 @@ Options are given as a comma-separated list. Recognized options are:
 show_status[=\fIbars\fR|\fItext\fR|\fInone\fR]
 Show real-time steering information.
 .TP
-matrix=\fIv1\fR|\fIv2\fR|\fIv3\fR
+matrix=\fIv1\fR|\fIv4\fR[:\fIparam\fR]|\fIv2\fR|\fIv3\fR
 Controls steering behavior for rear-encoded sounds. \fIv1\fR does not
-remove anything from the front outputs. \fIv2\fR adds full steering of
-sounds encoded to \-45° in the C/S axis and restores full lateral
-separation of sounds encoded from 0° to \-22.5° in the C/S axis in all
-four outputs. \fIv3\fR adds full steering of sounds encoded to the left and
-right surround positions (L/R=±22.5° C/S=\-22.5°). The default is \fIv3\fR.
+remove anything from the front outputs. \fIv4\fR fully steers sounds
+encoded full rear (C/S=\-45°) and restores lateral separation of sounds
+encoded along the C/S axis from 0° to \-45° in the front outputs and
+from 0° to \-22.5° in the surround outputs. Steering of sounds encoded
+to the left and right surround positions (L/R=±22.5° C/S=-22.5°) is
+adjustable via \fIparam\fR. The default value of 0.5 gives approximately
+12dB front/surround separation. \fIv2\fR and \fIv3\fR are retained for
+backwards compatability and are the same as \fIv4\fR with \fIparam\fR set to 0
+(4.8dB separation) or 1 (full separation), respectively. The default
+matrix is \fIv4\fR.
 .TP
-shelf=\fIgain\fR|\fInone\fR[:\fIf0\fR[\fBk\fR]]
+shelf=\fIgain\fR[:\fIf0\fR[\fBk\fR]]|\fInone\fR
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to
-\-22.5°. The default values are \-3dB and 500Hz, respectively.
+\-22.5°. The default values are \-3dB and 500Hz.
 .TP
 lowpass=\fIf0\fR[\fBk\fR]|\fInone\fR
 Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR

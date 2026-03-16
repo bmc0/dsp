@@ -111,7 +111,7 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double surr_mult[2], contour_pwrcmp, freq_mask;
+	double cmc_param, surr_mult[2], contour_pwrcmp, freq_mask;
 	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
 	ssize_t fade_frames, fade_p;
 #ifdef DSP_STATUSLINES
@@ -419,7 +419,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				const double ct2 = ct0/ct1;
 
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, 1, &m, NULL, 0);
+				state->calc_matrix_coefs(&band->ax, surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, state->cmc_param, 1, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -618,6 +618,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->status_type = config.status_type;
 	state->do_phase_flip = (config.do_phase_flip != 0);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
+	state->cmc_param = config.calc_matrix_coefs_param;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 
 	phase_flip_init_params(&state->pf_params, istream->fs);

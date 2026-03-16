@@ -259,17 +259,22 @@ Example:
 
 	* `show_status[=bars|text|none]`  
 		Show real-time steering information.
-	* `matrix=v1|v2|v3`  
+	* `matrix=v1|v4[:param]|v2|v3`  
 		Controls steering behavior for rear-encoded sounds. `v1` does not
-		remove anything from the front outputs. `v2` adds full steering of
-		sounds encoded to -45° in the C/S axis and restores full lateral
-		separation of sounds encoded from 0° to -22.5° in the C/S axis in all
-		four outputs. `v3` adds full steering of sounds encoded to the left and
-		right surround positions (L/R=±22.5° C/S=-22.5°). The default is `v3`.
-	* `shelf=gain|none[:f0[k]]`  
+		remove anything from the front outputs. `v4` fully steers sounds
+		encoded full rear (C/S=-45°) and restores lateral separation of sounds
+		encoded along the C/S axis from 0° to -45° in the front outputs and
+		from 0° to -22.5° in the surround outputs. Steering of sounds encoded
+		to the left and right surround positions (L/R=±22.5° C/S=-22.5°) is
+		adjustable via `param`. The default value of 0.5 gives approximately
+		12dB front/surround separation. `v2` and `v3` are retained for
+		backwards compatability and are the same as `v4` with `param` set to 0
+		(4.8dB separation) or 1 (full separation), respectively. The default
+		matrix is `v4`.
+	* `shelf=gain[:f0[k]]|none`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
-		-22.5°. The default values are -3dB and 500Hz, respectively.
+		-22.5°. The default values are -3dB and 500Hz.
 	* `lowpass=f0[k]|none`  
 		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
 		in surround outputs. Active when C/S is positive and gradually removed

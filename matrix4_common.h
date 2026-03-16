@@ -55,11 +55,11 @@
 #define PWRCMP_FALL_TIME     15.0
 #define PWRCMP_FACTOR_SENS    0.2
 
-#define MATRIX_ID_DEFAULT          v3
-#define SURR_MULT_DEFAULT          0.7071
+#define MATRIX_V4_PARAM_DEFAULT    0.5
+#define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
 #define SURR_DELAY_DEFAULT        15.0
-#define SHELF_MULT_DEFAULT         0.7071
+#define SHELF_MULT_DEFAULT         M_SQRT1_2
 #define SHELF_F0_DEFAULT         500.0
 #define CONTOUR_PWRCMP_DEFAULT     1.0
 #define CONTOUR_PWRCMP_MB_DEFAULT  1.0
@@ -166,7 +166,7 @@ union cmc_shelf_mult {
 	double arg;
 	struct { double front, surr; } ret;
 };
-typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip;
@@ -175,6 +175,7 @@ struct matrix4_config {
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
+	double calc_matrix_coefs_param;
 };
 
 struct phase_flip_params {

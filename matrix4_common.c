@@ -24,9 +24,8 @@
 #include "matrix4_common.h"
 #include "delay.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
-void calc_matrix_coefs_v2(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
-void calc_matrix_coefs_v3(const struct axes *, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v1(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v4(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -91,11 +90,11 @@ int get_args_and_channels(const struct effect_info *ei, const struct stream_info
 	return 0;
 }
 
-static int is_opt(const char *opt, const char *name)
+static int optcmp(const char *opt, const char *name, char sep)
 {
 	size_t len = strlen(name);
-	if (len > 1 && name[len-1] == '=')
-		return (strncmp(opt, name, len-1) == 0 && (opt[len-1] == '\0' || opt[len-1] == '='));
+	if (len > 1 && name[len-1] == sep)
+		return (strncmp(opt, name, len-1) == 0 && (opt[len-1] == '\0' || opt[len-1] == sep));
 	return (strcmp(opt, name) == 0);
 }
 
@@ -118,6 +117,8 @@ static void set_fb_stop_default(struct matrix4_config *config)
 	}
 }
 
+#define is_opt(opt, name)     optcmp(opt, name, '=')
+#define is_opt_arg(opt, name) optcmp(opt, name, ':')
 #define HANDLE_BOOLEAN_ARG(s) \
 	do { \
 		char *opt_arg = isolate(opt, '='); \
@@ -128,9 +129,6 @@ static void set_fb_stop_default(struct matrix4_config *config)
 			goto fail; \
 		} \
 	} while (0)
-#define CONCAT(a, b) a ## b
-#define GET_MATRIX_FUNC(id) CONCAT(calc_matrix_coefs_, id)
-
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
@@ -144,7 +142,8 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->freq_mask = FREQ_MASK_DEFAULT;
-	config->calc_matrix_coefs = GET_MATRIX_FUNC(MATRIX_ID_DEFAULT);
+	config->calc_matrix_coefs = calc_matrix_coefs_v4;
+	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
 	if (config->opt_str_idx > 0) {
 		opt_str = strdup(argv[config->opt_str_idx]);
 		char *opt = opt_str, *next_opt, *endptr;
@@ -167,12 +166,27 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			else if (is_opt(opt, "matrix=")) {
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;
-				if (strcmp(opt_arg, "v1") == 0)
+				if (is_opt_arg(opt_arg, "v1"))
 					config->calc_matrix_coefs = calc_matrix_coefs_v1;
-				else if (strcmp(opt_arg, "v2") == 0)
-					config->calc_matrix_coefs = calc_matrix_coefs_v2;
-				else if (strcmp(opt_arg, "v3") == 0)
-					config->calc_matrix_coefs = calc_matrix_coefs_v3;
+				else if (is_opt_arg(opt_arg, "v2")) {
+					config->calc_matrix_coefs = calc_matrix_coefs_v4;
+					config->calc_matrix_coefs_param = 0.0;
+				}
+				else if (is_opt_arg(opt_arg, "v3")) {
+					config->calc_matrix_coefs = calc_matrix_coefs_v4;
+					config->calc_matrix_coefs_param = 1.0;
+				}
+				else if (is_opt_arg(opt_arg, "v4:")) {
+					config->calc_matrix_coefs = calc_matrix_coefs_v4;
+					config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
+					char *opt_subarg = isolate(opt_arg, ':');
+					if (*opt_subarg != '\0') {
+						const double param = strtod(opt_subarg, &endptr);
+						CHECK_ENDPTR(opt_subarg, endptr, "matrix: v4: param", goto fail);
+						CHECK_RANGE(param >= 0.0 && param <= 1.0, "matrix: v4: param", goto fail);
+						config->calc_matrix_coefs_param = param;
+					}
+				}
 				else {
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
 					goto fail;
@@ -238,22 +252,21 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				char *opt_arg = isolate(opt, '=');
 				if (!is_mb) goto mb_only;
 				if (*opt_arg == '\0') goto needs_arg;
-				char *opt_subarg = isolate(opt_arg, ':');
-				if (strcmp(opt_arg, "butterworth") == 0)
+				if (is_opt_arg(opt_arg, "butterworth"))
 					config->fb_type = FILTER_BANK_TYPE_BUTTERWORTH;
-				else if (strcmp(opt_arg, "chebyshev1") == 0)
+				else if (is_opt_arg(opt_arg, "chebyshev1:"))
 					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV1;
-				else if (strcmp(opt_arg, "chebyshev2") == 0)
+				else if (is_opt_arg(opt_arg, "chebyshev2:"))
 					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV2;
-				else if (strcmp(opt_arg, "elliptic") == 0)
+				else if (is_opt_arg(opt_arg, "elliptic:"))
 					config->fb_type = FILTER_BANK_TYPE_ELLIPTIC;
 				else {
 					LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", argv[0], opt_arg);
 					goto fail;
 				}
 				set_fb_stop_default(config);
+				char *opt_subarg = isolate(opt_arg, ':'), *opt_subarg1;
 				if (*opt_subarg != '\0') {
-					char *opt_subarg1 = isolate(opt_subarg, ':');
 					switch (config->fb_type) {
 					case FILTER_BANK_TYPE_CHEBYSHEV1:
 					case FILTER_BANK_TYPE_CHEBYSHEV2:
@@ -263,10 +276,9 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
 							goto fail;
 						}
-						if (*opt_subarg1 != '\0')
-							LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg1);
 						break;
 					case FILTER_BANK_TYPE_ELLIPTIC:
+						opt_subarg1 = isolate(opt_subarg, ':');
 						config->fb_stop[0] = strtod(opt_subarg, &endptr);
 						CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto fail);
 						if (*opt_subarg1 != '\0') {
@@ -279,8 +291,8 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 							goto fail;
 						}
 						break;
-					default:
-						LOG_FMT(LL_ERROR, "%s: warning: %s: ignoring argument: %s", argv[0], opt_arg, opt_subarg);
+					case FILTER_BANK_TYPE_BUTTERWORTH:
+						break; /* no params */
 					}
 				}
 			}
@@ -592,7 +604,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_rear, double param_adj, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -691,150 +703,11 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
 #define SURR_PDC_FACTOR_SB 0.5
 
 /*
- * Full steering of rear-encoded sounds and full left/right separation from
- * cs=0° to cs=-22.5°, but only partial steering of left-/right-surround-
+ * Full steering of rear-encoded sounds, full left/right separation from
+ * cs=0° to cs=-22.5°, and adjustable steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v2(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
-{
-	const double lr = ax->lr, cs = ax->cs;
-	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
-
-	/* initial surround elements */
-	m->rsr = m->lsl = 1.0;
-	m->rsl = m->lsr = 0.0;
-	const double gl = 1.0+tan(abs_lr-M_PI_4);
-	if (lr > 0.0) {
-		m->lsl -= gl*gl;
-		m->lsr -= gl;
-	}
-	else if (lr < 0.0) {
-		m->rsl -= gl;
-		m->rsr -= gl*gl;
-	}
-	if (cs > 0.0) {
-		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr -= gc_2;
-		m->rsl -= gc_2;
-		m->rsr -= gc_2;
-	}
-	else if (cs < 0.0) {
-		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
-		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr += gc_2;
-		m->rsl += gc_2;
-		m->rsr -= gc_2;
-	}
-
-	/* power correction for uncorrelated input */
-	const double pu_sl = pwr_sum(m->lsl, m->lsr);
-	m->lsl /= pu_sl;
-	m->lsr /= pu_sl;
-	const double pu_sr = pwr_sum(m->rsl, m->rsr);
-	m->rsl /= pu_sr;
-	m->rsr /= pu_sr;
-
-	if (cs >= 0.0) {
-		m->ll = 1.0;
-		m->lr = 0.0;
-	}
-	else {
-		/* initial front elements */
-		const double cf_sm2 = square(MINIMUM(surr_mult_rear, 1.0));
-		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
-		const double front_gc_2 = (0.5+0.5*tan(abs_cs-M_PI_4))*cf;
-		m->ll = 1.0 - front_gc_2;
-		m->lr = front_gc_2;
-
-		/* power correction for uncorrelated input */
-		const double pu_fl = pwr_sum(m->ll, m->lr);
-		m->ll /= pu_fl;
-		m->lr /= pu_fl;
-	}
-
-	/* input phasors for given lr, cs */
-	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
-	double sin_theta, cos_theta;
-	if (abs_lr+abs_cs < M_PI_4) {
-		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
-		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
-		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
-		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
-	}
-	else {
-		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
-		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
-	}
-	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
-	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
-
-	/* level for directional input */
-	const double gd_fl2 = square(m->ll*l_real + m->lr*r_real) + square(m->ll*l_imag + m->lr*r_imag);
-	const double gd_fr2 = square(m->lr*l_real + m->ll*r_real) + square(m->lr*l_imag + m->ll*r_imag);
-	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
-	const double gd_sr2 = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
-
-	/* power for directional input */
-	const double pd_f = gd_fl2 + gd_fr2;
-	const double pd_s = gd_sl2 + gd_sr2;
-
-	/* weighted directional power */
-	double pd_f_wf = pd_f, pd_s_wf = pd_s;
-	double pd_f_ws = 1.0, pd_s_ws = 1.0;
-	if (cs < 0.0) {
-		if (abs_cs < abs_lr) {
-			const double lr2 = square(lr), cs2 = square(cs);
-			const double wf = (lr2+cs2 > DBL_MIN) ? square((lr2-cs2)/(lr2+cs2)) : 0.0;
-			pd_f_wf = (pd_f-1.0)*wf+1.0;
-			pd_s_wf = (pd_s-1.0)*wf+1.0;
-			pd_f_ws = (pd_f-1.0)*(1.0-wf)+1.0;
-			pd_s_ws = (pd_s-1.0)*(1.0-wf)+1.0;
-		}
-		else {
-			pd_s_wf = pd_f_wf = 1.0;
-			pd_f_ws = pd_f;
-			pd_s_ws = pd_s;
-		}
-	}
-	if (!is_mb) pd_s_ws = (pd_s_ws-1.0)*SURR_PDC_FACTOR_SB+1.0;
-
-	/* directional power correction and normalization */
-	const double surr_mult2 = square(surr_mult);
-	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
-	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
-	const double pdc_all2 = (is_mb) ? 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2) : 1.0;
-	const double pdc_f = sqrt(pdc_fi2*pdc_all2);
-	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
-
-	if (r_shelf_mult) {
-		for (int i = 0; i < n_shelf_mult; ++i) {
-			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
-			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
-			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
-			const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
-			r_shelf_mult[i].ret.front = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
-			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
-		}
-	}
-
-	m->ll *= pdc_f;
-	m->lr *= pdc_f;
-	m->rr = m->ll;
-	m->rl = m->lr;
-	m->lsl *= pdc_s;
-	m->lsr *= pdc_s;
-	m->rsl *= pdc_s;
-	m->rsr *= pdc_s;
-}
-
-/*
- * Like v2, but with full steering of left-/right-surround-encoded sounds.
-*/
-void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_mult_rear, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_mult_rear, double param_adj, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -883,7 +756,7 @@ void calc_matrix_coefs_v3(const struct axes *ax, double surr_mult, double surr_m
 		/* initial front elements */
 		const double front_gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
 		const double front_cs = (cs > -M_PI_4/2) ? 4.0*abs_cs : M_PI_2;
-		const double front_lr_mult = (abs_lr <= M_PI_4/2) ? 1.0 : 1.0+cos(4.0*abs_lr);
+		const double front_lr_mult = ((abs_lr <= M_PI_4/2) ? 1.0 : 1.0+cos(4.0*abs_lr)) * param_adj;
 		m->rr = m->ll = -front_gc_2;
 		m->rl = m->lr = front_gc_2;
 		if (lr > 0.0) {
