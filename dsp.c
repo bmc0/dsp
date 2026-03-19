@@ -918,6 +918,7 @@ int main(int argc, char *argv[])
 			SET_DITHER(&chain);
 			print_io_info(in_codecs.head, LL_NORMAL, "input");
 			update_progress(in_codecs.head, pos, is_paused, 1);
+			status_ctrl(STATUS_CTRL_DRAW);
 			do {
 				struct event ev;
 				while (ev_queue_pop(is_paused, &ev) == 0) {
