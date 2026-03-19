@@ -112,11 +112,12 @@ generate impulses and exponential sine sweeps. The syntax for the \fIpath\fR
 argument is as follows:
 .PP
 .RS
-[\fItype\fR[@\fIchannel_selector\fR][:\fIarg\fR[=\fIvalue\fR]...]][/\fItype\fR...][+\fIlen\fR[\fBs\fR|\fBm\fR|\fBS\fR]]
+[\fItype\fR[@\fIchannel_selector\fR][:\fIarg\fR[=\fIvalue\fR]...]][/\fItype\fR...][+\fIlength\fR]
 .RE
 .PP
 \fItype\fR may be `sine' for sine sweeps or tones, or `delta' for a delta function
-(impulse). `sine' accepts the following arguments:
+(impulse). \fIlength\fR is a timespec (see ``Timespec syntax''). `sine' accepts the
+following arguments:
 .TP
 \fBfreq\fR=\fIf0\fR[\fBk\fR][\-\fIf1\fR[\fBk\fR]]
 Frequency. If \fIlen\fR is set and \fIf1\fR is given, an exponential sine sweep

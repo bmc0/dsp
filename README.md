@@ -141,10 +141,11 @@ The `sgen` input type is a basic (for now, at least) signal generator that can
 generate impulses and exponential sine sweeps. The syntax for the `path`
 argument is as follows:
 
-	[type[@channel_selector][:arg[=value]...]][/type...][+len[s|m|S]]
+	[type[@channel_selector][:arg[=value]...]][/type...][+length]
 
 `type` may be `sine` for sine sweeps or tones, or `delta` for a delta function
-(impulse). `sine` accepts the following arguments:
+(impulse). `length` is a timespec (see "Timespec syntax"). `sine` accepts the
+following arguments:
 
 * `freq=f0[k][-f1[k]]`
 	Frequency. If `len` is set and `f1` is given, an exponential sine sweep

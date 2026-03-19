@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2018-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2018-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -212,7 +212,7 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 	args = arg = strdup(p->path);
 	len_str = isolate(arg, '+');
 	if (*len_str != '\0') {
-		c->frames = parse_len(len_str, p->fs, &endptr);
+		c->frames = parse_timespec(len_str, p->fs, &endptr);
 		if (check_endptr(p->type, len_str, endptr, "length"))
 			goto fail;
 		if (c->frames <= 0) {
