@@ -65,6 +65,7 @@
 #define CONTOUR_PWRCMP_MB_DEFAULT  1.0
 #define LOWPASS_F0_DEFAULT      6000.0
 #define DO_PHASE_FLIP_DEFAULT      1
+#define DO_DIRECT_PATH_DEFAULT     0
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 #define FREQ_MASK_DEFAULT        0.0
@@ -169,7 +170,7 @@ union cmc_shelf_mult {
 typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
-	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip;
+	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, fb_stop[2], freq_mask;
 	ssize_t surr_delay_frames;
 	enum status_type status_type;
@@ -293,6 +294,22 @@ static inline double phase_flip_pos_rs(struct axes *ax)
 static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, double pos)
 {
 	return exp(pos*(pf->c[1]-pf->c[0])+pf->c[0])-1.0;
+}
+
+static inline void surr_direct_pan(struct axes *ax, double r[2])
+{
+	if (ax->cs >= 0.0) {
+		r[0] = 1.0;
+		r[1] = 0.0;
+	}
+	else {
+		double x = fabs(ax->lr), y = ax->cs+(M_PI_4/2);
+		if (ax->cs > -M_PI_4/2) y *= 2.0;
+		double z = MAXIMUM(x-y, 0.0)*6.0;
+		z = MINIMUM(z, M_PI_2);
+		r[0] = cos(z);
+		r[1] = sin(z);
+	}
 }
 
 #if DOWNSAMPLE_FACTOR > 1

@@ -299,6 +299,11 @@ Example:
 		default is `true`.
 	* `signal[=true|false]`  
 		Toggle the effect when `effect.signal()` is called.
+	* `direct_path[=true|false]`  
+		Redirect strongly rear-encoded sounds to two additional surround
+		outputs which are not delayed. Enables sharper localization of such
+		sounds while still allowing delay/decorrelation to be applied to
+		ambient components. The default is `false`.
 	* `surround_delay=delay[s|m|S]`  
 		Surround output delay. Generally, this should be set so that the
 		surrounds are delayed 10-25 milliseconds relative to the fronts

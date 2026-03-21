@@ -139,6 +139,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
+	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->freq_mask = FREQ_MASK_DEFAULT;
@@ -241,6 +242,9 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "signal=")) {
 				HANDLE_BOOLEAN_ARG(config->enable_signal);
+			}
+			else if (is_opt(opt, "direct_path=")) {
+				HANDLE_BOOLEAN_ARG(config->do_direct_path);
 			}
 			else if (is_opt(opt, "surround_delay=")) {
 				char *opt_arg = isolate(opt, '=');
