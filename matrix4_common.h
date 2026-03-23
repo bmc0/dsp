@@ -41,7 +41,6 @@
 #define EVENT_MAX_HOLD_TIME 200.0
 #define EVENT_MIN_HOLD_TIME  50.0
 #define EVENT_MASK_TIME     100.0
-#define DELAY_TIME (EVENT_SAMPLE_TIME + RISE_TIME_FAST*0.4)
 #define ORD_SENS_ERR          2.0
 #define ORD_SENS_WEIGHT       3.0
 #define ORD_WEIGHT_THRESH     0.3
@@ -59,6 +58,8 @@
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
 #define SURR_DELAY_DEFAULT        15.0
+#define LOOKAHEAD_DEFAULT          0.6
+#define LOOKAHEAD_MB_DEFAULT       0.9
 #define SHELF_MULT_DEFAULT         M_SQRT1_2
 #define SHELF_F0_DEFAULT         500.0
 #define CONTOUR_PWRCMP_DEFAULT     1.0
@@ -172,7 +173,7 @@ struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
-	ssize_t surr_delay_frames;
+	ssize_t lookahead_frames, surr_delay_frames;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;

@@ -660,7 +660,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		cs_interp_set(&band->m_surr_dir, 0.0);
 	}
 
-	state->fb_buf_len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
+	state->fb_buf_len = config.lookahead_frames;
 #if DOWNSAMPLE_FACTOR > 1
 	state->fb_buf_len += CS_INTERP_DELAY_FRAMES;
 #endif

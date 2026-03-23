@@ -129,11 +129,13 @@ static void set_fb_stop_default(struct matrix4_config *config)
 			goto fail; \
 		} \
 	} while (0)
+#define CALC_LOOKAHEAD_FRAMES(x, fs) TIME_TO_FRAMES(EVENT_SAMPLE_TIME + RISE_TIME_FAST*(x), fs)
 int parse_effect_opts(const char *const *argv, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
 	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
 	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
+	config->lookahead_frames = CALC_LOOKAHEAD_FRAMES((is_mb)?LOOKAHEAD_MB_DEFAULT:LOOKAHEAD_DEFAULT, istream->fs);
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
 	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
@@ -315,6 +317,14 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				config->freq_mask = strtod(opt_arg, &endptr);
 				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
 				CHECK_RANGE(config->freq_mask >= 0.0 && config->freq_mask <= 1.0, opt, goto fail);
+			}
+			else if (is_opt(opt, "lookahead=")) {  /* undocumented; for testing */
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0') goto needs_arg;
+				double v = strtod(opt_arg, &endptr);
+				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
+				CHECK_RANGE(v >= 0.0 && v <= 2.0, opt, goto fail);
+				config->lookahead_frames = CALC_LOOKAHEAD_FRAMES(v, istream->fs);
 			}
 			else {
 				LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);

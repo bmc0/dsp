@@ -366,7 +366,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream, 1.0);
 
-	state->len = TIME_TO_FRAMES(DELAY_TIME, istream->fs);
+	state->len = config.lookahead_frames;
 #if DOWNSAMPLE_FACTOR > 1
 	state->len += CS_INTERP_DELAY_FRAMES;
 #endif
