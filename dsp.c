@@ -863,7 +863,7 @@ int main(int argc, char *argv[])
 				char *endptr;
 				start_pos = parse_timespec(start_timespec, c->fs, &endptr);
 				int end_is_rel = (*endptr == '+');
-				if (end_is_rel || *endptr == '-') {
+				if (endptr != start_timespec && (end_is_rel || *endptr == '-')) {
 					char *end_timespec = endptr+1;
 					end_pos = parse_timespec(end_timespec, c->fs, &endptr);
 					if (check_endptr(NULL, end_timespec, endptr, "end timespec"))

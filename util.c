@@ -96,12 +96,10 @@ ssize_t parse_timespec(const char *s, int fs, char **r_endptr)
 	char *endptr;
 	if (!strchr(s, ':'))
 		return lround(parse_len_frac_2(s, fs, r_endptr, 0));
-	double v = 0.0;
-	for (int i = 0; i < 3; ++i) {
-		v = v*60.0 + strtod(s, &endptr);
-		if (*endptr != ':') break;
-		s = ++endptr;
-	}
+	double v = strtod(s, &endptr);
+	const double sign = (signbit(v)) ? -1.0 : 1.0;
+	for (int i = 0; *endptr == ':' && i < 2; ++i)
+		v = v*60.0 + strtod(endptr+1, &endptr)*sign;
 	if (r_endptr) *r_endptr = endptr;
 	return lround(v * fs);
 }
