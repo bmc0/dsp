@@ -382,7 +382,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	}
 	else state->lowpass_mult = 1.0;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
-	event_config_init(&state->evc, istream);
+	event_config_init(&state->evc, istream, config.rear_ev_mask);
 
 	return e;
 }

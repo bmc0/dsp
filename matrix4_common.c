@@ -138,6 +138,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->shelf_f0 = SHELF_F0_DEFAULT;
 	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
+	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
@@ -245,6 +246,13 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 			}
 			else if (is_opt(opt, "direct_path=")) {
 				HANDLE_BOOLEAN_ARG(config->do_direct_path);
+			}
+			else if (is_opt(opt, "rear_event_mask=")) {
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0') goto needs_arg;
+				config->rear_ev_mask = strtod(opt_arg, &endptr);
+				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
+				CHECK_RANGE(config->rear_ev_mask >= 0.0 && config->rear_ev_mask <= 100.0, opt, goto fail);
 			}
 			else if (is_opt(opt, "surround_delay=")) {
 				char *opt_arg = isolate(opt, '=');
@@ -387,13 +395,14 @@ void event_state_cleanup(struct event_state *ev)
 	#endif
 }
 
-void event_config_init_priv(struct event_config *evc, double fs, double diff_overshoot)
+void event_config_init_priv(struct event_config *evc, double fs, double rear_ev_mask, double diff_overshoot)
 {
 	evc->sample_frames = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	evc->max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, fs);
 	evc->min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, fs);
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
 	evc->diff_lim = M_PI_4*diff_overshoot;
+	evc->rear_ev_mask = rear_ev_mask;
 }
 
 void phase_flip_init_params(struct phase_flip_params *pf, double fs)
@@ -409,7 +418,7 @@ static inline double drift_err_scale(const struct axes *ax0, const struct axes *
 	return 1.0 + (lr_err+cs_err)*sens_err;
 }
 
-void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, double rear_ev_mask, struct axes *ax, struct axes *ax_ev)
+void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
@@ -529,8 +538,9 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
 			}
-			else if (diff_cs_avg < -M_PI_4/12 && ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh*rear_ev_mask)
-						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh*rear_ev_mask))) {
+			else if (evc->rear_ev_mask > 0.0 && diff_cs_avg < -M_PI_4/12
+					&& ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh*evc->rear_ev_mask)
+						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh*evc->rear_ev_mask))) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring short-duration rear event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */

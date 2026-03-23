@@ -304,6 +304,11 @@ Example:
 		outputs which are not delayed. Enables sharper localization of such
 		sounds while still allowing delay/decorrelation to be applied to
 		ambient components. The default is `false`.
+	* `rear_event_mask=factor`  
+		Sensitivity to rear-encoded sound events. If set to zero, sensitivity
+		is the same for all directions. If set to a high value (e.g. 5), most
+		rear events will be ignored. The default values are 1 for `matrix4`
+		and 0.3 for `matrix4_mb`.
 	* `surround_delay=delay[s|m|S]`  
 		Surround output delay. Generally, this should be set so that the
 		surrounds are delayed 10-25 milliseconds relative to the fronts

@@ -30,7 +30,6 @@
 #define DOWNSAMPLE_FACTOR 32
 #define NORM_ACCOM_FACTOR 0.6
 #define DIFF_OVERSHOOT    1.01
-#define REAR_EVENT_MASK   0.3
 #include "matrix4_common.h"
 
 #define EVENT_THRESH_MAX 3.6
@@ -668,7 +667,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
 	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
-	event_config_init(&state->evc, istream);
+	event_config_init(&state->evc, istream, config.rear_ev_mask);
 #endif
 	fshape_init(&state->fshape[0], istream->fs, fshape_lf, fshape_hf, 0);
 	state->fshape[1] = state->fshape[0];

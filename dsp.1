@@ -309,6 +309,12 @@ outputs which are not delayed. Enables sharper localization of such
 sounds while still allowing delay/decorrelation to be applied to
 ambient components. The default is `false'.
 .TP
+rear_event_mask=\fIfactor\fR
+Sensitivity to rear-encoded sound events. If set to zero, sensitivity
+is the same for all directions. If set to a high value (e.g. 5), most
+rear events will be ignored. The default values are 1 for \fBmatrix4\fR
+and 0.3 for \fBmatrix4_mb\fR.
+.TP
 surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Surround output delay. Generally, this should be set so that the
 surrounds are delayed 10\-25 milliseconds relative to the fronts

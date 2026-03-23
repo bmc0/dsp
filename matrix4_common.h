@@ -64,6 +64,8 @@
 #define CONTOUR_PWRCMP_DEFAULT     1.0
 #define CONTOUR_PWRCMP_MB_DEFAULT  1.0
 #define LOWPASS_F0_DEFAULT      6000.0
+#define REAR_EVENT_MASK_DEFAULT    1.0
+#define REAR_EVENT_MASK_MB_DEFAULT 0.3
 #define DO_PHASE_FLIP_DEFAULT      1
 #define DO_DIRECT_PATH_DEFAULT     0
 
@@ -83,9 +85,6 @@
 #endif
 #ifndef DIFF_OVERSHOOT
 	#define DIFF_OVERSHOOT 1.001
-#endif
-#ifndef REAR_EVENT_MASK
-	#define REAR_EVENT_MASK 1.0
 #endif
 
 /* 1 = linear; 2 = parabolic 2x; 3 = cubic B-spline; 4 = cubic Hermite; 5 = polyphase FIR (Blackman window) */
@@ -147,7 +146,7 @@ struct event_state {
 
 struct event_config {
 	ssize_t sample_frames, max_hold_frames, min_hold_frames;
-	double ord_factor_c, diff_lim;
+	double ord_factor_c, diff_lim, rear_ev_mask;
 };
 
 enum status_type {
@@ -171,7 +170,8 @@ typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, doub
 
 struct matrix4_config {
 	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path;
-	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, fb_stop[2], freq_mask;
+	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
+	double fb_stop[2], freq_mask;
 	ssize_t surr_delay_frames;
 	enum status_type status_type;
 	enum filter_bank_type fb_type;
@@ -210,8 +210,8 @@ void draw_steering_bar(double, int, struct steering_bar *);
 
 /* private functions */
 void event_state_init_priv(struct event_state *, double, double);
-void event_config_init_priv(struct event_config *, double, double);
-void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, double, struct axes *, struct axes *);
+void event_config_init_priv(struct event_config *, double, double, double);
+void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *);
 
 static inline double smoothstep_nc(double x)
 {
@@ -231,14 +231,14 @@ static void event_state_init(struct event_state *ev, const struct stream_info *i
 	event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale);
 }
 
-static void event_config_init(struct event_config *evc, const struct stream_info *istream)
+static void event_config_init(struct event_config *evc, const struct stream_info *istream, double rear_ev_mask)
 {
-	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), DIFF_OVERSHOOT);
+	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), rear_ev_mask, DIFF_OVERSHOOT);
 }
 
 static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev)
 {
-	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, REAR_EVENT_MASK, ax, ax_ev);
+	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev);
 }
 
 static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)
