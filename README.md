@@ -698,6 +698,16 @@ directory in which the configuration file resides.
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.
 
+#### Notes
+
+The resample effect cannot be used with the LADSPA frontend.
+
+Some LADSPA hosts cache plugin information and may exhibit unexpected behavior
+if configuration files are added or removed, or if a configuration is edited to
+change the number of input and/or output channels. In these cases, it may be
+necessary to manually delete the cache file(s) or otherwise force the host to
+update its cache.
+
 #### Usage example: Route alsa audio through ladspa_dsp
 
 Put this in `~/.asoundrc`:
@@ -804,8 +814,6 @@ To load the LADSPA module at user login include settings in
 	load-module module-ladspa-sink sink_name=ladspa_out sink_master=<master_sink> plugin=<plugin name> label=<plugin label>
 	.fail
 	.endif
-
-**Note:** The resample effect cannot be used with the LADSPA frontend.
 
 ### Bugs
 
