@@ -296,6 +296,12 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 			d->ports[k][i] = (LADSPA_Data) obuf[j++];
 }
 
+static void run_null(LADSPA_Handle inst, unsigned long s)
+{
+	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
+	if (s > 0) memset(d->ports[1], 0, s * sizeof(LADSPA_Data));
+}
+
 static void cleanup_dsp(LADSPA_Handle inst)
 {
 	struct ladspa_dsp *d = (struct ladspa_dsp *) inst;
@@ -324,7 +330,7 @@ static char * make_port_name(const char *prefix, int idx)
 
 void __attribute__((constructor)) ladspa_dsp_so_init()
 {
-	int i, k;
+	int i, k, is_fallback = 0;
 	char **pn, *env, *tmp;
 	LADSPA_PortDescriptor *pd;
 	LADSPA_PortRangeHint *ph;
@@ -344,12 +350,13 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 	}
 
 	load_configs();
-	if (n_configs > 0)
-		descriptors = calloc(n_configs, sizeof(LADSPA_Descriptor));
-	else {
-		LOG_S(LL_ERROR, "error: no config files found");
-		return;
+	if (n_configs < 1) {
+		LOG_S(LL_ERROR, "warning: no config files found; providing fallback 'null' plugin");
+		n_configs = is_fallback = 1;
+		configs = realloc(configs, sizeof(struct ladspa_dsp_config));
+		init_config(&configs[0], "config_null", GLOBAL_CONFIG_DIR);
 	}
+	descriptors = calloc(n_configs, sizeof(LADSPA_Descriptor));
 	for (k = 0; k < n_configs; ++k) {
 		descriptors[k].UniqueID = 2378 + k;
 		if (configs[k].name) {
@@ -383,7 +390,7 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 			ph[i].HintDescriptor = 0;
 		descriptors[k].instantiate = instantiate_dsp;
 		descriptors[k].connect_port = connect_port_to_dsp;
-		descriptors[k].run = run_dsp;
+		descriptors[k].run = (is_fallback) ? run_null : run_dsp;
 		descriptors[k].run_adding = NULL;
 		descriptors[k].set_run_adding_gain = NULL;
 		descriptors[k].deactivate = NULL;
