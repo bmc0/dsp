@@ -150,7 +150,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 		while (*opt != '\0') {
 			next_opt = isolate(opt, ',');
 			if (*opt == '\0') /* do nothing */;
-			else if (is_opt(opt, "show_status=")) {
+			else if (is_opt(opt, "status=") || is_opt(opt, "show_status=")) {
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0' || strcmp(opt_arg, "bars") == 0)
 					config->status_type = STATUS_TYPE_BARS;

@@ -266,7 +266,7 @@ Example:
 
 	Options are given as a comma-separated list. Recognized options are:
 
-	* `show_status[=bars|text|none]`  
+	* `status[=bars|text|none]`  
 		Show real-time steering information.
 	* `matrix=v1|v4[:param]|v2|v3`  
 		Controls steering behavior for rear-encoded sounds. `v1` does not
