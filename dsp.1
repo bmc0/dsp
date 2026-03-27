@@ -678,10 +678,10 @@ backslash (`\\') may be used to escape whitespace, `#', or `\\'. Example:
 An exclamation mark (`!') allows initialization failure of the effect that
 follows.
 .SS FFTW wisdom
-Effects utilizing FFTW3 can optionally load and save wisdom. For \fBdsp\fR, set
-`$DSP_FFTW_WISDOM_PATH'. \fBladspa_dsp\fR uses `$LADSPA_DSP_FFTW_WISDOM_PATH'
-instead. If a path is set, FFTW plans are created with the FFTW_MEASURE flag.
-Accumulated wisdom is written on exit.
+Effects utilizing FFTW3 can optionally load and save wisdom. For \fBdsp\fR, set the
+`DSP_FFTW_WISDOM_PATH' environment variable. \fBladspa_dsp\fR reads
+`LADSPA_DSP_FFTW_WISDOM_PATH' instead. If a path is set, FFTW plans are created
+with the FFTW_MEASURE flag. Accumulated wisdom is written on exit.
 .SH SIGNALS
 \fBTSTP\fR is handled gracefully, pausing the active input and output and restoring
 terminal state. \fBUSR1\fR triggers a rebuild of the effects chain. \fBUSR2\fR sends a

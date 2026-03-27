@@ -338,7 +338,7 @@ Example:
 	specifies the input channels to be mixed to produce an output channel. `.`
 	selects no input channels. For example, `remix 0,1 2,3` mixes input
 	channels 0 and 1 into output channel 0, and input channels 2 and 3 into
-	output channel 1.  `remix -` mixes all input channels into a single output
+	output channel 1. `remix -` mixes all input channels into a single output
 	channel. The active channel selector is used as an input channel mask for
 	the selector arguments.
 * `st2ms`
@@ -613,10 +613,10 @@ follows.
 
 #### FFTW wisdom
 
-Effects utilizing FFTW3 can optionally load and save wisdom. For `dsp`, set
-`$DSP_FFTW_WISDOM_PATH`. `ladspa_dsp` uses `$LADSPA_DSP_FFTW_WISDOM_PATH`
-instead. If a path is set, FFTW plans are created with the FFTW_MEASURE flag.
-Accumulated wisdom is written on exit.
+Effects utilizing FFTW3 can optionally load and save wisdom. For `dsp`, set the
+`DSP_FFTW_WISDOM_PATH` environment variable. `ladspa_dsp` reads
+`LADSPA_DSP_FFTW_WISDOM_PATH` instead. If a path is set, FFTW plans are created
+with the FFTW_MEASURE flag. Accumulated wisdom is written on exit.
 
 ### Signals
 
