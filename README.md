@@ -524,7 +524,7 @@ preserved.
 
 A timespec may be given in one of two forms: `[[hours:]minutes:]seconds` or
 `offset[s|m|S]`. In the latter form, the suffix specifies whether `offset` is
-in seconds, milliseconds, or samples, respectively.
+in seconds (default), milliseconds, or samples, respectively.
 
 #### Filter width
 
