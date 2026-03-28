@@ -585,8 +585,8 @@ static void update_progress(ssize_t pos, ssize_t repeats, int is_paused, int for
 		double in_delay_s = 0.0, chain_delay_s, out_delay_s;
 		get_delay_sec(&chain_delay_s, &out_delay_s);
 		ssize_t delay = get_delay_frames(in->fs, chain_delay_s, out_delay_s);
-		ssize_t p = (pos > delay) ? pos - delay : 0;
-		ssize_t rem = (in->frames > p) ? in->frames - p : 0;
+		ssize_t p = MAXIMUM(pos - delay, input_list.head->start);
+		ssize_t rem = MAXIMUM(in->frames - p, 0);
 		if (verbose_progress)
 			in_delay_s = (double) codec_read_buf_delay(in_codec_buf) / in->fs;
 		dsp_statuslines_acquire();

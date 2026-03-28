@@ -152,9 +152,11 @@ static inline ssize_t codec_read_buf_seek(struct codec_read_buf *rb, ssize_t pos
 	if (rb->data) {
 		/* assume no seeking to pos > 0 for real-time codecs */
 		if (pos > 0 && (input->codec->hints & CODEC_HINT_REALTIME)) return -1;
-		return codec_read_buf_cmd_push(rb->data, CODEC_READ_BUF_CMD_SEEK, pos);
+		pos = codec_read_buf_cmd_push(rb->data, CODEC_READ_BUF_CMD_SEEK, pos);
 	}
-	return input->codec->seek(input->codec, pos);
+	else pos = input->codec->seek(input->codec, pos);
+	if (pos >= 0) rb->pos = pos;
+	return pos;
 }
 
 static inline void codec_read_buf_pause(struct codec_read_buf *rb, int pause_state, int sync)
