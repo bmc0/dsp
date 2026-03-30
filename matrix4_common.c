@@ -24,8 +24,8 @@
 #include "matrix4_common.h"
 #include "delay.h"
 
-void calc_matrix_coefs_v1(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
-void calc_matrix_coefs_v4(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v1(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v4(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
 {
@@ -130,7 +130,7 @@ static void set_fb_stop_default(struct matrix4_config *config)
 		} \
 	} while (0)
 #define CALC_LOOKAHEAD_FRAMES(x, fs) TIME_TO_FRAMES(EVENT_SAMPLE_TIME + RISE_TIME_FAST*(x), fs)
-int parse_effect_opts(const char *const *argv, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
+int parse_effect_opts(const char *const *argv, const char *dir, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
 {
 	char *opt_str = NULL;
 	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
@@ -143,6 +143,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
+	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->freq_mask = FREQ_MASK_DEFAULT;
@@ -326,6 +327,23 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 				CHECK_RANGE(v >= 0.0 && v <= 2.0, opt, goto fail);
 				config->lookahead_frames = CALC_LOOKAHEAD_FRAMES(v, istream->fs);
 			}
+			else if (is_opt(opt, "dpwr_decouple=")) {  /* undocumented; for testing */
+				HANDLE_BOOLEAN_ARG(config->do_dpwr_decouple);
+			}
+		#if DEBUG_POWER_ERROR
+			else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
+				char *opt_arg = isolate(opt, '=');
+				if (*opt_arg == '\0') goto needs_arg;
+				char *path = construct_full_path(dir, opt_arg, istream);
+				config->pwr_err_file = fopen(path, "w");
+				if (!config->pwr_err_file) {
+					LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", argv[0], path);
+					free(path);
+					goto fail;
+				}
+				free(path);
+			}
+		#endif
 			else {
 				LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
 				goto fail;
@@ -362,17 +380,22 @@ void event_state_init_priv(struct event_state *ev, double fs, double base_thresh
 	for (int i = 0; i < 4; ++i) ewma_init(&ev->avg[i], fs, EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(ACCOM_TIME*2.0));
 	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
+	for (int i = 0; i < 2; ++i) ewma_init(&ev->drift_dpwr[i], fs, EWMA_RISE_TIME(ACCOM_TIME*0.5));
+	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift_dpwr[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
 	ewma_init(&ev->drift_scale[0], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
 	ewma_set(&ev->drift_scale[0], 1.0);
 	ewma_init(&ev->drift_scale[1], fs, EWMA_RISE_TIME(RISE_TIME_FAST*0.3));
 	ewma_init(&ev->pwrcmp_factor, fs, EWMA_RISE_TIME(PWRCMP_RISE_TIME));
-	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->drift_notch[i],
+	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->ord_flt[i],
+		BIQUAD_LOWPASS, fs, (0.34*1000*1.5)/RISE_TIME_FAST, 0.577, 0, 0, BIQUAD_WIDTH_Q);
+	for (int i = 2; i < 4; ++i) biquad_init_using_type(&ev->ord_flt[i],
 		BIQUAD_PEAK, fs, ORD_NOTCH_FREQ_1, 0.5, ORD_NOTCH_GAIN_1, 0, BIQUAD_WIDTH_Q);
-	for (int i = 2; i < 4; ++i) biquad_init_using_type(&ev->drift_notch[i],
+	for (int i = 4; i < 6; ++i) biquad_init_using_type(&ev->ord_flt[i],
 		BIQUAD_PEAK, fs, ORD_NOTCH_FREQ_2, 0.5, ORD_NOTCH_GAIN_2, 0, BIQUAD_WIDTH_Q);
 	ev->t_hold = -2;
-	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
+	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME*0.5, fs);
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
+	ev->ord_lp_buf = calloc(ev->buf_len, sizeof(struct axes));
 	#if ENABLE_LOOKBACK
 		ev->diff_buf = calloc(ev->buf_len, sizeof(struct axes));
 		ev->slope_buf = calloc(ev->buf_len, sizeof(double [2]));
@@ -390,6 +413,7 @@ void event_state_init_priv(struct event_state *ev, double fs, double base_thresh
 void event_state_cleanup(struct event_state *ev)
 {
 	free(ev->ord_buf);
+	free(ev->ord_lp_buf);
 	#if ENABLE_LOOKBACK
 		free(ev->diff_buf);
 		free(ev->slope_buf);
@@ -428,11 +452,20 @@ static inline double drift_err_scale(const struct axes *ax0, const struct axes *
 	return 1.0 + (lr_err+cs_err)*sens_err;
 }
 
-void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev)
+void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
 		.cs = CALC_CS(env->sum, env->diff, env->sum/env->diff),
+	};
+	const struct axes ord_lp = {
+		.lr = biquad(&ev->ord_flt[0], ord.lr),
+		.cs = biquad(&ev->ord_flt[1], ord.cs),
+	};
+	const struct axes ord_lp_d = ev->ord_lp_buf[ev->buf_p];
+	const struct axes ord_lp_d_notched = {
+		.lr = biquad(&ev->ord_flt[4], biquad(&ev->ord_flt[2], ord_lp_d.lr)),
+		.cs = biquad(&ev->ord_flt[5], biquad(&ev->ord_flt[3], ord_lp_d.cs)),
 	};
 	const struct envs adapt = {
 		.l = pwr_env->l - ewma_run_set_max(&ev->accom[0], pwr_env->l),
@@ -445,8 +478,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		.cs = CALC_CS(adapt.sum, adapt.diff, sqrt(adapt.sum/adapt.diff)),
 	};
 	ev->diff_last = diff;
-	const struct axes ord_d = ev->ord_buf[ev->buf_p];
 	ev->ord_buf[ev->buf_p] = ord;
+	ev->ord_lp_buf[ev->buf_p] = ord_lp;
 	#if ENABLE_LOOKBACK
 		ev->diff_buf[ev->buf_p] = diff;
 	#endif
@@ -480,10 +513,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ev->slope_buf[ev->buf_p][0] = l_slope;
 		ev->slope_buf[ev->buf_p][1] = r_slope;
 	#endif
-	const struct axes ord_d_notched = {
-		.lr = biquad(&ev->drift_notch[2], biquad(&ev->drift_notch[0], ord_d.lr)),
-		.cs = biquad(&ev->drift_notch[3], biquad(&ev->drift_notch[1], ord_d.cs)),
-	};
 	const double max_d = ev->max_buf[ev->buf_p];
 	ev->max_buf[ev->buf_p] = MAXIMUM(l_event, r_event);
 	ewma_run_scale_asym(&ev->pwrcmp_factor, 1.0-smoothstep(max_d*ev->pcf_sens), 1.0, PWRCMP_RISE_TIME/PWRCMP_FALL_TIME);
@@ -533,8 +562,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	}
 
 	if (ev->sample) {
-		ewma_run(&ev->avg[0], ord.lr);
-		ewma_run(&ev->avg[1], ord.cs);
+		const double ord_lr_avg = ewma_run(&ev->avg[0], ord.lr);
+		const double ord_cs_avg = ewma_run(&ev->avg[1], ord.cs);
 		const double diff_lr_avg = ewma_run(&ev->avg[2], diff.lr);
 		const double diff_cs_avg = ewma_run(&ev->avg[3], diff.cs);
 		if (l_event > ev->max[1]) ev->max[1] = l_event;
@@ -561,8 +590,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				ev->dir.lr = diff_lr_avg;
 				ev->dir.cs = diff_cs_avg;
 				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
-					ev->dir.lr = ewma_get_last(&ev->avg[0]);
-					ev->dir.cs = ewma_get_last(&ev->avg[1]);
+					ev->dir.lr = ord_lr_avg;
+					ev->dir.cs = ord_cs_avg;
 					ev->ord_factor += 1.0;
 					if (!(ev->flags[1] & EVENT_FLAG_FUSE))
 						++ev->ord_count;
@@ -598,19 +627,27 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			ewma_set(&ev->drift[1], ax->cs);
 			ewma_set(&ev->drift_scale[0], 1.0);
 		}
+
+		ax_dpwr->lr = ewma_set(&ev->drift_dpwr[0], ewma_run_scale(&ev->drift_dpwr[2], ev->dir.lr, ds_diff));
+		ax_dpwr->cs = ewma_set(&ev->drift_dpwr[1], ewma_run_scale(&ev->drift_dpwr[3], ev->dir.cs, ds_diff));
 	}
 	else {
 		const struct axes ax_last = { .lr = ewma_get_last(&ev->drift[0]), .cs = ewma_get_last(&ev->drift[1]) };
 		const double ds_ord = ewma_run_set_max(&ev->drift_scale[0],
-			drift_err_scale(&ax_last, &ord_d_notched, ORD_SENS_ERR) * ev->ds_ord_buf[ev->buf_p]);
+			drift_err_scale(&ax_last, &ord_lp_d_notched, ORD_SENS_ERR) * ev->ds_ord_buf[ev->buf_p]);
 		#if DEBUG_PRINT_MIN_RISE_TIME
 			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds_ord);
 		#endif
-		ax->lr = ewma_run_scale(&ev->drift[0], ord_d_notched.lr, ds_ord);
-		ax->cs = ewma_run_scale(&ev->drift[1], ord_d_notched.cs, ds_ord);
+		ax->lr = ewma_run_scale(&ev->drift[0], ord_lp_d_notched.lr, ds_ord);
+		ax->cs = ewma_run_scale(&ev->drift[1], ord_lp_d_notched.cs, ds_ord);
 		ewma_set(&ev->drift[2], ax->lr);
 		ewma_set(&ev->drift[3], ax->cs);
 		ax_ev->lr = ax_ev->cs = 0.0;
+
+		const struct axes ax_dpwr_last = { .lr = ewma_get_last(&ev->drift_dpwr[0]), .cs = ewma_get_last(&ev->drift_dpwr[1]) };
+		const double ds_dpwr = drift_err_scale(&ax_dpwr_last, &ord_lp, ORD_DPWR_SENS_ERR);
+		ax_dpwr->lr = ewma_set(&ev->drift_dpwr[2], ewma_run_scale(&ev->drift_dpwr[0], ord_lp.lr, ds_dpwr));
+		ax_dpwr->cs = ewma_set(&ev->drift_dpwr[3], ewma_run_scale(&ev->drift_dpwr[1], ord_lp.cs, ds_dpwr));
 	}
 	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
 	if (l_mask_norm_sm > ds_ord_thresh || r_mask_norm_sm > ds_ord_thresh) {
@@ -628,7 +665,7 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_mult_rear, double param_adj, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear, double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -672,17 +709,18 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
 	m->rsr /= pu_sr;
 
 	/* input phasors for given lr, cs */
-	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
+	const double ph_lr = ax_dpwr->lr, ph_cs = ax_dpwr->cs;
+	const double sin_lr = sin(ph_lr+M_PI_4), cos_lr = cos(ph_lr+M_PI_4);
 	double sin_theta, cos_theta;
-	if (abs_lr+fabs(cs) < M_PI_4) {
-		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
+	if (fabs(ph_lr)+fabs(ph_cs) < M_PI_4) {
+		const double alpha = sqrt(1.0-square(sin(2.0*ph_cs)/cos(2.0*ph_lr)));
 		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
-		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
-		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
+		sin_theta = (ph_cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
+		cos_theta = (ph_cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
 	}
 	else {
-		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
-		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
+		sin_theta = (ph_cs < 0.0) ? 1.0 : 0.0;
+		cos_theta = (ph_cs < 0.0) ? 0.0 : 1.0;
 	}
 	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
 	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
@@ -698,7 +736,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
 	const double surr_pwr = surr_mult2*adj_norm_mult2;
-	const double pdc_f = sqrt(1.0-surr_pwr*MINIMUM(pd_s, 1.0));
+	const double pdc_f = sqrt(1.0-surr_pwr*pd_s);
 	const double pdc_s = sqrt(surr_pwr);
 
 	if (r_shelf_mult) {
@@ -721,17 +759,11 @@ void calc_matrix_coefs_v1(const struct axes *ax, double surr_mult, double surr_m
 }
 
 /*
- * Note: A factor of 0.75 results in approximately equal power
- * error for both directional and uncorrelated inputs.
-*/
-#define SURR_PDC_FACTOR_SB 0.5
-
-/*
  * Full steering of rear-encoded sounds, full left/right separation from
  * cs=0° to cs=-22.5°, and adjustable steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_mult_rear, double param_adj, int is_mb, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear, double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -808,24 +840,26 @@ void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_m
 	}
 
 	/* input phasors for given lr, cs */
-	const double sin_lr = sin(lr+M_PI_4), cos_lr = cos(lr+M_PI_4);
+	const double ph_lr = ax_dpwr->lr, ph_cs = ax_dpwr->cs;
+	const double abs_ph_lr = fabs(ph_lr), abs_ph_cs = fabs(ph_cs);
+	const double sin_lr = sin(ph_lr+M_PI_4), cos_lr = cos(ph_lr+M_PI_4);
 #if 0
 	/* straightforward calculation */
-	const double phase = (abs_lr+abs_cs>=M_PI_4)?(cs<0.0)?-M_PI_4:M_PI_4:0.5*asin(sin(2.0*cs)/cos(2.0*lr));
+	const double phase = (abs_ph_lr+abs_ph_cs>=M_PI_4)?(ph_cs<0.0)?-M_PI_4:M_PI_4:0.5*asin(sin(2.0*ph_cs)/cos(2.0*ph_lr));
 	const double l_real = sin_lr*cos(M_PI_4-phase), l_imag = sin_lr*sin(M_PI_4-phase);
 	const double r_real = cos_lr*cos(phase-M_PI_4), r_imag = cos_lr*sin(phase-M_PI_4);
 #else
 	/* faster calculation */
 	double sin_theta, cos_theta;
-	if (abs_lr+abs_cs < M_PI_4) {
-		const double alpha = sqrt(1.0-square(sin(2.0*cs)/cos(2.0*lr)));
+	if (abs_ph_lr+abs_ph_cs < M_PI_4) {
+		const double alpha = sqrt(1.0-square(sin(2.0*ph_cs)/cos(2.0*ph_lr)));
 		const double beta = sqrt(1.0+alpha), gamma = sqrt(1.0-alpha);
-		sin_theta = (cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
-		cos_theta = (cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
+		sin_theta = (ph_cs < 0.0) ? 0.5*(beta+gamma) : 0.5*(beta-gamma);
+		cos_theta = (ph_cs < 0.0) ? 0.5*(beta-gamma) : 0.5*(beta+gamma);
 	}
 	else {
-		sin_theta = (cs < 0.0) ? 1.0 : 0.0;
-		cos_theta = (cs < 0.0) ? 0.0 : 1.0;
+		sin_theta = (ph_cs < 0.0) ? 1.0 : 0.0;
+		cos_theta = (ph_cs < 0.0) ? 0.0 : 1.0;
 	}
 	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
 	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
@@ -844,9 +878,9 @@ void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_m
 	/* weighted directional power */
 	double pd_f_wf = pd_f, pd_s_wf = pd_s;
 	double pd_f_ws = 1.0, pd_s_ws = 1.0;
-	if (cs < 0.0) {
-		if (abs_cs < abs_lr) {
-			const double lr2 = square(lr), cs2 = square(cs);
+	if (ph_cs < 0.0) {
+		if (abs_ph_cs < abs_ph_lr) {
+			const double lr2 = square(ph_lr), cs2 = square(ph_cs);
 			const double wf = (lr2+cs2 > DBL_MIN) ? square((lr2-cs2)/(lr2+cs2)) : 0.0;
 			pd_f_wf = (pd_f-1.0)*wf+1.0;
 			pd_s_wf = (pd_s-1.0)*wf+1.0;
@@ -859,14 +893,13 @@ void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_m
 			pd_s_ws = pd_s;
 		}
 	}
-	if (!is_mb) pd_s_ws = (pd_s_ws-1.0)*SURR_PDC_FACTOR_SB+1.0;
 
 	/* directional power correction and normalization */
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
 	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
 	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
-	const double pdc_all2 = (is_mb) ? 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2) : 1.0;
+	const double pdc_all2 = 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2);
 	const double pdc_f = sqrt(pdc_fi2*pdc_all2);
 	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
 
@@ -876,7 +909,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, double surr_mult, double surr_m
 			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
 			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
 			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
-			const double pdc_all_hf2 = (is_mb) ? 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2) : 1.0;
+			const double pdc_all_hf2 = 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2);
 			r_shelf_mult[i].ret.front = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
 			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
 		}

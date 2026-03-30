@@ -22,6 +22,7 @@
 #include <float.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include "effect.h"
 #include "ewma.h"
 #include "biquad.h"
@@ -50,6 +51,7 @@
 #define ORD_NOTCH_GAIN_2     -8.5
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
+#define ORD_DPWR_SENS_ERR     8.0
 #define PWRCMP_RISE_TIME    100.0
 #define PWRCMP_FALL_TIME     15.0
 #define PWRCMP_FACTOR_SENS    0.2
@@ -69,6 +71,7 @@
 #define REAR_EVENT_MASK_MB_DEFAULT 0.3
 #define DO_PHASE_FLIP_DEFAULT      1
 #define DO_DIRECT_PATH_DEFAULT     0
+#define DO_DPWR_DECOUPLE_DEFAULT   1
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 #define FREQ_MASK_DEFAULT        0.0
@@ -99,6 +102,7 @@
 
 #define ENABLE_LOOKBACK 1
 #define DEBUG_PRINT_MIN_RISE_TIME 0
+#define DEBUG_POWER_ERROR 0
 
 struct envs {
 	double l, r, sum, diff;
@@ -127,9 +131,9 @@ struct event_state {
 		EVENT_FLAG_END = 1<<4,
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4], drift_scale[2], pwrcmp_factor;
-	struct biquad_state drift_notch[4];
-	struct axes dir, diff_last, *ord_buf;
+	struct ewma_state drift[4], drift_dpwr[4], drift_scale[2], pwrcmp_factor;
+	struct biquad_state ord_flt[6];
+	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
 		double (*slope_buf)[2];
@@ -167,10 +171,10 @@ union cmc_shelf_mult {
 	double arg;
 	struct { double front, surr; } ret;
 };
-typedef void (*calc_matrix_coefs_func)(const struct axes *, double, double, double, int, struct matrix_coefs *, union cmc_shelf_mult *, int);
+typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
-	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path;
+	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
 	ssize_t lookahead_frames, surr_delay_frames;
@@ -178,6 +182,9 @@ struct matrix4_config {
 	enum filter_bank_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double calc_matrix_coefs_param;
+	#if DEBUG_POWER_ERROR
+		FILE *pwr_err_file;
+	#endif
 };
 
 struct phase_flip_params {
@@ -196,7 +203,7 @@ struct phase_flip_params {
 #define CBUF_PREV(x, len) (((x)>0)?(x)-1:(len)-1)
 
 int get_args_and_channels(const struct effect_info *, const struct stream_info *, const char *, int, const char *const *, struct matrix4_config *);
-int parse_effect_opts(const char *const *, const struct stream_info *, const int, struct matrix4_config *);
+int parse_effect_opts(const char *const *, const char *, const struct stream_info *, const int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void event_state_cleanup(struct event_state *);
@@ -212,7 +219,7 @@ void draw_steering_bar(double, int, struct steering_bar *);
 /* private functions */
 void event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double, double, double);
-void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *);
+void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *, struct axes *);
 
 static inline double smoothstep_nc(double x)
 {
@@ -237,9 +244,9 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), rear_ev_mask, DIFF_OVERSHOOT);
 }
 
-static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev)
+static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
-	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev);
+	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev, ax_dpwr);
 }
 
 static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)

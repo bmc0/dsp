@@ -26,6 +26,7 @@
 #include "allpass.h"
 #include "util.h"
 #include "fir.h"
+#include "smf.h"
 
 #define DOWNSAMPLE_FACTOR 32
 #define NORM_ACCOM_FACTOR 0.6
@@ -84,7 +85,7 @@ struct filter_bank {
 struct matrix4_band {
 	struct smooth_state sm;
 	struct event_state ev;
-	struct axes ax, ax_ev;
+	struct axes ax, ax_ev, ax_dpwr;
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
@@ -94,6 +95,10 @@ struct matrix4_band {
 	struct cs_interp_state m_surr_amb, m_surr_dir;
 	struct ewma_state ev_thresh;
 	double ev_thresh_max, ev_thresh_min, contour;
+#if DEBUG_POWER_ERROR
+	struct ewma_state pwr_err[2];
+	struct smf_state pwr_err_sm;
+#endif
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
 	struct statusline_state statusline;
@@ -102,7 +107,7 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1;
-	char disable, do_phase_flip, do_direct_path;
+	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[6];
 	struct filter_bank fb[2];
@@ -114,6 +119,9 @@ struct matrix4_mb_state {
 	double cmc_param, surr_mult[2], contour_pwrcmp, freq_mask;
 	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
 	ssize_t fade_frames, fade_p;
+#if DEBUG_POWER_ERROR
+	FILE *pwr_err_file;
+#endif
 #ifdef DSP_STATUSLINES
 	int statuslines_registered;
 #endif
@@ -408,8 +416,9 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				const double ev_thresh = ewma_run_set_max(&band->ev_thresh,
 					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact*(1.0/(N_BANDS-1)));
 
-				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev);
+				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev, &band->ax_dpwr);
 				norm_axes(&band->ax);
+				norm_axes(&band->ax_dpwr);
 
 				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
@@ -419,7 +428,8 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				const double ct2 = ct0/ct1;
 
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, state->cmc_param, 1, &m, NULL, 0);
+				state->calc_matrix_coefs(&band->ax, (state->do_dpwr_decouple) ? &band->ax_dpwr : &band->ax,
+					surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, state->cmc_param, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -444,27 +454,44 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				}
 			}
 
-			out_l += s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
-			out_r += s0_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
+			sample_t b_l = s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
+			sample_t b_r = s0_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
+			sample_t b_ls = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
+			sample_t b_rs = s0_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
 
-			const sample_t ls_tmp = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
-			const sample_t rs_tmp = s0_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
-			sample_t ls_tmp_pf = ls_tmp, rs_tmp_pf = rs_tmp;
+		#if DEBUG_POWER_ERROR
+		#ifdef DSP_STATUSLINES
+			if (state->status_type || state->pwr_err_file) {
+		#else
+			if (state->pwr_err_file) {
+		#endif
+				const double pwr_in = ewma_run(&band->pwr_err[0], s0_d_fb*s0_d_fb + s1_d_fb*s1_d_fb);
+				const double pwr_out = ewma_run(&band->pwr_err[1], b_l*b_l + b_r*b_r + b_ls*b_ls + b_rs*b_rs);
+				const double pwr_ratio = MAXIMUM(pwr_out, DBL_MIN)/MAXIMUM(pwr_in, DBL_MIN);
+				const double pwr_ratio_sm = smf_run(&band->pwr_err_sm, pwr_ratio);
+				if (state->s == 0 && state->pwr_err_file)
+					fprintf(state->pwr_err_file, "%.15e%c", pwr_ratio_sm, (k==N_BANDS-1)?'\n':' ');
+			}
+		#endif
+
+			out_l += b_l;
+			out_r += b_r;
+			sample_t b_ls_pf = b_ls, b_rs_pf = b_rs;
 			if (state->do_phase_flip) {
 				band->pf_ap[0].c0 = cs_interp(&band->pf_ap_c0[0], state->s);
 				band->pf_ap[1].c0 = cs_interp(&band->pf_ap_c0[1], state->s);
-				ls_tmp_pf = ap1_run(&band->pf_ap[0], ls_tmp_pf+1e-15)-1e-15;
-				rs_tmp_pf = ap1_run(&band->pf_ap[1], rs_tmp_pf+1e-15)-1e-15;
+				b_ls_pf = ap1_run(&band->pf_ap[0], b_ls_pf+1e-15)-1e-15;
+				b_rs_pf = ap1_run(&band->pf_ap[1], b_rs_pf+1e-15)-1e-15;
 			}
 			if (state->do_direct_path) {
 				const sample_t m_surr_amb = cs_interp(&band->m_surr_amb, state->s);
 				const sample_t m_surr_dir = cs_interp(&band->m_surr_dir, state->s);
-				out_ls += ls_tmp_pf*m_surr_amb; out_rs += rs_tmp_pf*m_surr_amb;
-				out_ls_dir += ls_tmp*m_surr_dir; out_rs_dir -= rs_tmp*m_surr_dir;
+				out_ls += b_ls_pf*m_surr_amb; out_rs += b_rs_pf*m_surr_amb;
+				out_ls_dir += b_ls*m_surr_dir; out_rs_dir -= b_rs*m_surr_dir;
 			}
 			else {
-				out_ls += ls_tmp_pf;
-				out_rs += rs_tmp_pf;
+				out_ls += b_ls_pf;
+				out_rs += b_rs_pf;
 			}
 
 			state->fb_buf[0][state->fb_buf_p].s[k] = state->fb[0].s[k];
@@ -505,11 +532,18 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				struct matrix4_band *band = &state->band[i];
 				snprintf(band->statusline.s, LENGTH(band->statusline.s),
 					"%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
-					"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
-					e->name, (state->disable) ? " [off]" : "", i,
+					"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd"
+				#if DEBUG_POWER_ERROR
+					"; pwr_err: %+05.2fdB"
+				#endif
+					, e->name, (state->disable) ? " [off]" : "", i,
 					TO_DEGREES(band->ax.lr), TO_DEGREES(band->ax_ev.lr), TO_DEGREES(band->ax.cs), TO_DEGREES(band->ax_ev.cs),
 					band->ev.adj, ewma_get_last(&band->ev_thresh), state->contour_pwrcmp*ewma_get_last(&band->ev.pwrcmp_factor),
-					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count);
+					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count
+				#if DEBUG_POWER_ERROR
+					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
+				#endif
+				);
 			}
 		}
 		else {
@@ -518,9 +552,16 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 				draw_steering_bar(band->ax.lr, band->ev.hold, &band->lr_bar);
 				draw_steering_bar(band->ax.cs, band->ev.hold, &band->cs_bar);
 				snprintf(band->statusline.s, LENGTH(band->statusline.s),
-					"%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd",
-					e->name, (state->disable) ? " [off]" : "", i,
-					band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count);
+					"%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd"
+				#if DEBUG_POWER_ERROR
+					"; pwr_err: %+05.2fdB"
+				#endif
+					, e->name, (state->disable) ? " [off]" : "", i,
+					band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count
+				#if DEBUG_POWER_ERROR
+					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
+				#endif
+				);
 			}
 		}
 		dsp_statuslines_release();
@@ -563,6 +604,10 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	free(state->fb_buf[1]);
 	for (int i = 0; i < N_BANDS; ++i)
 		event_state_cleanup(&state->band[i].ev);
+#if DEBUG_POWER_ERROR
+	if (state->pwr_err_file)
+		fclose(state->pwr_err_file);
+#endif
 #ifdef DSP_STATUSLINES
 	if (state->statuslines_registered) {
 		dsp_statuslines_acquire();
@@ -605,7 +650,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
 		return NULL;
-	if (parse_effect_opts(argv, istream, 1, &config))
+	if (parse_effect_opts(argv, dir, istream, 1, &config))
 		return NULL;
 
 	e = calloc(1, sizeof(struct effect));
@@ -636,9 +681,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->status_type = config.status_type;
 	state->do_phase_flip = !!config.do_phase_flip;
 	state->do_direct_path = !!config.do_direct_path;
+	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	state->cmc_param = config.calc_matrix_coefs_param;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
+#if DEBUG_POWER_ERROR
+	state->pwr_err_file = config.pwr_err_file;
+#endif
 
 	phase_flip_init_params(&state->pf_params, istream->fs);
 	for (int k = 0; k < N_BANDS; ++k) {
@@ -658,6 +707,11 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		ap1_reset(&band->pf_ap[1]);
 		cs_interp_set(&band->m_surr_amb, 1.0);
 		cs_interp_set(&band->m_surr_dir, 0.0);
+	#if DEBUG_POWER_ERROR
+		ewma_init(&band->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+		smf_init(&band->pwr_err_sm, istream->fs, SMF_RISE_TIME(300.0), 0.1);
+	#endif
 	}
 
 	state->fb_buf_len = config.lookahead_frames;

@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2025-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -73,6 +73,11 @@ static inline double smf_asym_run(struct smf_state *state, double s)
 static inline double smf_run(struct smf_state *state, double s)
 {
 	return smf_run_c(state, s, state->c0);
+}
+
+static inline double smf_get_last(struct smf_state *state)
+{
+	return state->m1;
 }
 
 #endif

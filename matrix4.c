@@ -37,7 +37,7 @@ struct dyn_shelf_state {
 
 struct matrix4_state {
 	int s, c0, c1;
-	char disable, do_phase_flip, do_direct_path;
+	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple;
 	enum status_type status_type;
 	sample_t *bufs[2];
 	struct biquad_state in_hp[2], in_lp[2];
@@ -45,7 +45,7 @@ struct matrix4_state {
 	struct smooth_state sm;
 	struct event_state ev;
 	struct event_config evc;
-	struct axes ax, ax_ev;
+	struct axes ax, ax_ev, ax_dpwr;
 	struct smf_state bg_cs;
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
@@ -59,6 +59,14 @@ struct matrix4_state {
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double cmc_param, surr_mult[2], shelf_mult, lowpass_mult, contour_pwrcmp;
 	ssize_t len, p, fade_frames, fade_p, surr_delay_frames;
+#if DEBUG_POWER_ERROR
+	struct {
+		struct biquad_state lp[6], hp[6];
+	} pwr_err_bp;
+	struct ewma_state pwr_err[2];
+	struct smf_state pwr_err_sm;
+	FILE *pwr_err_file;
+#endif
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
 	struct statusline_state statusline;
@@ -112,8 +120,9 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		#else
 		if (1) {
 		#endif
-			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev);
+			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
 			norm_axes(&state->ax);
+			norm_axes(&state->ax_dpwr);
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
@@ -129,7 +138,8 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 				{ .arg = surr_mult*shelf_ct1 },
 				{ .arg = surr_mult*shelf_ct1*lp_ct1 },
 			};
-			state->calc_matrix_coefs(&state->ax, surr_mult, state->surr_mult[1]*cur_fade_mult, state->cmc_param, 0, &m, r_shelf_mult, LENGTH(r_shelf_mult));
+			state->calc_matrix_coefs(&state->ax, (state->do_dpwr_decouple) ? &state->ax_dpwr : &state->ax,
+				surr_mult, state->surr_mult[1]*cur_fade_mult, state->cmc_param, &m, r_shelf_mult, LENGTH(r_shelf_mult));
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -190,6 +200,27 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 			out_rs_pf = ap1_run(&state->pf_ap[1], out_rs_pf);
 		}
 
+	#if DEBUG_POWER_ERROR
+	#ifdef DSP_STATUSLINES
+		if (state->status_type || state->pwr_err_file) {
+	#else
+		if (state->pwr_err_file) {
+	#endif
+			const sample_t pe_l_in = biquad(&state->pwr_err_bp.hp[0], biquad(&state->pwr_err_bp.lp[0], s0_d));
+			const sample_t pe_r_in = biquad(&state->pwr_err_bp.hp[1], biquad(&state->pwr_err_bp.lp[1], s1_d));
+			const sample_t pe_l_out = biquad(&state->pwr_err_bp.hp[2], biquad(&state->pwr_err_bp.lp[2], out_l));
+			const sample_t pe_r_out = biquad(&state->pwr_err_bp.hp[3], biquad(&state->pwr_err_bp.lp[3], out_r));
+			const sample_t pe_ls_out = biquad(&state->pwr_err_bp.hp[4], biquad(&state->pwr_err_bp.lp[4], out_ls));
+			const sample_t pe_rs_out = biquad(&state->pwr_err_bp.hp[5], biquad(&state->pwr_err_bp.lp[5], out_rs));
+			const double pe_in = ewma_run(&state->pwr_err[0], pe_l_in*pe_l_in + pe_r_in*pe_r_in);
+			const double pe_out = ewma_run(&state->pwr_err[1], pe_l_out*pe_l_out + pe_r_out*pe_r_out + pe_ls_out*pe_ls_out + pe_rs_out*pe_rs_out);
+			const double pe_ratio = MAXIMUM(pe_out, DBL_MIN)/MAXIMUM(pe_in, DBL_MIN);
+			const double pe_ratio_sm = smf_run(&state->pwr_err_sm, MINIMUM(pe_ratio, 10.0));
+			if (state->s == 0 && state->pwr_err_file)
+				fprintf(state->pwr_err_file, "%.15e\n", pe_ratio_sm);
+		}
+	#endif
+
 		sample_t *ibuf_p = &ibuf[i*e->istream.channels], *obuf_p = &obuf[i*e->ostream.channels];
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (k == state->c0) obuf_p[k] = out_l;
@@ -225,19 +256,33 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 		if (state->status_type == STATUS_TYPE_TEXT) {
 			snprintf(state->statusline.s, LENGTH(state->statusline.s),
 				"%s%s: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
-				"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd",
-				e->name, (state->disable) ? " [off]" : "",
+				"adj: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd"
+			#if DEBUG_POWER_ERROR
+				"; pwr_err: %+05.2fdB"
+			#endif
+				, e->name, (state->disable) ? " [off]" : "",
 				TO_DEGREES(state->ax.lr), TO_DEGREES(state->ax_ev.lr), TO_DEGREES(state->ax.cs), TO_DEGREES(state->ax_ev.cs),
 				state->ev.adj, state->contour_pwrcmp*ewma_get_last(&state->ev.pwrcmp_factor),
-				state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count);
+				state->ev.ord_count, state->ev.diff_count, state->ev.early_count, state->ev.ignore_count
+			#if DEBUG_POWER_ERROR
+				, 10.0*log10(smf_get_last(&state->pwr_err_sm))
+			#endif
+			);
 		}
 		else {
 			draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
 			draw_steering_bar(state->ax.cs, state->ev.hold, &state->cs_bar);
 			snprintf(state->statusline.s, LENGTH(state->statusline.s),
-				"%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd",
-				e->name, (state->disable) ? " [off]" : "",
-				state->lr_bar.s, state->cs_bar.s, state->ev.ord_count, state->ev.diff_count, state->ev.ignore_count);
+				"%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd"
+			#if DEBUG_POWER_ERROR
+				"; pwr_err: %+05.2fdB"
+			#endif
+				, e->name, (state->disable) ? " [off]" : "",
+				state->lr_bar.s, state->cs_bar.s, state->ev.ord_count, state->ev.diff_count, state->ev.ignore_count
+			#if DEBUG_POWER_ERROR
+				, 10.0*log10(smf_get_last(&state->pwr_err_sm))
+			#endif
+			);
 		}
 		dsp_statuslines_release();
 	}
@@ -278,6 +323,10 @@ void matrix4_effect_destroy(struct effect *e)
 	free(state->bufs[0]);
 	free(state->bufs[1]);
 	event_state_cleanup(&state->ev);
+#if DEBUG_POWER_ERROR
+	if (state->pwr_err_file)
+		fclose(state->pwr_err_file);
+#endif
 #ifdef DSP_STATUSLINES
 	if (state->statusline_registered) {
 		dsp_statuslines_acquire();
@@ -318,7 +367,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 
 	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
 		return NULL;
-	if (parse_effect_opts(argv, istream, 0, &config))
+	if (parse_effect_opts(argv, dir, istream, 0, &config))
 		return NULL;
 
 	e = calloc(1, sizeof(struct effect));
@@ -341,9 +390,13 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->status_type = config.status_type;
 	state->do_phase_flip = !!config.do_phase_flip;
 	state->do_direct_path = !!config.do_direct_path;
+	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	state->cmc_param = config.calc_matrix_coefs_param;
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
+#if DEBUG_POWER_ERROR
+	state->pwr_err_file = config.pwr_err_file;
+#endif
 
 	for (int i = 0; i < 2; ++i) {
 		biquad_init_using_type(&state->in_hp[i], BIQUAD_HIGHPASS, istream->fs,  500.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
@@ -365,6 +418,15 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	cs_interp_set(&state->m_surr_dir, 0.0);
 	smooth_state_init(&state->sm, istream);
 	event_state_init(&state->ev, istream, 1.0);
+#if DEBUG_POWER_ERROR
+	for (int i = 0; i < 6; ++i) {
+		biquad_init_using_type(&state->pwr_err_bp.lp[i], BIQUAD_LOWPASS, istream->fs, 14000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
+		biquad_init_using_type(&state->pwr_err_bp.hp[i], BIQUAD_HIGHPASS, istream->fs, 180.0, 0.4, 0, 0, BIQUAD_WIDTH_Q);
+	}
+	ewma_init(&state->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+	ewma_init(&state->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+	smf_init(&state->pwr_err_sm, istream->fs, SMF_RISE_TIME(300.0), 0.1);
+#endif
 
 	state->len = config.lookahead_frames;
 #if DOWNSAMPLE_FACTOR > 1
