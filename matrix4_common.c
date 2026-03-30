@@ -296,7 +296,7 @@ int parse_effect_opts(const char *const *argv, const struct stream_info *istream
 					}
 				}
 			}
-			else if (is_opt(opt, "freq_mask=")) {
+			else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
 				char *opt_arg = isolate(opt, '=');
 				if (!is_mb) goto mb_only;
 				if (*opt_arg == '\0') goto needs_arg;

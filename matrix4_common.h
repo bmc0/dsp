@@ -67,7 +67,7 @@
 #define DO_PHASE_FLIP_DEFAULT      1
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
-#define FREQ_MASK_DEFAULT        0.3
+#define FREQ_MASK_DEFAULT        0.0
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
