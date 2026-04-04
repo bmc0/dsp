@@ -1,0 +1,17 @@
+# Example:
+#     Linear phase LR4 crossover at 2kHz using
+#     forward and reverse IIR filters.
+# Input channel map:
+#     0: Left
+#     1: Right
+# Output channel map:
+#     0: Left tweeter
+#     1: Right tweeter
+#     2: Left woofer
+#     3: Right woofer
+
+:0,1 {
+	remix 0 1 0 1
+	:0,1 highpass 2k bw2 highpass -r 2k bw2 :
+	:2,3 lowpass 2k bw2 lowpass -r 2k bw2 :
+} :

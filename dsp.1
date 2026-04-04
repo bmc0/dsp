@@ -338,13 +338,13 @@ Default values are 25 for \fIchebyshev1\fR and \fIchebyshev2\fR, and 35:50 for
 Applying decorrelation filters to the surround outputs can further improve
 spatial impression over simple delay. Example:
 .EX
-	matrix4 surround_delay=5m -3/0
-	:2,3 decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	matrix4 -3/0
+	:2,3 delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
 .EE
-Note that \fIsurround_delay\fR is set to only 5ms because the decorrelation
-filters add approximately 10ms of delay at high frequencies. The group
-delay falls below 80Hz, so an additional \fIallpass\fR filter is added to
-compensate.
+The surround outputs are advanced by 10ms using the \fBdelay\fR effect to
+compensate for the peak energy time of the decorrelation filters. An
+additional \fBallpass\fR filter equalizes the group delay at low frequencies.
+
 .TP
 \fBmatrix4_mb\fR [\fIoptions\fR] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]
 Like the \fBmatrix4\fR effect, but divides the input into 13 individually

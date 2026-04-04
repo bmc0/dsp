@@ -1,0 +1,19 @@
+# Example:
+#     Upmix 2-channel audio to 2/4 surround using matrix4.
+# Input channel map:
+#     0: Left
+#     1: Right
+# Output channel map:
+#     0: Front Left
+#     1: Front Right
+#     2: Side Left
+#     3: Side Right
+#     4: Rear Left
+#     5: Rear Right
+
+matrix4 signal -3/0
+:2,3 {
+	delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
+	gain -3.01 remix 0 1 0 1
+	:2,3 delay 2m decorrelate -s7 -m -f0.7k -l35m 5 allpass 80 0.6 :
+} :

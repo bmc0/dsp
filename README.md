@@ -330,14 +330,15 @@ Example:
 	spatial impression over simple delay. Example:
 
 	```
-	matrix4 surround_delay=5m -3/0
-	:2,3 decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	matrix4 -3/0
+	:2,3 delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
 	```
 
-	Note that `surround_delay` is set to only 5ms because the decorrelation
-	filters add approximately 10ms of delay at high frequencies. The group
-	delay falls below 80Hz, so an additional `allpass` filter is added to
-	compensate.
+	The surround outputs are advanced by 10ms using the `delay` effect to
+	compensate for the peak energy time of the decorrelation filters. An
+	additional `allpass` filter equalizes the group delay at low frequencies.
+
+	See `examples/matrix4_*` for more examples.
 
 * `matrix4_mb [options] [surround_level][/surround_level_rear]`  
 	Like the `matrix4` effect, but divides the input into 13 individually
