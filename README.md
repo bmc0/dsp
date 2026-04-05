@@ -693,7 +693,9 @@ ignored. The valid keys are:
 	leaves `LC_NUMERIC` up to the LADSPA host (not generally recommended).
 * `effects_chain`  
 	String to build the effects chain. The format is the same as an effects
-	file, but only a single line is interpreted.
+	file, but only a single line is interpreted. Alternatively, the special
+	`[effects_chain]` directive causes all subsequent lines to be interpreted
+	as in an effects file.
 
 Example configuration:
 
@@ -701,10 +703,12 @@ Example configuration:
 	input_channels=1
 	output_channels=1
 	LC_NUMERIC=C
-	effects_chain=gain -3 lowshelf 100 1s +3 @/path/to/eq_file
+	[effects_chain]
+	gain -3 lowshelf 100 1s +3
+	@/path/to/eq_file
 
-Relative file paths in the `effects_chain` line are relative to the
-directory in which the configuration file resides.
+Relative file paths in the effects chain are relative to the directory in which
+the configuration file resides.
 
 The loglevel can be set to `VERBOSE`, `NORMAL`, or `SILENT` through the
 `LADSPA_DSP_LOGLEVEL` environment variable.

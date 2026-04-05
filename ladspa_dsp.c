@@ -83,24 +83,25 @@ static void init_config(struct ladspa_dsp_config *config, const char *file_name,
 
 static int read_config(struct ladspa_dsp_config *config, const char *path)
 {
-	int i, k;
-	char *c, *key, *value, *next, *endptr;
-
-	c = get_file_contents(path);
+	char *c = get_file_contents(path);
 	if (!c) return 2;
 
-	key = c;
-	for (i = 1; *key != '\0'; ++i) {
+	char *key = c, *endptr, *chain_str = NULL;
+	for (int i = 1; *key != '\0'; ++i) {
 		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
 			++key;
-		next = isolate(key, '\n');
+		char *next = isolate(key, '\n');
 		if (*key != '\0' && *key != '#') {
-			value = isolate(key, '=');
+			if (strcmp(key, "[effects_chain]") == 0) {
+				chain_str = next;
+				break;
+			}
+			char *value = isolate(key, '=');
 			if (strcmp(key, "input_channels") == 0) {
 				config->input_channels = strtol(value, &endptr, 10);
 				if (check_endptr(path, value, endptr, "input_channels")) goto parse_fail;
 				if (config->input_channels <= 0) {
-					LOG_S(LL_ERROR, "error: input_channels must be > 0");
+					LOG_FMT(LL_ERROR, "%s: error: input_channels must be > 0", path);
 					goto parse_fail;
 				}
 			}
@@ -108,7 +109,7 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 				config->output_channels = strtol(value, &endptr, 10);
 				if (check_endptr(path, value, endptr, "output_channels")) goto parse_fail;
 				if (config->output_channels <= 0) {
-					LOG_S(LL_ERROR, "error: output_channels must be > 0");
+					LOG_FMT(LL_ERROR, "%s: error: output_channels must be > 0", path);
 					goto parse_fail;
 				}
 			}
@@ -119,18 +120,17 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 					config->lc_n = strdup(value);
 			}
 			else if (strcmp(key, "effects_chain") == 0) {
-				for (k = 0; k < config->chain_argc; ++k)
-					free(config->chain_argv[k]);
-				free(config->chain_argv);
-				gen_argv_from_string(value, &config->chain_argc, &config->chain_argv);
+				chain_str = value;
 			}
 			else {
-				LOG_FMT(LL_ERROR, "error: line %d: invalid option: %s", i, key);
+				LOG_FMT(LL_ERROR, "%s: line %d: error: invalid option: %s", path, i, key);
 				goto parse_fail;
 			}
 		}
 		key = next;
 	}
+	if (chain_str) gen_argv_from_string(chain_str, &config->chain_argc, &config->chain_argv);
+	else LOG_FMT(LL_ERROR, "%s: warning: empty effects chain", path);
 	free(c);
 	return 0;
 
@@ -372,21 +372,21 @@ void __attribute__((constructor)) ladspa_dsp_so_init()
 		descriptors[k].Maker = strdup("Michael Barbour");
 		descriptors[k].Copyright = strdup("ISC");
 		descriptors[k].PortCount = configs[k].input_channels + configs[k].output_channels;
-		pd = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(LADSPA_PortDescriptor));
+		pd = calloc(descriptors[k].PortCount, sizeof(LADSPA_PortDescriptor));
 		descriptors[k].PortDescriptors = pd;
 		for (i = 0; i < configs[k].input_channels; ++i)
 			pd[i] = LADSPA_PORT_INPUT | LADSPA_PORT_AUDIO;
 		for (i = configs[k].input_channels; i < configs[k].input_channels + configs[k].output_channels; ++i)
 			pd[i] = LADSPA_PORT_OUTPUT | LADSPA_PORT_AUDIO;
-		pn = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(char *));
+		pn = calloc(descriptors[k].PortCount, sizeof(char *));
 		descriptors[k].PortNames = (const char **) pn;
 		for (i = 0; i < configs[k].input_channels; ++i)
 			pn[i] = make_port_name("Input", i);
 		for (; i < configs[k].input_channels + configs[k].output_channels; ++i)
 			pn[i] = make_port_name("Output", i - configs[k].input_channels);
-		ph = calloc(configs[k].input_channels + configs[k].output_channels, sizeof(LADSPA_PortRangeHint));
+		ph = calloc(descriptors[k].PortCount, sizeof(LADSPA_PortRangeHint));
 		descriptors[k].PortRangeHints = ph;
-		for (i = 0; i < configs[k].input_channels + configs[k].output_channels; ++i)
+		for (i = 0; i < descriptors[k].PortCount; ++i)
 			ph[i].HintDescriptor = 0;
 		descriptors[k].instantiate = instantiate_dsp;
 		descriptors[k].connect_port = connect_port_to_dsp;
