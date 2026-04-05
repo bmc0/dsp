@@ -177,8 +177,9 @@ static const char * trunc_line(const char *s, int w)
 	const size_t len = strlen(s);
 	if (w >= LENGTH(buf)) w = LENGTH(buf)-1;
 	if (len > w) {
-		memcpy(buf, s, w-3);
-		memcpy(buf+w-3, "...", 4);
+		const int trunc_len = MAXIMUM(w-3, 0);
+		memcpy(buf, s, trunc_len);
+		memcpy(buf+trunc_len, "...", 4);
 		return buf;
 	}
 	return s;
