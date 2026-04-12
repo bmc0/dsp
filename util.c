@@ -236,81 +236,19 @@ int num_bits_set(const char *b, int n)
 	return c;
 }
 
-static void strip_char(char *str, char c, int is_esc)
-{
-	int i = 0, k = 0, esc = 0;
-	while (str[k] != '\0') {
-		if (!esc && str[k] == c) {
-			if (is_esc)
-				esc = 1;
-			++k;
-		}
-		else {
-			str[i++] = str[k++];
-			esc = 0;
-		}
-	}
-	str[i] = '\0';
-}
-
-int gen_argv_from_string(const char *str, int *argc, char ***argv)
-{
-	int i = 0, k = 0, n = 1, esc = 0, end = 0;
-	char *tmp;
-
-	*argc = 0;
-	*argv = NULL;
-
-	while (!end) {
-		if (!esc && str[k] == '\\') {
-			esc = 1;
-			n = 0;
-		}
-		else if (n && str[k] == '#') {
-			while (str[k] != '\0' && str[k] != '\n')
-				++k;
-			i = k;
-			n = 0;
-			continue;
-		}
-		else if ((!esc && IS_WHITESPACE(str[k])) || str[k] == '\0') {
-			if (str[k] == '\n')
-				n = 1;
-			else if (str[k] == '\0')
-				end = 1;
-			if (i != k) {
-				tmp = strndup(&str[i], k - i);
-				strip_char(tmp, '\\', 1);
-				*argv = realloc(*argv, (*argc + 1) * sizeof(char *));
-				(*argv)[(*argc)++] = tmp;
-				i = k;
-			}
-			++i;
-		}
-		else {
-			if (n && !IS_WHITESPACE(str[k]))
-				n = 0;
-			esc = 0;
-		}
-		++k;
-	}
-	return 0;
-}
-
 char * get_file_contents(const char *path)
 {
-	const size_t g = 512;
-	ssize_t s = g, p = 0, r;
+	ssize_t s = 2048, p = 0, r;
 	int fd;
 	char *c;
 
 	if ((fd = open(path, O_RDONLY)) < 0)
 		return NULL;
-	c = calloc(s, sizeof(char));
+	c = malloc(s * sizeof(char));
 	while ((r = read(fd, &c[p], s - p)) > -1) {
 		p += r;
 		if (p >= s) {
-			s += g;
+			s += 2048;
 			c = realloc(c, s * sizeof(char));
 		}
 		if (r == 0) {
@@ -521,3 +459,21 @@ void dsp_fftw_save_wisdom(void)
 	wisdom_loaded = 0;
 }
 #endif
+
+const char *err_strs[] = {
+	[0]          = "no error",
+	[DSP_ENOMEM] = "no memory",
+};
+
+const char * dsp_strerror(int e)
+{
+	if (e < 0 || e >= LENGTH(err_strs))
+		return "unknown error";
+	return err_strs[e];
+}
+
+void dsp_perror(int e, const char *msg)
+{
+	if (msg) LOG_FMT(LL_ERROR, "error: %s: %s", msg, dsp_strerror(e));
+	else LOG_FMT(LL_ERROR, "error: %s", dsp_strerror(e));
+}

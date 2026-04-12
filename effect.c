@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <math.h>
 #include <errno.h>
 #include "effect.h"
@@ -107,176 +108,295 @@ void effects_chain_append(struct effects_chain *chain, struct effect *e)
 	LIST_APPEND(chain, e);
 }
 
-static int build_effects_chain_block(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
-static int build_effects_chain_block_from_file(const char *, struct effects_chain *, struct stream_info *, const char *, const char *, int);
+enum ec_token_id {
+	EC_TOKEN_LITERAL = 0,
+	EC_TOKEN_ESC_LITERAL,
+	EC_TOKEN_CH_SEL,
+	EC_TOKEN_BLOCK_START,
+	EC_TOKEN_BLOCK_END,
+	EC_TOKEN_SOURCE,
+	EC_TOKEN_ALLOW_FAIL,
+};
 
-static int build_effects_chain_block(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *initial_channel_mask, const char *dir)
+struct ec_token {
+	struct ec_token *prev, *next;
+	enum ec_token_id id;
+	int line, col, len;
+	char str[];
+};
+
+struct ec_token_list {
+	struct ec_token *head, *tail;
+};
+
+static enum ec_token_id ec_get_token_id(const char *s)
 {
-	int i, k = 0, allow_fail = 0, last_stream_channels = stream->channels;
-	char *channel_selector, *channel_mask;
-	const char *last_channel_selector_str = NULL;
-	const struct effect_info *ei = NULL;
-	struct effect *e = NULL;
+	if (s[0] == ':')
+		return EC_TOKEN_CH_SEL;
+	else if (s[0] == '{' && s[1] == '\0')
+		return EC_TOKEN_BLOCK_START;
+	else if (s[0] == '}' && s[1] == '\0')
+		return EC_TOKEN_BLOCK_END;
+	else if (s[0] == '@' && s[1] != '\0')
+		return EC_TOKEN_SOURCE;
+	else if (s[0] == '!' && s[1] == '\0')
+		return EC_TOKEN_ALLOW_FAIL;
+	return EC_TOKEN_LITERAL;
+}
 
-	channel_mask = NEW_SELECTOR(stream->channels);
-	if (initial_channel_mask)
-		COPY_SELECTOR(channel_mask, initial_channel_mask, stream->channels);
-	else
-		SET_SELECTOR(channel_mask, stream->channels);
-
-	channel_selector = NEW_SELECTOR(stream->channels);
-	COPY_SELECTOR(channel_selector, channel_mask, stream->channels);
-
-	while (k < argc) {
-		if (strcmp(argv[k], "!") == 0) {
-			allow_fail = 1;
-			++k;
-			continue;
-		}
-		if (last_stream_channels != stream->channels) {  /* construct new channel mask */
-			const int delta = stream->channels - last_stream_channels;
-			char *tmp_mask = NEW_SELECTOR(stream->channels);
-			if (delta > 0) {
-				/* additional channels are appended */
-				COPY_SELECTOR(tmp_mask, channel_mask, last_stream_channels);
-				free(channel_mask);
-				channel_mask = tmp_mask;
-				for (int j = last_stream_channels; j < stream->channels; ++j)
-					SET_BIT(channel_mask, j);
-			}
-			else {
-				int nb = num_bits_set(channel_mask, last_stream_channels) + delta;
-				for (int j = 0; j < stream->channels && nb > 0; ++j) {
-					if (GET_BIT(channel_mask, j)) {
-						SET_BIT(tmp_mask, j);
-						--nb;
-					}
-				}
-				free(channel_mask);
-				channel_mask = tmp_mask;
-			}
-		}
-		if (argv[k][0] == ':') {
-			if (last_stream_channels != stream->channels) {
-				free(channel_selector);
-				channel_selector = NEW_SELECTOR(stream->channels);
-				last_stream_channels = stream->channels;
-			}
-			if (parse_selector_masked(&argv[k][1], channel_selector, channel_mask, stream->channels))
-				goto fail;
-			last_channel_selector_str = &argv[k][1];
-			++k;
-			continue;
-		}
-		if (last_stream_channels != stream->channels) {  /* re-parse the channel selector */
-			char *tmp_channel_selector = NEW_SELECTOR(stream->channels);
-			if (last_channel_selector_str == NULL)
-				COPY_SELECTOR(tmp_channel_selector, channel_mask, stream->channels);
-			else if (parse_selector_masked(last_channel_selector_str, tmp_channel_selector, channel_mask, stream->channels)) {
-				LOG_S(LL_VERBOSE, "note: the last effect changed the number of channels");
-				free(tmp_channel_selector);
-				goto fail;
-			}
-			free(channel_selector);
-			channel_selector = tmp_channel_selector;
-			last_stream_channels = stream->channels;
-		}
-		if (argv[k][0] == '@') {
-			if (build_effects_chain_block_from_file(&argv[k][1], chain, stream, channel_selector, dir, 0))
-				goto fail;
-			++k;
-			continue;
-		}
-		if (strcmp(argv[k], "{") == 0) {
-			int bc = 1;
-			for (i = k + 1; bc > 0 && i < argc; ++i) {
-				if      (strcmp(argv[i], "{") == 0) ++bc;
-				else if (strcmp(argv[i], "}") == 0) --bc;
-			}
-			if (bc > 0) {
-				LOG_S(LL_ERROR, "error: missing '}'");
-				goto fail;
-			}
-			if (build_effects_chain_block(i - k - 2, &argv[k + 1], chain, stream, channel_selector, dir))
-				goto fail;
-			k = i;
-			continue;
-		}
-		if (strcmp(argv[k], "}") == 0) {
-			LOG_S(LL_ERROR, "error: unexpected '}'");
-			goto fail;
-		}
-		ei = get_effect_info(argv[k]);
-		/* Find end of argument list */
-		for (i = k + 1; i < argc && !IS_EFFECTS_CHAIN_START(argv[i]); ++i);
-		if (ei == NULL) {
-			if (allow_fail)
-				LOG_FMT(LL_VERBOSE, "warning: no such effect: %s", argv[k]);
-			else {
-				LOG_FMT(LL_ERROR, "error: no such effect: %s", argv[k]);
-				goto fail;
-			}
-		}
-		else if (ei->init == NULL) {
-			if (allow_fail)
-				LOG_FMT(LL_VERBOSE, "warning: effect not available: %s", argv[k]);
-			else {
-				LOG_FMT(LL_ERROR, "error: effect not available: %s", argv[k]);
-				goto fail;
-			}
-		}
-		else {
-			if (LOGLEVEL(LL_VERBOSE)) {
-				dsp_log_acquire();
-				dsp_log_printf("%s: effect:", dsp_globals.prog_name);
-				for (int j = 0; j < i - k; ++j)
-					dsp_log_printf(" %s", argv[k + j]);
-				dsp_log_printf("; channels=%d [", stream->channels);
-				print_selector(channel_selector, stream->channels);
-				dsp_log_printf("] fs=%d\n", stream->fs);
-				dsp_log_release();
-			}
-			e = ei->init(ei, stream, channel_selector, dir, i - k, &argv[k]);
-			if (e == NULL) {
-				if (allow_fail)
-					LOG_FMT(LL_VERBOSE, "warning: failed to initialize non-essential effect: %s", argv[k]);
-				else {
-					LOG_FMT(LL_ERROR, "error: failed to initialize effect: %s", argv[k]);
-					goto fail;
-				}
-			}
-			while (e != NULL) {
-				struct effect *e_n = e->next;
-				if (e->run == NULL) {
-					LOG_FMT(LL_VERBOSE, "info: not using effect: %s", argv[k]);
-					destroy_effect(e);
-				}
-				else {
-					effects_chain_append(chain, e);
-					*stream = e->ostream;
-				}
-				e = e_n;
-			}
-		}
-		allow_fail = 0;
-		k = i;
-	}
-	free(channel_selector);
-	free(channel_mask);
-	return 0;
-
-	fail:
-	free(channel_selector);
-	free(channel_mask);
+int is_effect_or_token(const char *s)
+{
+	if (ec_get_token_id(s) == EC_TOKEN_LITERAL)
+		return (get_effect_info(s) != NULL);
 	return 1;
 }
 
-static int build_effects_chain_block_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
+static int ec_lex_word(struct ec_token_list *tokens, const char *s, int line, int col, int len)
 {
-	char **argv = NULL, *tmp, *d = NULL, *p, *c;
-	int i, ret = 0, argc = 0;
+	size_t slen = 0;
+	enum ec_token_id id = EC_TOKEN_ESC_LITERAL;
+	if (*s == '\\') ++s;
+	else id = ec_get_token_id(s);
+	switch (id) {
+	case EC_TOKEN_CH_SEL:
+	case EC_TOKEN_SOURCE:
+		++s;
+	case EC_TOKEN_ESC_LITERAL:
+	case EC_TOKEN_LITERAL:
+		slen = strlen(s);
+	default: break;
+	}
+	struct ec_token *tok = calloc(1, sizeof(struct ec_token)+slen+1);
+	if (!tok) {
+		dsp_perror(DSP_ENOMEM, NULL);
+		return 1;
+	}
+	tok->id = id;
+	tok->line = line;
+	tok->col = col;
+	tok->len = len;
+	if (slen > 0) memcpy(tok->str, s, slen);
+	LIST_APPEND(tokens, tok);
+	return 0;
+}
 
-	p = construct_full_path(dir, path, stream);
+static void ec_token_list_destroy(struct ec_token_list *tokens)
+{
+	while (tokens->head) {
+		struct ec_token *tok = tokens->head;
+		LIST_REMOVE(tokens, tok);
+		free(tok);
+	}
+}
+
+static void ec_print_escaped_str(const char *s, int max_len)
+{
+	const char *end = (max_len > 0) ? s + max_len : NULL;
+	while (*s && s != end) {
+		const char *esc = NULL;
+		switch (*s) {
+		case '\a': esc = "\\a"; break;
+		case '\b': esc = "\\b"; break;
+		case '\t': esc = "\\t"; break;
+		case '\n': esc = "\\n"; break;
+		case '\v': esc = "\\v"; break;
+		case '\f': esc = "\\f"; break;
+		case '\r': esc = "\\r"; break;
+		}
+		if (esc) dsp_log_puts(esc);
+		else {
+			if (iscntrl(*s)) dsp_log_printf("\\%03o", *s);
+			else dsp_log_putc(*s);
+		}
+		++s;
+	}
+	if (s == end && *s != '\0')
+		dsp_log_puts("...");
+}
+
+static void ec_print_line(const char *reason, const char *path, const char *msg,
+	const char *s, int line, int col, int len)
+{
+	dsp_log_acquire();
+	dsp_log_printf("%s: ", dsp_globals.prog_name);
+	if (path) dsp_log_printf("%s: line %d: ", path, line+1);
+	dsp_log_printf("%s: %s\n  | ", reason, msg);
+	for (int i = 0; s[i] && s[i] != '\n'; ++i) {
+		if (s[i] == '\t') dsp_log_puts("    ");
+		else dsp_log_putc(s[i]);
+	}
+	dsp_log_puts("\n  | ");
+	for (int i = 0; (len < 1 || i < col+len) && s[i] && s[i] != '\n'; ++i) {
+		char hl[5] = { (i < col) ? ' ' : (i == col) ? '^' : '~', '\0' };
+		if (s[i] == '\t') {
+			memset(hl+1, (hl[0] != '^') ? hl[0] : '~', 3);
+			dsp_log_puts(hl);
+		}
+		else dsp_log_putc(hl[0]);
+	}
+	if (len < 1) dsp_log_puts(">>");
+	dsp_log_putc('\n');
+	dsp_log_release();
+}
+#define ec_line_err(path, msg, s, line, col, len) \
+	ec_print_line("error", path, msg, s, line, col, len)
+
+static int ec_split_and_lex_string(struct ec_token_list *tokens, const char *s, const char *path, int *r_lines)
+{
+	int line = *r_lines, sep = 1, esc = 0, quo = 0, cont = 0;
+	int i = 0, k = 0, l = 0, bp = 0, bsz = 1024, done = 0;
+	char *buf = malloc(bsz*sizeof(char));
+	while (!done) {
+		int sp = 1;
+		const char c = s[k];
+		if (c == '\\' && !esc) {
+			esc = 1;
+			if (sep) goto append_char;
+		}
+		else if (c == '"' && !esc)
+			quo = !quo;
+		else if (c == '#' && !esc && !quo && sep) {
+			while (s[k] && s[k] != '\n') ++k;
+			i = k+1;
+		}
+		else if (c == '\0' || (!esc && !quo && isspace((unsigned char) c))) {
+			if (c == '\0') {
+				if (quo) {
+					ec_line_err(path, "unterminated quoted string", &s[l], line, i-l, 0);
+					break;
+				}
+				done = 1;
+			}
+			if (i != k) {
+				buf[bp] = '\0';
+				ec_lex_word(tokens, buf, line, i-l, k-i);
+				bp = 0;
+				i = k;
+			}
+			sep = 1;
+			++i;
+		}
+		else {
+			sp = 0;
+			append_char:
+			buf[bp++] = c;
+			if (bp == bsz) {
+				bsz += 1024;
+				buf = realloc(buf, bsz*sizeof(char));
+			}
+		}
+		if (s[k] == '\n') {
+			if (esc || quo) ++cont;
+			else {
+				line += cont+1;
+				l = k+1;
+				cont = 0;
+			}
+		}
+		if (!sp) sep = esc = 0;
+		++k;
+	}
+	free(buf);
+	*r_lines = line+cont+1;
+	return (done) ? 0 : 1;
+}
+
+static int ec_token_is_keyword(struct ec_token *tok)
+{
+	if (tok->id != EC_TOKEN_ESC_LITERAL) {
+		if (tok->id != EC_TOKEN_LITERAL)
+			return 1;
+		else if (get_effect_info(tok->str))
+			return 1;
+	}
+	return 0;
+}
+
+struct ec_parser_state {
+	struct effects_chain *chain;
+	struct stream_info *stream;
+	const char *path, *dir;
+	char **line_strs;
+	char *ch_sel, *ch_mask;
+	struct ec_token *last_ch_sel;
+	int allow_fail, last_stream_ch;
+};
+
+enum ec_nest { EC_NEST_NONE = 0, EC_NEST_BLOCK };
+
+static struct ec_token * ec_parse(struct ec_parser_state *, struct ec_token *, enum ec_nest);
+
+static int ec_parser_state_ch_sel_mask(struct ec_parser_state *state, const char *initial_ch_mask)
+{
+	state->ch_sel = NEW_SELECTOR(state->stream->channels);
+	state->ch_mask = NEW_SELECTOR(state->stream->channels);
+	if (initial_ch_mask) COPY_SELECTOR(state->ch_mask, initial_ch_mask, state->stream->channels);
+	else SET_SELECTOR(state->ch_mask, state->stream->channels);
+	COPY_SELECTOR(state->ch_sel, state->ch_mask, state->stream->channels);
+	return 0;
+}
+
+static void ec_parser_state_cleanup(struct ec_parser_state *state)
+{
+	free(state->ch_sel);
+	free(state->ch_mask);
+}
+
+static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_parser_state *parent_state)
+{
+	struct ec_parser_state state = {
+		.chain = parent_state->chain,
+		.stream = parent_state->stream,
+		.path = parent_state->path,
+		.dir = parent_state->dir,
+		.last_stream_ch = parent_state->last_stream_ch,
+	};
+	if (ec_parser_state_ch_sel_mask(&state, parent_state->ch_sel))
+		return tok;
+	tok = ec_parse(&state, tok, EC_NEST_BLOCK);
+	ec_parser_state_cleanup(&state);
+	return tok;
+}
+
+static int ec_parse_string(char *s, const char *path, const char *dir, struct effects_chain *chain,
+	struct stream_info *stream, const char *initial_ch_mask)
+{
+	int lines = 0;
+	struct ec_token_list tokens = {0};
+	if (ec_split_and_lex_string(&tokens, s, path, &lines))
+		return 1;
+
+	struct ec_parser_state state = {
+		.chain = chain,
+		.stream = stream,
+		.path = path,
+		.dir = dir,
+		.last_stream_ch = stream->channels,
+	};
+	if (ec_parser_state_ch_sel_mask(&state, initial_ch_mask))
+		return 1;
+	if (lines > 0) {
+		state.line_strs = calloc(lines, sizeof(const char *));
+		char *line = s;
+		for (int i = 0; i < lines && *line != '\0'; ++i) {
+			state.line_strs[i] = line;
+			line = isolate(line, '\n');
+		}
+	}
+
+	struct ec_token *tok = ec_parse(&state, tokens.head, EC_NEST_NONE);
+	ec_token_list_destroy(&tokens);
+	free(state.line_strs);
+	ec_parser_state_cleanup(&state);
+	return (tok == NULL) ? 0 : 1;
+}
+
+static int ec_parse_file(const char *path, const char *dir, struct effects_chain *chain,
+	struct stream_info *stream, const char *ch_mask, int enforce_eof_marker)
+{
+	int ret = 0;
+	char *p = construct_full_path(dir, path, stream), *c = NULL, *d = NULL;
+	if (!p) goto fail_nomem;
 	if (!(c = get_file_contents(p))) {
 		LOG_FMT(LL_ERROR, "error: failed to load effects file: %s: %s", p, strerror(errno));
 		goto fail;
@@ -284,38 +404,245 @@ static int build_effects_chain_block_from_file(const char *path, struct effects_
 	if (enforce_eof_marker) {
 		const ssize_t l = LENGTH(EFFECTS_FILE_EOF_MARKER)-1;
 		ssize_t k = strlen(c);
-		while (k > l && IS_WHITESPACE(c[k-1])) --k;
+		while (k > l && isspace((unsigned char) c[k-1])) --k;
 		if (k < l || strncmp(&c[k-l], EFFECTS_FILE_EOF_MARKER, l) != 0 || (k > l && c[k-l-1] != '\n')) {
 			LOG_FMT(LL_ERROR, "error: no valid end-of-file marker: %s", p);
 			goto fail;
 		}
 	}
-	if (gen_argv_from_string(c, &argc, &argv))
-		goto fail;
-	d = strdup(p);
-	tmp = strrchr(d, '/');
-	if (tmp == NULL) {
-		free(d);
-		d = strdup(".");
-	}
-	else
-		*tmp = '\0';
+	char *b = strrchr(p, '/');
+	if (b && !(d = strndup(p, b-p))) goto fail_nomem;
 	LOG_FMT(LL_VERBOSE, "info: begin effects file: %s", p);
-	if (build_effects_chain_block(argc, (const char *const *) argv, chain, stream, channel_mask, d))
+	if (ec_parse_string(c, p, (d)?d:".", chain, stream, ch_mask))
 		goto fail;
 	LOG_FMT(LL_VERBOSE, "info: end effects file: %s", p);
 	done:
 	free(c);
 	free(p);
 	free(d);
-	for (i = 0; i < argc; ++i)
-		free(argv[i]);
-	free(argv);
 	return ret;
 
+	fail_nomem:
+	dsp_perror(DSP_ENOMEM, NULL);
 	fail:
 	ret = 1;
 	goto done;
+}
+
+static int ec_parse_argv(int argc, const char *const *argv, const char *dir, struct effects_chain *chain,
+	struct stream_info *stream, const char *ch_mask)
+{
+	if (argc < 1) return 0;
+	int ret = 0;
+	ssize_t s = 2048, p = 0;
+	struct ec_token_list tokens = {0};
+	struct ec_parser_state state = {0};
+	char *line = malloc(s * sizeof(char));
+	if (!line) goto fail_nomem;
+	for (int i = 0; i < argc; ++i) {
+		const int len = strlen(argv[i]);
+		if (p+len >= s) {
+			while (p+len >= s) s += 2048;
+			char *line_tmp = realloc(line, s * sizeof(char));
+			if (!line_tmp) goto fail_nomem;
+			line = line_tmp;
+		}
+		if (ec_lex_word(&tokens, argv[i], 0, p, len))
+			goto fail;
+		memcpy(line+p, argv[i], len);
+		p += len+1;
+		line[p-1] = ' ';
+	}
+	line[p-1] = '\0';
+
+	state.chain = chain;
+	state.stream = stream;
+	state.path = NULL;
+	state.dir = dir;
+	state.line_strs = &line;
+	state.last_stream_ch = stream->channels;
+	if (ec_parser_state_ch_sel_mask(&state, ch_mask))
+		goto fail;
+	if (ec_parse(&state, tokens.head, EC_NEST_NONE) != NULL)
+		goto fail;
+
+	done:
+	ec_token_list_destroy(&tokens);
+	ec_parser_state_cleanup(&state);
+	free(line);
+	return ret;
+
+	fail_nomem:
+	dsp_perror(DSP_ENOMEM, NULL);
+	fail:
+	ret = 1;
+	goto done;
+}
+
+#define ec_parse_print_line(reason, state, msg, line, col, len) \
+	ec_print_line(reason, (state)->path, msg, (state)->line_strs[line], line, col, len)
+#define ec_parse_hl_token(reason, state, msg, tok) \
+	ec_parse_print_line(reason, state, msg, (tok)->line, (tok)->col, (tok)->len)
+#define ec_parse_err(state, msg, tok) ec_parse_hl_token("error", state, msg, tok)
+#define ec_parse_note(state, msg, tok) ec_parse_hl_token("note", state, msg, tok)
+static int ec_parse_effect_err(struct ec_parser_state *state, const char *msg, struct ec_token *tok, struct ec_token *hl_end)
+{
+	dsp_log_acquire();
+	dsp_log_printf("%s: ", dsp_globals.prog_name);
+	if (state->path) dsp_log_printf("%s: line %d: ", state->path, tok->line+1);
+	dsp_log_printf("%s: %s: ", (state->allow_fail) ? "warning" : "error", msg);
+	ec_print_escaped_str(tok->str, 0);
+	dsp_log_putc('\n');
+	dsp_log_release();
+	const int len = (hl_end->line == tok->line) ? hl_end->col + hl_end->len - tok->col : 0;
+	ec_parse_print_line("note", state, "defined here:", tok->line, tok->col, len);
+	return (state->allow_fail) ? 0 : 1;
+}
+
+static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token *tok, enum ec_nest nest)
+{
+	struct ec_token *prev_effect = NULL;
+	while (tok) {
+		if (nest == EC_NEST_BLOCK && tok->id == EC_TOKEN_BLOCK_END)
+			return tok;
+		if (tok->id == EC_TOKEN_ALLOW_FAIL) {
+			state->allow_fail = 1;
+			tok = tok->next; continue;
+		}
+		if (state->last_stream_ch != state->stream->channels) {  /* construct new channel mask */
+			const int delta = state->stream->channels - state->last_stream_ch;
+			char *tmp_mask = NEW_SELECTOR(state->stream->channels);
+			if (delta > 0) {
+				/* additional channels are appended */
+				COPY_SELECTOR(tmp_mask, state->ch_mask, state->last_stream_ch);
+				free(state->ch_mask);
+				state->ch_mask = tmp_mask;
+				for (int j = state->last_stream_ch; j < state->stream->channels; ++j)
+					SET_BIT(state->ch_mask, j);
+			}
+			else {
+				int nb = num_bits_set(state->ch_mask, state->last_stream_ch) + delta;
+				for (int j = 0; j < state->stream->channels && nb > 0; ++j) {
+					if (GET_BIT(state->ch_mask, j)) {
+						SET_BIT(tmp_mask, j);
+						--nb;
+					}
+				}
+				free(state->ch_mask);
+				state->ch_mask = tmp_mask;
+			}
+		}
+		if (tok->id == EC_TOKEN_CH_SEL) {
+			if (state->last_stream_ch != state->stream->channels) {
+				free(state->ch_sel);
+				state->ch_sel = NEW_SELECTOR(state->stream->channels);
+				state->last_stream_ch = state->stream->channels;
+			}
+			if (parse_selector_masked(tok->str, state->ch_sel, state->ch_mask, state->stream->channels)) {
+				ec_parse_note(state, "defined here:", tok);
+				return tok;
+			}
+			state->last_ch_sel = tok;
+			tok = tok->next; continue;
+		}
+		if (state->last_stream_ch != state->stream->channels) {  /* re-parse the channel selector */
+			char *tmp_ch_sel = NEW_SELECTOR(state->stream->channels);
+			if (!state->last_ch_sel)
+				COPY_SELECTOR(tmp_ch_sel, state->ch_mask, state->stream->channels);
+			else if (parse_selector_masked(state->last_ch_sel->str, tmp_ch_sel, state->ch_mask, state->stream->channels)) {
+				ec_parse_note(state, "active channel selector defined here:", state->last_ch_sel);
+				ec_parse_note(state, "number of channels modified by this effect:", prev_effect);
+				free(tmp_ch_sel);
+				return tok;
+			}
+			free(state->ch_sel);
+			state->ch_sel = tmp_ch_sel;
+			state->last_stream_ch = state->stream->channels;
+		}
+		if (tok->id == EC_TOKEN_SOURCE) {
+			if (ec_parse_file(tok->str, state->dir, state->chain, state->stream, state->ch_sel, 0))
+				return tok;
+			tok = tok->next; continue;
+		}
+		if (tok->id == EC_TOKEN_BLOCK_START) {
+			struct ec_token *end = ec_parse_child_block(tok->next, state);
+			if (!end) {
+				ec_parse_err(state, "unterminated block", tok);
+				return tok;
+			}
+			else if (end->id != EC_TOKEN_BLOCK_END)
+				return tok;
+			tok = end->next;
+			continue;
+		}
+		if (tok->id != EC_TOKEN_LITERAL) {
+			ec_parse_err(state, "unexpected token", tok);
+			return tok;
+		}
+		const struct effect_info *ei = get_effect_info(tok->str);
+		/* find end of argument list */
+		int argc = 1;
+		struct ec_token *argv_end = tok;
+		while (argv_end->next && !ec_token_is_keyword(argv_end->next)) {
+			argv_end = argv_end->next;
+			++argc;
+		}
+		if (ei == NULL) {
+			if (ec_parse_effect_err(state, "no such effect", tok, argv_end))
+				return tok;
+		}
+		else if (ei->init == NULL) {
+			if (ec_parse_effect_err(state, "effect not available", tok, argv_end))
+				return tok;
+		}
+		else {
+			/* build argument vector */
+			char **argv = calloc(argc, sizeof(char *));
+			struct ec_token *arg = tok;
+			for (int i = 0; i < argc; ++i) {
+				argv[i] = strdup(arg->str);
+				arg = arg->next;
+			}
+			if (LOGLEVEL(LL_VERBOSE)) {
+				dsp_log_acquire();
+				dsp_log_printf("%s: effect:", dsp_globals.prog_name);
+				for (int i = 0; i < argc; ++i) {
+					const int do_quo = !!strchr(argv[i], ' ');
+					dsp_log_putc(' ');
+					if (do_quo) dsp_log_putc('"');
+					ec_print_escaped_str(argv[i], 160);
+					if (do_quo) dsp_log_putc('"');
+				}
+				dsp_log_printf("; channels=%d [", state->stream->channels);
+				print_selector(state->ch_sel, state->stream->channels);
+				dsp_log_printf("] fs=%d\n", state->stream->fs);
+				dsp_log_release();
+			}
+			struct effect *e = ei->init(ei, state->stream, state->ch_sel, state->dir, argc, (const char *const *) argv);
+			for (int i = 0; i < argc; ++i) free(argv[i]);
+			free(argv);
+			if (e == NULL) {
+				if (ec_parse_effect_err(state, "failed to initialize effect", tok, argv_end))
+					return tok;
+			}
+			while (e != NULL) {
+				struct effect *e_n = e->next;
+				if (e->run == NULL) {
+					LOG_FMT(LL_VERBOSE, "info: not using effect: %s", tok->str);
+					destroy_effect(e);
+				}
+				else {
+					effects_chain_append(state->chain, e);
+					*state->stream = e->ostream;
+				}
+				e = e_n;
+			}
+		}
+		state->allow_fail = 0;
+		prev_effect = tok;
+		tok = argv_end->next;
+	}
+	return NULL;
 }
 
 static void effects_chain_optimize(struct effects_chain *chain)
@@ -647,16 +974,34 @@ static int build_effects_chain_finish(struct effects_chain *chain)
 	return 1;
 }
 
-int build_effects_chain(int argc, const char *const *argv, struct effects_chain *chain, struct stream_info *stream, const char *dir)
+int build_effects_chain_from_argv(int argc, const char *const *argv, struct effects_chain *chain,
+	struct stream_info *stream, const char *ch_mask, const char *dir)
 {
-	if (build_effects_chain_block(argc, argv, chain, stream, NULL, dir))
+	if (ec_parse_argv(argc, argv, dir, chain, stream, ch_mask))
 		return 1;
 	return build_effects_chain_finish(chain);
 }
 
-int build_effects_chain_from_file(const char *path, struct effects_chain *chain, struct stream_info *stream, const char *channel_mask, const char *dir, int enforce_eof_marker)
+int build_effects_chain_from_string(const char *cs, const char *path, struct effects_chain *chain,
+	struct stream_info *stream, const char *ch_mask, const char *dir)
 {
-	if (build_effects_chain_block_from_file(path, chain, stream, channel_mask, dir, enforce_eof_marker))
+	char *s = strdup(cs);
+	if (!s) {
+		dsp_perror(DSP_ENOMEM, NULL);
+		return 1;
+	}
+	if (ec_parse_string(s, path, dir, chain, stream, ch_mask)) {
+		free(s);
+		return 1;
+	}
+	free(s);
+	return build_effects_chain_finish(chain);
+}
+
+int build_effects_chain_from_file(const char *path, struct effects_chain *chain,
+	struct stream_info *stream, const char *ch_mask, const char *dir, int enforce_eof_marker)
+{
+	if (ec_parse_file(path, dir, chain, stream, ch_mask, enforce_eof_marker))
 		return 1;
 	return build_effects_chain_finish(chain);
 }

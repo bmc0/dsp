@@ -66,20 +66,16 @@ struct effects_chain {
 };
 
 #define EFFECTS_CHAIN_INITIALIZER {0}
-#define IS_EFFECTS_CHAIN_START(x) ( \
-	get_effect_info(x) != NULL \
-	|| (x)[0] == ':' \
-	|| (x)[0] == '@' \
-	|| strcmp(x, "!") == 0 \
-	|| strcmp(x, "{") == 0 \
-)
+#define IS_EFFECTS_CHAIN_START(x) is_effect_or_token(x)
 #define EFFECTS_FILE_EOF_MARKER "#EOF#"
 
 const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);
 void effect_list_append(struct effect *, struct effect *);
 void effects_chain_append(struct effects_chain *, struct effect *);
-int build_effects_chain(int, const char *const *, struct effects_chain *, struct stream_info *, const char *);
+int is_effect_or_token(const char *);
+int build_effects_chain_from_argv(int, const char *const *, struct effects_chain *, struct stream_info *, const char *, const char *);
+int build_effects_chain_from_string(const char *, const char *, struct effects_chain *, struct stream_info *, const char *, const char *);
 int build_effects_chain_from_file(const char *, struct effects_chain *, struct stream_info *, const char *, const char *, int);
 ssize_t get_effects_chain_buffer_len(struct effects_chain *, ssize_t, int);
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);

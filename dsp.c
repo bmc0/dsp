@@ -773,7 +773,7 @@ static void handle_tstp(int is_paused)
 		destroy_effects_chain(&chain); \
 		stream.fs = input_list.head->codec->fs; \
 		stream.channels = input_list.head->codec->channels; \
-		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL)) \
+		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL)) \
 			cleanup_and_exit(1); \
 	} while (0)
 
@@ -919,7 +919,7 @@ int main(int argc, char *argv[])
 	};
 
 	if (plot) {
-		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
+		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
 			cleanup_and_exit(1);
 		plot_effects_chain(&chain, input_list.head->codec->fs, input_list.head->codec->channels, (plot > 1));
 	}
@@ -948,7 +948,7 @@ int main(int argc, char *argv[])
 		have_sig_thread = 1;
 		query_term_size();
 
-		if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL))
+		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
 			cleanup_and_exit(1);
 		if ((in_codec_buf = codec_read_buf_init(&input_list, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
@@ -1050,7 +1050,7 @@ int main(int argc, char *argv[])
 								stream.channels = input_list.head->codec->channels;
 								xfade_state.istream = stream;
 								xfade_state.chain[0] = chain;
-								if (build_effects_chain(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL))
+								if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL, NULL))
 									cleanup_and_exit(1);
 								xfade_state.ostream = stream;
 								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);

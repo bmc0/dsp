@@ -46,8 +46,8 @@ struct ladspa_dsp {
 };
 
 struct ladspa_dsp_config {
-	int input_channels, output_channels, chain_argc;
-	char *name, *dir_path, *lc_n, **chain_argv;
+	int input_channels, output_channels;
+	char *name, *dir_path, *lc_n, *chain_str;
 };
 
 struct dsp_globals dsp_globals = {
@@ -86,14 +86,14 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 	char *c = get_file_contents(path);
 	if (!c) return 2;
 
-	char *key = c, *endptr, *chain_str = NULL;
+	char *key = c, *endptr;
 	for (int i = 1; *key != '\0'; ++i) {
 		while ((*key == ' ' || *key == '\t') && *key != '\n' && *key != '\0')
 			++key;
 		char *next = isolate(key, '\n');
 		if (*key != '\0' && *key != '#') {
 			if (strcmp(key, "[effects_chain]") == 0) {
-				chain_str = next;
+				config->chain_str = next;
 				break;
 			}
 			char *value = isolate(key, '=');
@@ -120,7 +120,7 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 					config->lc_n = strdup(value);
 			}
 			else if (strcmp(key, "effects_chain") == 0) {
-				chain_str = value;
+				config->chain_str = value;
 			}
 			else {
 				LOG_FMT(LL_ERROR, "%s: line %d: error: invalid option: %s", path, i, key);
@@ -129,8 +129,8 @@ static int read_config(struct ladspa_dsp_config *config, const char *path)
 		}
 		key = next;
 	}
-	if (chain_str) gen_argv_from_string(chain_str, &config->chain_argc, &config->chain_argv);
-	else LOG_FMT(LL_ERROR, "%s: warning: empty effects chain", path);
+	if (!config->chain_str) LOG_FMT(LL_ERROR, "%s: warning: no effects chain specified", path);
+	else config->chain_str = strdup(config->chain_str);
 	free(c);
 	return 0;
 
@@ -209,7 +209,6 @@ static void load_configs(void)
 
 static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned long fs)
 {
-	int r;
 	locale_t old_locale = 0, new_locale = 0;
 	struct stream_info stream;
 	struct ladspa_dsp_config *config = (struct ladspa_dsp_config *) desc->ImplementationData;
@@ -236,7 +235,9 @@ static LADSPA_Handle instantiate_dsp(const LADSPA_Descriptor *desc, unsigned lon
 		}
 		old_locale = uselocale(new_locale);
 	}
-	r = build_effects_chain(config->chain_argc, (const char *const *) config->chain_argv, &d->chain, &stream, config->dir_path);
+	int r = 0;
+	if (config->chain_str)
+		r = build_effects_chain_from_string(config->chain_str, config->name, &d->chain, &stream, NULL, config->dir_path);
 	if (old_locale != (locale_t) 0) {
 		LOG_S(LL_VERBOSE, "info: resetting locale");
 		uselocale(old_locale);
@@ -411,9 +412,7 @@ void __attribute__((destructor)) ladspa_dsp_so_fini()
 			free((char *) descriptors[k].PortNames[i]);
 		free((char **) descriptors[k].PortNames);
 		free((LADSPA_PortRangeHint *) descriptors[k].PortRangeHints);
-		for (i = 0; i < configs[k].chain_argc; ++i)
-			free(configs[k].chain_argv[i]);
-		free(configs[k].chain_argv);
+		free(configs[k].chain_str);
 		free(configs[k].lc_n);
 		free(configs[k].dir_path);
 		free(configs[k].name);

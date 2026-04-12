@@ -54,7 +54,6 @@
 #endif
 #define TEST_BIT(x, o, s) (!!GET_BIT(x, o) == !!(s))
 #define IS_POWER_OF_2(x) ((x) && !((x)&((x)-1)))
-#define IS_WHITESPACE(x) ((x) == ' ' || (x) == '\t' || (x) == '\n' || (x) == '\r')
 #define PM_RAND_MAX 0x7fffffff
 
 struct dsp_getopt_state {
@@ -72,7 +71,6 @@ int parse_selector(const char *, char *, int);
 int parse_selector_masked(const char *, char *, const char *, int);
 void print_selector(const char *, int);
 int num_bits_set(const char *, int);
-int gen_argv_from_string(const char *, int *, char ***);
 char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *, const struct stream_info *);
 char * isolate(char *, char);
@@ -85,6 +83,10 @@ void dsp_fftw_release(void);
 int dsp_fftw_load_wisdom(void);   /* Not MT-safe. Call before planning; returns true if a path was specified. */
 void dsp_fftw_save_wisdom(void);  /* Called at exit--do not use anywhere else. */
 #endif
+
+enum { DSP_ENOMEM = 1 };
+const char * dsp_strerror(int);
+void dsp_perror(int, const char *);
 
 #ifdef INT64_MAX
 #define PM_RAND_R_DEFINE_FUNC(func_name, A) \

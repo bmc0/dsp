@@ -609,13 +609,15 @@ appended to the end of the channel list.
 
 Files may be sourced using the `@` directive: `@[~/]path/to/file`. See "File
 paths" for more information about how paths are interpreted. Note that sourcing
-a file implicitly creates a block (see "Channel selectors and masks"). Within a
-file, lines in which the first non-whitespace character is `#` are ignored. A
-backslash (`\`) may be used to escape whitespace, `#`, or `\`. Example:
+a file implicitly creates a block (see "Channel selectors and masks"). Comments
+start with a word beginning with `#` and extend to the next newline. All
+characters within a comment are ignored. Characters enclosed in double quotes
+(`"..."`) are interpreted as literal except for backslash (`\`). A backslash
+causes any character that follows to be intepreted as literal. Example:
 
-	gain -4.0
+	gain -4 lowshelf 90 1s 4
 	# This is a comment
-	lowshelf 90 1s +4 eq 3k 1.5 -3
+	eq 3k 1.5 -3  # Another comment
 
 #### Other directives
 
