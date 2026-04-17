@@ -58,6 +58,7 @@
 
 enum input_mode {
 	INPUT_MODE_CONCAT,
+	INPUT_MODE_ABX,
 	INPUT_MODE_SEQUENCE,
 };
 
@@ -106,6 +107,15 @@ static struct {
 	int rows, cols;
 } term_size = {0};
 
+#define ABX_TRIALS_DEFAULT 10
+#define ABX_FADE_DURATION  50  /* milliseconds */
+static int n_trials = ABX_TRIALS_DEFAULT;
+static struct read_buf_input_list abx_inputs[2] = {
+	READ_BUF_INPUT_LIST_INITIALIZER,
+	READ_BUF_INPUT_LIST_INITIALIZER,
+};
+static struct codec_read_buf *abx_codec_bufs[2] = { NULL, NULL };
+
 static const char help_text[] =
 	"Usage: %s [options] path ... [effect [args]] ...\n"
 	"\n"
@@ -124,6 +134,7 @@ static const char help_text[] =
 	"  -P         same as '-p', but also plot phase response\n"
 	"  -V         verbose progress display\n"
 	"  -S         use \"sequence\" input combining mode\n"
+	"  -X[n]      run in ABX comparator mode\n"
 	"\n"
 	"Input/output options:\n"
 	"  -o               output\n"
@@ -151,6 +162,18 @@ static const char interactive_help[] =
 	"  v : toggle verbose progress display\n"
 	"  s : send signal to effects chain\n"
 	"  q : quit\n";
+
+static const char abx_interactive_help[] =
+	"Keys:\n"
+	"  h     : display this help\n"
+	"  a|1   : play A\n"
+	"  b|3   : play B\n"
+	"  x|2   : play X\n"
+	"  A     : X is A\n"
+	"  B     : X is B\n"
+	"  Enter : accept current choice\n"
+	"  q     : terminate test and quit\n";
+
 
 struct dsp_globals dsp_globals = {
 	LL_NORMAL,              /* loglevel */
@@ -358,13 +381,17 @@ static void cleanup_and_exit(int s)
 	}
 	codec_read_buf_destroy(in_codec_buf);
 	read_buf_input_list_destroy(&input_list);
+	for (int i = 0; i < 2; ++i) {
+		codec_read_buf_destroy(abx_codec_bufs[i]);
+		read_buf_input_list_destroy(&abx_inputs[i]);
+	}
 	codec_write_buf_destroy(out_codec_buf);
 	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
 	destroy_effects_chain(&xfade_state.chain[1]);
-	#ifdef HAVE_FFTW3
-		dsp_fftw_save_wisdom();
-	#endif
+#ifdef HAVE_FFTW3
+	dsp_fftw_save_wisdom();
+#endif
 	free(buf1);
 	free(buf2);
 	if (term_attrs_saved)
@@ -411,7 +438,7 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 	*r_timespan = NULL;
 	*r_repeats = 0;
 
-	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSot:e:BLNr:c:R:T:l::n")) != -1) {
+	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSX::ot:e:BLNr:c:R:T:l::n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help();
@@ -463,6 +490,18 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 			break;
 		case 'S':
 			input_mode = INPUT_MODE_SEQUENCE;
+			break;
+		case 'X':
+			input_mode = INPUT_MODE_ABX;
+			if (g->arg) {
+				n_trials = strtol(g->arg, &endptr, 10);
+				if (check_endptr(NULL, g->arg, endptr, "trials")) return 1;
+				if (n_trials < 2) {
+					LOG_S(LL_ERROR, "error: minimum number of trials is 2");
+					return 1;
+				}
+			}
+			else n_trials = ABX_TRIALS_DEFAULT;
 			break;
 		case 'o':
 			p->mode = CODEC_MODE_WRITE;
@@ -760,6 +799,219 @@ static void handle_tstp(int is_paused)
 	query_term_size();
 }
 
+static double abx_p_value(int n, int k)
+{
+	/* Based on https://stackoverflow.com/a/45869209 */
+	const double log1_2 = -6.931471805599453094e-01;
+	double cdf = exp(n*log1_2), b = 0.0;
+	for (int x = 1; x <= n-k; ++x) {
+		b += log(n-x+1)-log(x);
+		cdf += exp(b + n*log1_2);
+	}
+	return cdf;
+}
+
+static inline double abx_fade_mult(int pos, int n)
+{
+	const double fade = (double) pos / n;
+	return (fade <= 0.5) ? 4.0*(fade*fade*fade) : 1.0-4.0*((1.0-fade)*(1.0-fade)*(1.0-fade));
+}
+
+enum { ABX_IBUF_A = 0, ABX_IBUF_B, ABX_IBUF_X };
+static inline int abx_ibuf(int id)
+{
+	switch (id) {
+	case 'A': return ABX_IBUF_A;
+	case 'B': return ABX_IBUF_B;
+	case 'X': return ABX_IBUF_X;
+	default: LOG_FMT(LL_ERROR, "%s(): BUG: invalid id: %d", __func__, id);
+	}
+	return ABX_IBUF_X;
+}
+
+static inline int abx_key_to_id(int key)
+{
+	switch (key) {
+	case 'a': case '1': return 'A';
+	case 'b': case '3': return 'B';
+	case 'x': case '2': return 'X';
+	default: LOG_FMT(LL_ERROR, "%s(): BUG: invalid key: %d", __func__, key);
+	}
+	return 'X';
+}
+
+static void update_abx_status(int trial, int n_trials, int cur_input, int last_sel)
+{
+	dsp_statuslines_acquire();
+	int pl = snprintf(progress_line, LENGTH(progress_line), "ABX trial %d of %d / playing: %c", trial+1, n_trials, cur_input);
+	if (pl < LENGTH(progress_line)-1 && last_sel)
+		pl += snprintf(progress_line+pl, LENGTH(progress_line)-pl, " / current choice: X is %c", last_sel);
+	dsp_statuslines_release();
+}
+
+#define SET_DITHER(chain, in_codec) \
+	do { \
+		const int chain_needs_dither = effects_chain_needs_dither(chain); \
+		const int do_dither = SHOULD_DITHER(in_codec, out_codec, chain_needs_dither); \
+		add_dither = effects_chain_set_dither_params(chain, out_codec->prec, do_dither); \
+		LOG_FMT(LL_VERBOSE, "info: auto dither %s%s", (do_dither) ? "on" : "off", \
+			(do_dither && !add_dither) ? " (effect)" : ""); \
+	} while (0)
+
+static void run_abx_loop(void)
+{
+	const int in_channels = abx_inputs[0].head->codec->channels;
+	const int fade_frames = lrint((ABX_FADE_DURATION/1000.0) * abx_inputs[0].head->codec->fs);
+	const ssize_t buf_len = get_effects_chain_buffer_len(&chain, block_frames, in_channels);
+	int ret = 0, add_dither = 0, term_sig, fade_pos = 0;
+	int trial = 0, n_correct = 0, cur_input = 'X', next_input = 0, last_sel = 0;
+	sample_t *ibufs[3] = {0}, *obuf;
+	buf1 = calloc(buf_len, sizeof(sample_t));
+	buf2 = calloc(buf_len, sizeof(sample_t));
+	ibufs[ABX_IBUF_A] = calloc(block_frames, sizeof(sample_t)*in_channels);
+	ibufs[ABX_IBUF_B] = calloc(block_frames, sizeof(sample_t)*in_channels);
+
+	uint32_t seed = ((uint32_t) time(NULL)) & PM_RAND_MAX;
+	pm_rand2_r(&seed);
+	char *seq = calloc(n_trials, sizeof(char));
+	const int na = n_trials/2+(seed&(n_trials&1));
+	memset(seq, 'A', na);
+	memset(seq+na, 'B', n_trials-na);
+	for (int i = n_trials-1; i > 0; --i) {
+		const int k = pm_rand1_r(&seed)/(PM_RAND_MAX/(i+1)+1);
+		char tmp = seq[i]; seq[i] = seq[k]; seq[k] = tmp;
+	}
+
+	SET_DITHER(&chain, abx_inputs[0].head->codec);
+	ibufs[ABX_IBUF_X] = ibufs[abx_ibuf(seq[trial])];
+	while (trial < n_trials) {
+		ibufs[ABX_IBUF_X] = ibufs[abx_ibuf(seq[trial])];
+		LOG_FMT(LL_NORMAL, "info: starting ABX trial %d of %d", trial+1, n_trials);
+		if (!show_progress && !next_input) LOG_FMT(LL_NORMAL, "info: playing %c", cur_input);
+		update_abx_status(trial, n_trials, (next_input) ? next_input : cur_input, last_sel);
+		status_ctrl(STATUS_CTRL_DRAW);
+		for (;;) {
+			struct event ev;
+			while (ev_queue_pop(0, &ev) == 0) {
+				int id = 0;
+				switch (ev.type) {
+				case EVENT_TYPE_SIGNAL:
+					switch (ev.val) {
+					case SIGINT:
+					case SIGTERM:
+						term_sig = ev.val;
+						goto got_term_sig;
+					case SIGTSTP:
+					case SIGUSR1:
+					case SIGUSR2:
+						LOG_FMT(LL_NORMAL, "warning: ignoring signal %d", ev.val);
+						break;
+					case SIGWINCH:
+						query_term_size();
+						break;
+					default:
+						LOG_FMT(LL_ERROR, "%s: BUG: unhandled signal: %d", __func__, ev.val);
+					}
+					break;
+				case EVENT_TYPE_KEY:
+					switch (ev.val) {
+					case 'h':
+						dsp_log_acquire();
+						dsp_log_printf("\n%s\n", abx_interactive_help);
+						dsp_log_release();
+						break;
+					case 'a': case '1':
+					case 'b': case '3':
+					case 'x': case '2':
+						id = abx_key_to_id(ev.val);
+						if (id != 'X') last_sel = id;
+						if (next_input || cur_input != id) next_input = id;
+						break;
+					case 'A': case 'B':
+						last_sel = ev.val;
+					case '\n':
+						if (last_sel) goto end_trial;
+						break;
+					case 'q':
+						codec_write_buf_drop(out_codec_buf, 1, 0);
+						goto done;
+					}
+					break;
+				case EVENT_TYPE_CODEC_ERROR:
+					goto fail;
+				default:
+					LOG_FMT(LL_ERROR, "%s: BUG: unhandled event type: %d", __func__, (int) ev.type);
+				}
+			}
+			ssize_t r_a = codec_read_buf_read(abx_codec_bufs[0], ibufs[ABX_IBUF_A], block_frames);
+			ssize_t r_b = codec_read_buf_read(abx_codec_bufs[1], ibufs[ABX_IBUF_B], block_frames);
+			if (r_a != r_b) {
+				LOG_FMT(LL_ERROR, "error: unequal reads: %zd != %zd", r_a, r_b);
+				goto fail;
+			}
+			if (next_input || fade_pos > 0) {
+				/*
+				 * Do a brief, non-overlapping fade every time the input is switched.
+				 * This is required in order to prevent pops/clicks or other cues that
+				 * may be audible when switching between, e.g. B and X, but not A and X
+				 * when X is A (or vice versa). An overlapping fade is problematic when
+				 * there are phase differences between inputs.
+				*/
+				if (fade_pos <= 0) fade_pos = fade_frames*2;
+				const ssize_t buf_end = r_a*in_channels;
+				ssize_t buf_pos = 0;
+				sample_t *ibuf = ibufs[abx_ibuf(cur_input)];
+				while (--fade_pos > 0 && buf_pos < buf_end) {
+					const double fade = (fade_pos > fade_frames)
+						? abx_fade_mult(fade_pos-fade_frames, fade_frames)
+						: abx_fade_mult(fade_frames-fade_pos, fade_frames);
+					if (fade_pos == fade_frames) {
+						cur_input = next_input;
+						next_input = 0;
+						ibuf = ibufs[abx_ibuf(cur_input)];
+						update_abx_status(trial, n_trials, cur_input, last_sel);
+						if (!show_progress) LOG_FMT(LL_NORMAL, "info: playing %c", cur_input);
+					}
+					for (int k = 0; k < in_channels; ++k, ++buf_pos)
+						buf1[buf_pos] = ibuf[buf_pos] * fade;
+				}
+				if (buf_pos < buf_end) memcpy(buf1+buf_pos, ibuf+buf_pos, sizeof(sample_t)*(buf_end-buf_pos));
+			}
+			else memcpy(buf1, ibufs[abx_ibuf(cur_input)], sizeof(sample_t)*r_a*in_channels);
+			ssize_t w = r_a;
+			obuf = run_effects_chain(&chain, &w, buf1, buf2);
+			write_out(w, obuf, add_dither);
+			status_ctrl(STATUS_CTRL_DRAW);
+		}
+		end_trial:
+		LOG_FMT(LL_NORMAL, "info: ABX trial %d: choice: X is %c", trial+1, last_sel);
+		if (last_sel == seq[trial]) ++n_correct;
+		if (cur_input == 'X') cur_input = seq[trial];
+		next_input = 'X';
+		last_sel = 0;
+		++trial;
+	}
+
+	done:
+	if (trial > 0) {
+		LOG_FMT(LL_ERROR, "info: ABX result: %d correct out of %d (p=%g)",
+			n_correct, trial, abx_p_value(trial, n_correct));
+	}
+	free(ibufs[ABX_IBUF_A]);
+	free(ibufs[ABX_IBUF_B]);
+	free(seq);
+	cleanup_and_exit(ret);
+
+	got_term_sig:
+	LOG_FMT(LL_NORMAL, "info: signal %d: terminating...", term_sig);
+	codec_write_buf_drop(out_codec_buf, 1, 0);
+	goto done;
+
+	fail:
+	ret = 1;
+	goto done;
+}
+
 #define DRAIN_EFFECTS_CHAIN \
 	do { \
 		ssize_t w = block_frames; \
@@ -791,7 +1043,7 @@ static void handle_tstp(int is_paused)
 
 #define REALLOC_BUFS(chain) \
 	do { \
-		const int new_buf_len = get_effects_chain_buffer_len(chain, block_frames, input_list.head->codec->channels); \
+		const ssize_t new_buf_len = get_effects_chain_buffer_len(chain, block_frames, input_list.head->codec->channels); \
 		if (new_buf_len > buf_len) { \
 			buf_len = new_buf_len; \
 			free(buf1); free(buf2); free(xfade_state.buf); \
@@ -799,15 +1051,6 @@ static void handle_tstp(int is_paused)
 			buf2 = calloc(buf_len, sizeof(sample_t)); \
 			xfade_state.buf = (!drain_effects) ? calloc(buf_len, sizeof(sample_t)) : NULL; \
 		} \
-	} while (0)
-
-#define SET_DITHER(chain) \
-	do { \
-		const int chain_needs_dither = effects_chain_needs_dither(chain); \
-		const int do_dither = SHOULD_DITHER(input_list.head->codec, out_codec, chain_needs_dither); \
-		add_dither = effects_chain_set_dither_params(chain, out_codec->prec, do_dither); \
-		LOG_FMT(LL_VERBOSE, "info: auto dither %s%s", (do_dither) ? "on" : "off", \
-			(do_dither && !add_dither) ? " (effect)" : ""); \
 	} while (0)
 
 int main(int argc, char *argv[])
@@ -848,16 +1091,6 @@ int main(int argc, char *argv[])
 			}
 			read_buf_blocks = MAXIMUM(read_buf_blocks, req_blocks - c->buf_ratio);
 			print_io_info(c, LL_VERBOSE, "input");
-			if (input_mode != INPUT_MODE_SEQUENCE) {
-				if (input_list.head != NULL && c->fs != input_list.head->codec->fs) {
-					LOG_S(LL_ERROR, "error: all inputs must have the same sample rate in concatenate mode");
-					cleanup_and_exit(1);
-				}
-				if (input_list.head != NULL && c->channels != input_list.head->codec->channels) {
-					LOG_S(LL_ERROR, "error: all inputs must have the same number of channels in concatenate mode");
-					cleanup_and_exit(1);
-				}
-			}
 			ssize_t c_frames = c->frames;
 			ssize_t start_pos = 0, end_pos = READ_BUF_INPUT_END_UNSPECIFIED;
 			if (start_timespec) {
@@ -902,6 +1135,18 @@ int main(int argc, char *argv[])
 				in_time = -1.0;
 			else in_time += (double) c_frames / c->fs;
 			read_buf_input_list_add(&input_list, c, start_pos, end_pos, repeats);
+		}
+	}
+	if (input_mode != INPUT_MODE_SEQUENCE) {
+		LIST_FOREACH(&input_list, input) {
+			if (input_list.head != NULL && input->codec->fs != input_list.head->codec->fs) {
+				LOG_S(LL_ERROR, "error: all inputs must have the same sample rate");
+				cleanup_and_exit(1);
+			}
+			if (input_list.head != NULL && input->codec->channels != input_list.head->codec->channels) {
+				LOG_S(LL_ERROR, "error: all inputs must have the same number of channels");
+				cleanup_and_exit(1);
+			}
 		}
 	}
 
@@ -950,7 +1195,39 @@ int main(int argc, char *argv[])
 
 		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
 			cleanup_and_exit(1);
-		if ((in_codec_buf = codec_read_buf_init(&input_list, block_frames, read_buf_blocks, NULL)) == NULL)
+
+		if (input_mode == INPUT_MODE_ABX) {
+			int n_inputs = 0;
+			LIST_FOREACH(&input_list, input) ++n_inputs;
+			if (n_inputs != 2) {
+				LOG_FMT(LL_ERROR, "error: expected 2 inputs; got %d", n_inputs);
+				cleanup_and_exit(1);
+			}
+			ssize_t abx_frames[2];
+			for (int i = 0; i < 2; ++i) {
+				struct read_buf_input *input = input_list.head;
+				if (input->end != READ_BUF_INPUT_END_UNSPECIFIED)
+					abx_frames[i] = input->end - input->start;
+				else abx_frames[i] = input->codec->frames;
+				if (abx_frames[i] < 0) {
+					LOG_S(LL_ERROR, "error: inputs must have a known length");
+					cleanup_and_exit(1);
+				}
+				LIST_REMOVE(&input_list, input);
+				input->repeats = READ_BUF_INPUT_REPEAT_INF;
+				LIST_APPEND(&abx_inputs[i], input);
+			}
+			if (abx_frames[0] != abx_frames[1]) {
+				LOG_S(LL_ERROR, "error: inputs must be of identical length");
+				cleanup_and_exit(1);
+			}
+			in_time = -1.0;
+			for (int i = 0; i < 2; ++i) {
+				if ((abx_codec_bufs[i] = codec_read_buf_init(&abx_inputs[i], block_frames, read_buf_blocks, NULL)) == NULL)
+					cleanup_and_exit(1);
+			}
+		}
+		else if ((in_codec_buf = codec_read_buf_init(&input_list, block_frames, read_buf_blocks, NULL)) == NULL)
 			cleanup_and_exit(1);
 
 		ssize_t out_frames = (in_time < 0.0) ? -1 : (ssize_t) llround(in_time * stream.fs);
@@ -959,6 +1236,7 @@ int main(int argc, char *argv[])
 			out_p.buf_ratio = 2;
 		if (init_out_codec(&out_p, &stream, out_frames, write_buf_blocks) == NULL)
 			cleanup_and_exit(1);
+		dither_mult = tpdf_dither_get_mult(out_codec->prec);
 
 		if (interactive == -1)
 			interactive = (out_codec->hints & CODEC_HINT_INTERACTIVE) ? 1 : 0;
@@ -971,15 +1249,19 @@ int main(int argc, char *argv[])
 			have_key_thread = 1;
 			LOG_S(LL_NORMAL, "info: running interactively; type 'h' for help");
 		}
+		else if (input_mode == INPUT_MODE_ABX) {
+			LOG_S(LL_ERROR, "error: ABX mode must be interactive");
+			cleanup_and_exit(1);
+		}
+		if (input_mode == INPUT_MODE_ABX) run_abx_loop();  /* does not return */
 
-		int buf_len = 0;
+		ssize_t buf_len = 0;
 		REALLOC_BUFS(&chain);
-		dither_mult = tpdf_dither_get_mult(out_codec->prec);
 
 		while (input_list.head != NULL) {
 			ssize_t r, pos = input_list.head->start;
 			int k = 0, repeats = input_list.head->repeats;
-			SET_DITHER(&chain);
+			SET_DITHER(&chain, input_list.head->codec);
 			print_io_info(input_list.head->codec, LL_NORMAL, "input");
 			update_progress(pos, repeats, is_paused, 1);
 			status_ctrl(STATUS_CTRL_DRAW);
@@ -1075,11 +1357,11 @@ int main(int argc, char *argv[])
 							else REOPEN_OUTPUT;
 							if (xfade_state.pos > 0) {
 								REALLOC_BUFS(&xfade_state.chain[1]);
-								SET_DITHER(&xfade_state.chain[1]);
+								SET_DITHER(&xfade_state.chain[1], input_list.head->codec);
 							}
 							else {
 								REALLOC_BUFS(&chain);
-								SET_DITHER(&chain);
+								SET_DITHER(&chain, input_list.head->codec);
 							}
 							break;
 						case 'v':

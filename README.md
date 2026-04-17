@@ -56,6 +56,7 @@ Option      | Description
 `-P`        | Same as `-p`, but also plot phase response.
 `-V`        | Verbose progress display.
 `-S`        | Use "sequence" input combining mode.
+`-X[n]`     | Run in ABX comparator mode.
 
 #### Input/output options
 
