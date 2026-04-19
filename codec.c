@@ -120,6 +120,9 @@ struct codec_info codecs[] = {
 #endif
 #ifndef LADSPA_FRONTEND
 	{ "pcm",     NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pcm_codec_init,     pcm_codec_print_encodings },
+#ifdef __BYTE_ORDER__
+	{ "wavpipe", NULL,                      CODEC_MODE_WRITE, pcm_codec_init,     pcm_codec_print_encodings },
+#endif
 #endif
 #ifdef HAVE_PULSE
 	{ "pulse",   NULL,      CODEC_MODE_READ|CODEC_MODE_WRITE, pulse_codec_init,   pulse_codec_print_encodings },

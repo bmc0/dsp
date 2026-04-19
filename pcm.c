@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdint.h>
 #include "pcm.h"
 #include "util.h"
 #include "sampleconv.h"
@@ -96,6 +97,54 @@ static ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return n;
 }
 
+#ifdef __BYTE_ORDER__
+struct wav_header {
+	uint8_t riff[4];
+	uint32_t filesize;
+	uint8_t wave[4], fmt[4];
+	uint32_t chunksize;
+	uint16_t audioformat;
+	uint16_t channels;
+	uint32_t fs;
+	uint32_t bytes_sec;
+	uint16_t bytes_frame;
+	uint16_t bits_sample;
+	uint8_t chunk_id[4];
+	uint32_t datasize;
+};
+
+static ssize_t wavpipe_write(struct codec *c, sample_t *buf, ssize_t frames)
+{
+	struct pcm_state *state = (struct pcm_state *) c->data;
+	struct wav_header h = {0};
+#if __BYTE_ORDER__  == __ORDER_LITTLE_ENDIAN__
+	memcpy(h.riff,     "RIFF", 4);
+#elif __BYTE_ORDER__  == __ORDER_BIG_ENDIAN__
+	memcpy(h.riff,     "RIFX", 4);
+#else
+	#error "unknown byte order"
+#endif
+	memcpy(h.wave,     "WAVE", 4);
+	memcpy(h.fmt,      "fmt ", 4);
+	memcpy(h.chunk_id, "data", 4);
+	h.filesize = 0xFFFFFFFFU-8;
+	h.chunksize = 0x10;
+	h.audioformat = (state->enc_info->can_dither) ? 0x1 : 0x3;
+	h.channels = c->channels;
+	h.fs = c->fs;
+	h.bytes_frame = c->channels * state->enc_info->bytes;
+	h.bytes_sec = h.bytes_frame * c->fs;
+	h.bits_sample = state->enc_info->bytes * 8;
+	h.datasize = 0xFFFFFFFFU-44;
+	if (write(state->fd, &h, sizeof(h)) == -1) {
+		LOG_FMT(LL_ERROR, "%s: write failed: %s", __func__, strerror(errno));
+		return 0;
+	}
+	c->write = pcm_write;
+	return pcm_write(c, buf, frames);
+}
+#endif
+
 static ssize_t pcm_seek(struct codec *c, ssize_t pos)
 {
 	off_t o;
@@ -164,6 +213,9 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 		lseek(fd, 0, SEEK_SET);
 	}
 	if (p->mode == CODEC_MODE_READ) c->read = pcm_read;
+#ifdef __BYTE_ORDER__
+	else if (strcmp(p->type, "wavpipe") == 0) c->write = wavpipe_write;
+#endif
 	else c->write = pcm_write;
 	c->seek = pcm_seek;
 	c->delay = codec_delay_noop;
