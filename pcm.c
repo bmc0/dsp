@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdint.h>
 #include "pcm.h"
 #include "util.h"
 #include "sampleconv.h"
@@ -39,8 +40,6 @@ struct pcm_enc_info {
 	void (*read_func)(void *, sample_t *, ssize_t);
 	void (*write_func)(sample_t *, void *, ssize_t);
 };
-
-static const char codec_name[] = "pcm";
 
 static struct pcm_enc_info encodings[] = {
 	{ "s16",    2, 16, 1, read_buf_s16,    write_buf_s16 },
@@ -73,7 +72,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG_FMT(LL_ERROR, "%s: read failed: %s", codec_name, strerror(errno));
+		LOG_FMT(LL_ERROR, "%s: read failed: %s", __func__, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -90,13 +89,61 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	state->enc_info->write_func(buf, buf, frames * c->channels);
 	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG_FMT(LL_ERROR, "%s: write failed: %s", codec_name, strerror(errno));
+		LOG_FMT(LL_ERROR, "%s: write failed: %s", __func__, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
 	state->pos += n;
 	return n;
 }
+
+#ifdef __BYTE_ORDER__
+struct wav_header {
+	uint8_t riff[4];
+	uint32_t filesize;
+	uint8_t wave[4], fmt[4];
+	uint32_t chunksize;
+	uint16_t audioformat;
+	uint16_t channels;
+	uint32_t fs;
+	uint32_t bytes_sec;
+	uint16_t bytes_frame;
+	uint16_t bits_sample;
+	uint8_t chunk_id[4];
+	uint32_t datasize;
+};
+
+ssize_t wavpipe_write(struct codec *c, sample_t *buf, ssize_t frames)
+{
+	struct pcm_state *state = (struct pcm_state *) c->data;
+	struct wav_header h = {0};
+#if __BYTE_ORDER__  == __ORDER_LITTLE_ENDIAN__
+	memcpy(h.riff,     "RIFF", 4);
+#elif __BYTE_ORDER__  == __ORDER_BIG_ENDIAN__
+	memcpy(h.riff,     "RIFX", 4);
+#else
+	#error "unknown byte order"
+#endif
+	memcpy(h.wave,     "WAVE", 4);
+	memcpy(h.fmt,      "fmt ", 4);
+	memcpy(h.chunk_id, "data", 4);
+	h.filesize = 0xFFFFFFFFU-8;
+	h.chunksize = 0x10;
+	h.audioformat = (state->enc_info->can_dither) ? 0x1 : 0x3;
+	h.channels = c->channels;
+	h.fs = c->fs;
+	h.bytes_frame = c->channels * state->enc_info->bytes;
+	h.bytes_sec = h.bytes_frame * c->fs;
+	h.bits_sample = state->enc_info->bytes * 8;
+	h.datasize = 0xFFFFFFFFU-44;
+	if (write(state->fd, &h, sizeof(h)) == -1) {
+		LOG_FMT(LL_ERROR, "%s: write failed: %s", __func__, strerror(errno));
+		return 0;
+	}
+	c->write = pcm_write;
+	return pcm_write(c, buf, frames);
+}
+#endif
 
 ssize_t pcm_seek(struct codec *c, ssize_t pos)
 {
@@ -146,17 +193,17 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 	struct codec *c = NULL;
 
 	if ((enc_info = pcm_get_enc_info(p->enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", p->type, p->enc);
 		goto fail;
 	}
 	if (!(p->endian == CODEC_ENDIAN_DEFAULT || p->endian == CODEC_ENDIAN_NATIVE)) {
-		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", p->type);
 		goto fail;
 	}
 	if (strcmp(p->path, "-") == 0)
 		fd = (p->mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
 	else if ((fd = open(p->path, (p->mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, strerror(errno));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", p->type, p->path, strerror(errno));
 		goto fail;
 	}
 
@@ -179,6 +226,9 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 		lseek(fd, 0, SEEK_SET);
 	}
 	if (p->mode == CODEC_MODE_READ) c->read = pcm_read;
+#ifdef __BYTE_ORDER__
+	else if (strcmp(p->type, "wavpipe") == 0) c->write = wavpipe_write;
+#endif
 	else c->write = pcm_write;
 	c->seek = pcm_seek;
 	c->delay = pcm_delay;
