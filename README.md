@@ -119,6 +119,7 @@ alsa    | rw    | s16 u8 s8 s24 s24_3 s32 float double
 ao      | w     | s16 u8 s32
 mp3     | r     | mad_f
 pcm     | rw    | s16 u8 s8 s24 s24_3 s32 float double
+wavpipe | w     | s16 u8 s24_3 s32 float double
 pulse   | rw    | s16 u8 s24 s24_3 s32 float
 
 #### Input combining modes
