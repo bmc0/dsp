@@ -30,7 +30,7 @@
 
 struct pcm_state {
 	int fd;
-	struct pcm_enc_info *enc_info;
+	const struct pcm_enc_info *enc_info;
 	ssize_t pos;
 };
 
@@ -41,7 +41,7 @@ struct pcm_enc_info {
 	void (*write_func)(sample_t *, void *, ssize_t);
 };
 
-static struct pcm_enc_info encodings[] = {
+static const struct pcm_enc_info encodings[] = {
 	{ "s16",    2, 16, 1, read_buf_s16,    write_buf_s16 },
 	{ "u8",     1, 8,  1, read_buf_u8,     write_buf_u8 },
 	{ "s8",     1, 8,  1, read_buf_s8,     write_buf_s8 },
@@ -54,12 +54,11 @@ static struct pcm_enc_info encodings[] = {
 	{ "double", 8, 53, 0, read_buf_double, write_buf_double },
 };
 
-static struct pcm_enc_info * pcm_get_enc_info(const char *enc)
+static const struct pcm_enc_info * pcm_get_enc_info(const char *enc)
 {
-	int i;
 	if (enc == NULL)
 		return &encodings[0];
-	for (i = 0; i < LENGTH(encodings); ++i)
+	for (int i = 0; i < LENGTH(encodings); ++i)
 		if (strcmp(enc, encodings[i].name) == 0)
 			return &encodings[i];
 	return NULL;
@@ -67,10 +66,9 @@ static struct pcm_enc_info * pcm_get_enc_info(const char *enc)
 
 ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
 
-	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
+	ssize_t n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
 		LOG_FMT(LL_ERROR, "%s: read failed: %s", __func__, strerror(errno));
 		return 0;
@@ -83,11 +81,10 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
-	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
 
 	state->enc_info->write_func(buf, buf, frames * c->channels);
-	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
+	ssize_t n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
 		LOG_FMT(LL_ERROR, "%s: write failed: %s", __func__, strerror(errno));
 		return 0;
@@ -143,11 +140,21 @@ ssize_t wavpipe_write(struct codec *c, sample_t *buf, ssize_t frames)
 	c->write = pcm_write;
 	return pcm_write(c, buf, frames);
 }
+
+#define IS_WAVPIPE(type) (strcmp(type, "wavpipe") == 0)
+#define WAVPIPE_BAD_ENC(enc_info) \
+	((enc_info)->write_func == write_buf_s8 || (enc_info)->write_func == write_buf_s24)
+static const struct pcm_enc_info * wavpipe_get_enc_info(const char *enc)
+{
+	const struct pcm_enc_info *enc_info = pcm_get_enc_info(enc);
+	if (enc_info && WAVPIPE_BAD_ENC(enc_info)) return NULL;
+	return enc_info;
+}
+
 #endif
 
 ssize_t pcm_seek(struct codec *c, ssize_t pos)
 {
-	off_t o;
 	struct pcm_state *state = (struct pcm_state *) c->data;
 	if (c->frames == -1)
 		return -1;
@@ -155,7 +162,7 @@ ssize_t pcm_seek(struct codec *c, ssize_t pos)
 		pos = 0;
 	else if (pos > c->frames)
 		pos = c->frames;
-	o = lseek(state->fd, pos * state->enc_info->bytes * c->channels, SEEK_SET);
+	off_t o = lseek(state->fd, pos * state->enc_info->bytes * c->channels, SEEK_SET);
 	if (o == -1)
 		return -1;
 	state->pos = o;
@@ -187,12 +194,15 @@ void pcm_destroy(struct codec *c)
 struct codec * pcm_codec_init(const struct codec_params *p)
 {
 	int fd = -1;
-	off_t size;
-	struct pcm_enc_info *enc_info;
-	struct pcm_state *state = NULL;
-	struct codec *c = NULL;
-
-	if ((enc_info = pcm_get_enc_info(p->enc)) == NULL) {
+#ifdef __BYTE_ORDER__
+	const int is_wavpipe = IS_WAVPIPE(p->type);
+	const struct pcm_enc_info *enc_info = (is_wavpipe)
+		? wavpipe_get_enc_info(p->enc)
+		: pcm_get_enc_info(p->enc);
+#else
+	const struct pcm_enc_info *enc_info = pcm_get_enc_info(p->enc);
+#endif
+	if (enc_info == NULL) {
 		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", p->type, p->enc);
 		goto fail;
 	}
@@ -207,11 +217,11 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 		goto fail;
 	}
 
-	state = calloc(1, sizeof(struct pcm_state));
+	struct pcm_state *state = calloc(1, sizeof(struct pcm_state));
 	state->fd = fd;
 	state->enc_info = enc_info;
 
-	c = calloc(1, sizeof(struct codec));
+	struct codec *c = calloc(1, sizeof(struct codec));
 	c->path = p->path;
 	c->type = p->type;
 	c->enc = enc_info->name;
@@ -221,13 +231,13 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 	if (enc_info->can_dither) c->hints |= CODEC_HINT_CAN_DITHER;
 	c->frames = -1;
 	if (p->mode == CODEC_MODE_READ) {
-		size = lseek(fd, 0, SEEK_END);
+		off_t size = lseek(fd, 0, SEEK_END);
 		c->frames = (size == -1) ? -1 : size / enc_info->bytes / p->channels;
 		lseek(fd, 0, SEEK_SET);
 	}
 	if (p->mode == CODEC_MODE_READ) c->read = pcm_read;
 #ifdef __BYTE_ORDER__
-	else if (strcmp(p->type, "wavpipe") == 0) c->write = wavpipe_write;
+	else if (is_wavpipe) c->write = wavpipe_write;
 #endif
 	else c->write = pcm_write;
 	c->seek = pcm_seek;
@@ -245,7 +255,15 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 
 void pcm_codec_print_encodings(const char *type)
 {
-	int i;
-	for (i = 0; i < LENGTH(encodings); ++i)
+#ifdef __BYTE_ORDER__
+	if (IS_WAVPIPE(type)) {
+		for (int i = 0; i < LENGTH(encodings); ++i) {
+			if (!WAVPIPE_BAD_ENC(&encodings[i]))
+				fprintf(stdout, " %s", encodings[i].name);
+		}
+		return;
+	}
+#endif
+	for (int i = 0; i < LENGTH(encodings); ++i)
 		fprintf(stdout, " %s", encodings[i].name);
 }
