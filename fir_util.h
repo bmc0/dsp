@@ -34,7 +34,7 @@ struct fir_config {
 	struct codec_params p;
 };
 
-sample_t * fir_read_filter(const struct effect_info *, const struct stream_info *, const char *, const struct codec_params *, int *, ssize_t *);
+sample_t * fir_read_filter(const struct effect_info *, const struct stream_info *, const char *, const char *, const struct codec_params *, int *, ssize_t *);
 int fir_parse_opts(const struct effect_info *, const struct stream_info *, struct fir_config *, struct dsp_getopt_state *, int, const char *const *, const char *,
 	int (*)(const struct effect_info *, const struct stream_info *, const struct fir_config *, int, const char *, void *), void *);
 struct effect * fir_init_align(const struct effect_info *, const struct stream_info *, const char *,

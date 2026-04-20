@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2017-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2017-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -160,13 +160,14 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 		return NULL;
 	}
 
+	const int selected_channel_count = num_bits_set(channel_selector, istream->channels);
 	state = calloc(1, sizeof(struct ladspa_host_state));
 	e = calloc(1, sizeof(struct effect));
 	e->data = state;
 
 	/* Build paths and dlopen() the plugin */
 	if ((argv[1][0] == '.' || argv[1][0] == '~') && argv[1][1] == '/') {
-		char *full_path = construct_full_path(dir, argv[1], istream);
+		char *full_path = construct_full_path(dir, argv[1], istream->fs, selected_channel_count);
 		state->dl = dlopen(full_path, dlopen_flags);
 		free(full_path);
 	}
@@ -194,7 +195,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 		char *dir = search_path, *next_dir;
 		while (dir && *dir != '\0') {
 			next_dir = isolate(dir, ':');
-			char *full_path = construct_full_path(dir, plugin_soname, istream);
+			char *full_path = construct_full_path(dir, plugin_soname, istream->fs, selected_channel_count);
 			state->dl = dlopen(full_path, dlopen_flags);
 			free(full_path);
 			if (state->dl) break;
@@ -248,7 +249,6 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 		LOG_FMT(LL_ERROR, "%s: %s: %s: error: plugin has no audio outputs", argv[0], argv[1], argv[2]);
 		goto fail;
 	}
-	const int selected_channel_count = num_bits_set(channel_selector, istream->channels);
 	if (state->n_in > 1) {
 		if (state->n_in != selected_channel_count) {
 			LOG_FMT(LL_ERROR, "%s: %s: %s: error: expected %d input channels, got %d", argv[0], argv[1], argv[2], state->n_in, selected_channel_count);

@@ -262,7 +262,7 @@ char * get_file_contents(const char *path)
 	return NULL;
 }
 
-char * construct_full_path(const char *dir, const char *path, const struct stream_info *stream)
+char * construct_full_path(const char *dir, const char *path, int fs, int channels)
 {
 	int pos = 0, len = strlen(path) + 16 + 1;
 	char *fp = NULL;
@@ -290,13 +290,13 @@ char * construct_full_path(const char *dir, const char *path, const struct strea
 			write_subst:
 			switch (*path) {
 			case 'r':
-				w = snprintf(fp+pos, len-pos, "%d", stream->fs);
+				w = snprintf(fp+pos, len-pos, "%d", fs);
 				break;
 			case 'k':
-				w = snprintf(fp+pos, len-pos, "%.10g", stream->fs/1000.0);
+				w = snprintf(fp+pos, len-pos, "%.10g", fs/1000.0);
 				break;
 			case 'c':
-				w = snprintf(fp+pos, len-pos, "%d", stream->channels);
+				w = snprintf(fp+pos, len-pos, "%d", channels);
 				break;
 			case '%':
 				if (pos+1 < len) fp[pos] = '%';

@@ -334,7 +334,7 @@ int parse_effect_opts(const char *const *argv, const char *dir, const struct str
 			else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
 				char *opt_arg = isolate(opt, '=');
 				if (*opt_arg == '\0') goto needs_arg;
-				char *path = construct_full_path(dir, opt_arg, istream);
+				char *path = construct_full_path(dir, opt_arg, istream->fs, config->n_channels);
 				config->pwr_err_file = fopen(path, "w");
 				if (!config->pwr_err_file) {
 					LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", argv[0], path);

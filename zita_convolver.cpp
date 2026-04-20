@@ -218,7 +218,7 @@ struct effect * zita_convolver_effect_init(const struct effect_info *ei, const s
 		++g.ind;
 	}
 	config.p.path = argv[g.ind];
-	filter_data = fir_read_filter(ei, istream, dir, &config.p, &filter_channels, &filter_frames);
+	filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
 	if (filter_data == NULL)
 		return NULL;
 	e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, min_part_len, max_part_len);

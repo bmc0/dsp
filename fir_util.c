@@ -23,7 +23,7 @@
 #include "fir_util.h"
 #include "delay.h"
 
-sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
+sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
 	static const char coefs_str_prefix[] = "coefs:";
 	static const char file_str_prefix[] = "file:";
@@ -77,7 +77,7 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 	else {
 		if (strncmp(path, file_str_prefix, LENGTH(file_str_prefix)-1) == 0)
 			path += LENGTH(file_str_prefix)-1;
-		char *fp = construct_full_path(dir, path, istream);
+		char *fp = construct_full_path(dir, path, istream->fs, num_bits_set(channel_selector, istream->channels));
 		struct codec_params c_params = *p;
 		c_params.path = fp;
 		c_params.mode = CODEC_MODE_READ;

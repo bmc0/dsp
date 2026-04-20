@@ -395,7 +395,8 @@ static int ec_parse_file(const char *path, const char *dir, struct effects_chain
 	struct stream_info *stream, const char *ch_mask, int enforce_eof_marker)
 {
 	int ret = 0;
-	char *p = construct_full_path(dir, path, stream), *c = NULL, *d = NULL;
+	char *p = NULL, *c = NULL, *d = NULL;
+	p = construct_full_path(dir, path, stream->fs, num_bits_set(ch_mask, stream->channels));
 	if (!p) goto fail_nomem;
 	if (!(c = get_file_contents(p))) {
 		LOG_FMT(LL_ERROR, "error: failed to load effects file: %s: %s", p, strerror(errno));
