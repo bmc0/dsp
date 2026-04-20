@@ -396,6 +396,7 @@ void read_buf_input_list_destroy_head(struct read_buf_input_list *list)
 {
 	struct read_buf_input *input = list->head;
 	LIST_REMOVE(list, input);
+	destroy_codec(input->codec);
 	free(input);
 }
 
