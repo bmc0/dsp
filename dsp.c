@@ -327,7 +327,7 @@ static void * key_worker(void *arg)
 		while ((r = read(fd, &ch, 1)) < 0 && errno == EINTR);
 		if (r == 1) ev_queue_push(EVENT_TYPE_KEY, ch);
 		else if (r < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: read: %s", __func__, strerror(errno));
+			dsp_perror(DSP_EREAD, NULL, strerror(errno));
 			return NULL;
 		}
 	}
@@ -1116,7 +1116,7 @@ int main(int argc, char *argv[])
 				if (start_pos > 0) {
 					start_pos = c->seek(c, start_pos);
 					if (start_pos < 0) {
-						LOG_FMT(LL_ERROR, "error: %s: seek failed", c->path);
+						dsp_perror(DSP_ESEEK, NULL, c->path);
 						cleanup_and_exit(1);
 					}
 				}

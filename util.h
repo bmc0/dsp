@@ -84,6 +84,22 @@ int dsp_fftw_load_wisdom(void);   /* Not MT-safe. Call before planning; returns 
 void dsp_fftw_save_wisdom(void);  /* Called at exit--do not use anywhere else. */
 #endif
 
+/* note: dsp_log_{printf,puts,putc} must be wrapped in calls to dsp_log_{acquire,release}() */
+int dsp_log_printf(const char *, ...) __attribute__((format(printf, 1, 2)));
+int dsp_log_puts(const char *);
+int dsp_log_putc(int);
+
+void dsp_log_safe_fmt(const char *, ...) __attribute__((format(printf, 1, 2)));
+
+#define LOG_FMT(l, fmt, ...) do { \
+	if (LOGLEVEL(l)) \
+		dsp_log_safe_fmt(fmt, __VA_ARGS__); \
+} while (0)
+#define LOG_S(l, s) do { \
+	if (LOGLEVEL(l)) \
+		dsp_log_safe_fmt("%s", s); \
+} while (0)
+
 enum {
 	DSP_ENONE = 0,
 	DSP_ENOMEM,

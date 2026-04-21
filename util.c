@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
@@ -473,6 +474,37 @@ void dsp_fftw_save_wisdom(void)
 }
 #endif
 
+int dsp_log_printf(const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	const int r = vfprintf(stderr, format, ap);
+	va_end(ap);
+	return r;
+}
+
+int dsp_log_puts(const char *s)
+{
+	return fputs(s, stderr);
+}
+
+int dsp_log_putc(int c)
+{
+	return putc(c, stderr);
+}
+
+void dsp_log_safe_fmt(const char *format, ...)
+{
+	va_list ap;
+	dsp_log_acquire();
+	fprintf(stderr, "%s: ", dsp_globals.prog_name);
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	va_end(ap);
+	putc('\n', stderr);
+	dsp_log_release();
+}
+
 const char *err_strs[] = {
 	[DSP_ENONE]     = "no error",
 	[DSP_ENOMEM]    = "no memory",
@@ -496,10 +528,10 @@ void dsp_perror(int e, const char *name, const char *msg)
 {
 	if (!LOGLEVEL(LL_ERROR)) return;
 	dsp_log_acquire();
-	dsp_log_printf("%s: ", dsp_globals.prog_name);
-	if (name) dsp_log_printf("%s: ", name);
-	dsp_log_printf("error: %s", dsp_strerror(e));
-	if (msg) dsp_log_printf(": %s", msg);
-	dsp_log_putc('\n');
+	fprintf(stderr, "%s: ", dsp_globals.prog_name);
+	if (name) fprintf(stderr, "%s: ", name);
+	fprintf(stderr, "error: %s", dsp_strerror(e));
+	if (msg) fprintf(stderr, ": %s", msg);
+	putc('\n', stderr);
 	dsp_log_release();
 }

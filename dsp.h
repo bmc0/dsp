@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-enum {
+enum dsp_loglevel {
 	LL_SILENT = 0,
 	LL_ERROR,
 	LL_OPEN_ERROR,
@@ -30,25 +30,6 @@ enum {
 	LL_VERBOSE,
 };
 #define LOGLEVEL(l) (dsp_globals.loglevel >= (l))
-#define dsp_log_printf(...) fprintf(stderr, __VA_ARGS__)
-#define dsp_log_puts(str)   fputs(str, stderr)
-#define dsp_log_putc(c)     putc(c, stderr)
-#define LOG_FMT(l, fmt, ...) \
-	do { \
-		if (LOGLEVEL(l)) { \
-			dsp_log_acquire(); \
-			dsp_log_printf("%s: " fmt "\n", dsp_globals.prog_name, __VA_ARGS__); \
-			dsp_log_release(); \
-		} \
-	} while (0)
-#define LOG_S(l, s) \
-	do { \
-		if (LOGLEVEL(l)) { \
-			dsp_log_acquire(); \
-			dsp_log_printf("%s: %s\n", dsp_globals.prog_name, s); \
-			dsp_log_release(); \
-		} \
-	} while (0)
 
 #define DEFAULT_FS       44100
 #define DEFAULT_CHANNELS     1
