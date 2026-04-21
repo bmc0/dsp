@@ -70,7 +70,7 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: read failed: %s", codec_name, snd_strerror(n));
+			dsp_perror(DSP_EREAD, codec_name, snd_strerror(n));
 			return r;
 		}
 		else
@@ -104,7 +104,7 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", codec_name);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: write failed: %s", codec_name, snd_strerror(n));
+			dsp_perror(DSP_EWRITE, codec_name, snd_strerror(n));
 			return w;
 		}
 		else

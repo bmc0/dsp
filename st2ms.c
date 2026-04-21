@@ -95,7 +95,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	}
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (n_channels != 2) {
-		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
+		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
 		return NULL;
 	}
 
@@ -112,7 +112,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 		e->run = ms2st_effect_run;
 		break;
 	default:
-		LOG_FMT(LL_ERROR, "%s: BUG: unknown effect: %s (%d)", __FILE__, argv[0], ei->effect_number);
+		dsp_perror(DSP_ENOEFFNUM, __FILE__, NULL);
 		free(e);
 		return NULL;
 	}

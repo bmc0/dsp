@@ -70,12 +70,12 @@ int get_args_and_channels(const struct effect_info *ei, const struct stream_info
 		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", argv[0]);
 
 	if (istream->fs < 32000) {
-		LOG_FMT(LL_ERROR, "%s: error: sample rate out of range", argv[0]);
+		dsp_perror(DSP_ERANGE, argv[0], "input sample rate");
 		return 1;
 	}
 	config->n_channels = num_bits_set(channel_selector, istream->channels);
 	if (config->n_channels != 2) {
-		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
+		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
 		return 1;
 	}
 	config->c0 = config->c1 = -1;

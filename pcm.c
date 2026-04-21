@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,8 +40,6 @@ struct pcm_enc_info {
 	void (*write_func)(sample_t *, void *, ssize_t);
 };
 
-static const char codec_name[] = "pcm";
-
 static struct pcm_enc_info encodings[] = {
 	{ "s16",    2, 16, 1, read_buf_s16,    write_buf_s16 },
 	{ "u8",     1, 8,  1, read_buf_u8,     write_buf_u8 },
@@ -73,7 +71,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 
 	n = read(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG_FMT(LL_ERROR, "%s: read failed: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, c->type, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -90,7 +88,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	state->enc_info->write_func(buf, buf, frames * c->channels);
 	n = write(state->fd, buf, frames * c->channels * state->enc_info->bytes);
 	if (n == -1) {
-		LOG_FMT(LL_ERROR, "%s: write failed: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EWRITE, c->type, strerror(errno));
 		return 0;
 	}
 	n = n / state->enc_info->bytes / c->channels;
@@ -109,8 +107,10 @@ ssize_t pcm_seek(struct codec *c, ssize_t pos)
 	else if (pos > c->frames)
 		pos = c->frames;
 	o = lseek(state->fd, pos * state->enc_info->bytes * c->channels, SEEK_SET);
-	if (o == -1)
+	if (o == -1) {
+		dsp_perror(DSP_ESEEK, c->type, strerror(errno));
 		return -1;
+	}
 	state->pos = o;
 	return o / state->enc_info->bytes / c->channels;
 }
@@ -146,17 +146,17 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 	struct codec *c = NULL;
 
 	if ((enc_info = pcm_get_enc_info(p->enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
+		dsp_perror(DSP_EBADENC, p->type, p->enc);
 		goto fail;
 	}
 	if (!(p->endian == CODEC_ENDIAN_DEFAULT || p->endian == CODEC_ENDIAN_NATIVE)) {
-		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: endian conversion not supported", p->type);
 		goto fail;
 	}
 	if (strcmp(p->path, "-") == 0)
 		fd = (p->mode == CODEC_MODE_WRITE) ? STDOUT_FILENO : STDIN_FILENO;
 	else if ((fd = open(p->path, (p->mode == CODEC_MODE_WRITE) ? O_WRONLY|O_CREAT|O_TRUNC : O_RDONLY, 0644)) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, strerror(errno));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", p->type, p->path, strerror(errno));
 		goto fail;
 	}
 

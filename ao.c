@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -61,7 +61,7 @@ ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 	state->enc_info->write_func(buf, buf, frames * c->channels);
 	if (ao_play(state->dev, (char *) buf, frames * c->channels * state->enc_info->bytes) == 0) {
-		LOG_FMT(LL_ERROR, "%s: ao_play(): write failed", codec_name);
+		dsp_perror(DSP_EWRITE, c->type, NULL);
 		return 0;
 	}
 	return frames;
@@ -115,7 +115,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 		goto fail;
 	}
 	if ((enc_info = ao_get_enc_info(p->enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
+		dsp_perror(DSP_EBADENC, p->type, p->enc);
 		goto fail;
 	}
 	format.bits = enc_info->prec;

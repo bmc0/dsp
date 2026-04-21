@@ -105,7 +105,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 		CHECK_ENDPTR(arg, endptr, "value", return NULL);
 		break;
 	default:
-		LOG_FMT(LL_ERROR, "%s: BUG: unknown effect: %s (%d)", __FILE__, argv[0], ei->effect_number);
+		dsp_perror(DSP_ENOEFFNUM, __FILE__, NULL);
 		return NULL;
 	}
 

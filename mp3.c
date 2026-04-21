@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <mad.h>
 #include "mp3.h"
+#include "util.h"
 
 /* largest possible frame size (http://www.mars.org/pipermail/mad-dev/2002-January/000425.html) */
 /* #define MP3_BUF_SIZE (2881 + MAD_BUFFER_GUARD) */
@@ -46,7 +47,7 @@ static ssize_t refill_buffer(struct mp3_state *state)
 	ssize_t r, rem = state->stream.bufend - state->stream.next_frame;
 	memmove(state->buf, state->stream.next_frame, rem);
 	if ((r = read(state->fd, state->buf + rem, MP3_BUF_SIZE - rem)) == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: read failure: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
 		return 0;
 	}
 	if (r == 0)
@@ -95,7 +96,7 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 		pos = c->frames - 1;
 
 	if (lseek(state->fd, 0, SEEK_SET) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: lseek failed", codec_name);
+		dsp_perror(DSP_ESEEK, codec_name, strerror(errno));
 		return -1;
 	}
 
@@ -108,7 +109,7 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: read failed: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
 		return -1;
 	}
 	mad_stream_buffer(&state->stream, state->buf, MP3_BUF_SIZE);
@@ -169,7 +170,7 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: read failed: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
 		len = -1;
 		goto done;
 	}
@@ -220,7 +221,7 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: read failed: %s", codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
 		goto fail;
 	}
 	mad_stream_buffer(&state->stream, state->buf, MP3_BUF_SIZE);

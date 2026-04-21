@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2013-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2013-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,8 +38,6 @@ struct sndfile_state {
 	SF_INFO *info;
 	sample_t scale;
 };
-
-static const char codec_name[] = "sndfile";
 
 static struct sndfile_type_info types[] = {
 	{ "sndfile", 0 },
@@ -113,7 +111,7 @@ ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
 	const sf_count_t r = sf_readf_double(state->f, buf, frames);
 	if (r != frames && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
-		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+		dsp_perror(DSP_EREAD, c->type, sf_error_number(e));
 	return (ssize_t) r;
 }
 
@@ -133,7 +131,7 @@ ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
 	if (state->scale > 1.0) buf_scale_int(buf, state->scale, frames * c->channels);
 	const sf_count_t r = sf_writef_double(state->f, buf, frames);
 	if (r != frames && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
-		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+		dsp_perror(DSP_EWRITE, c->type, sf_error_number(e));
 	return (ssize_t) r;
 }
 
@@ -149,7 +147,7 @@ ssize_t sndfile_seek(struct codec *c, ssize_t pos)
 		pos = c->frames - 1;
 	const sf_count_t r = sf_seek(state->f, pos, SEEK_SET);
 	if (r < 0 && (e = sf_error(state->f)) != SF_ERR_NO_ERROR)
-		LOG_FMT(LL_ERROR, "%s: %s", __func__, sf_error_number(e));
+		dsp_perror(DSP_ESEEK, c->type, sf_error_number(e));
 	return (ssize_t) r;
 }
 
@@ -241,12 +239,12 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 	info->channels = p->channels;
 	info->format = ((p->type == NULL) ? 0 : sndfile_get_type(p->type)) | sndfile_get_sf_enc(p->enc) | sndfile_get_endian(p->endian);
 	if (info->format == -1) {
-		LOG_FMT(LL_ERROR, "%s: error: bad format type or encoding: %s: type=%s enc=%s", codec_name, p->path, p->type, p->enc);
+		LOG_FMT(LL_ERROR, "sndfile: error: bad format type or encoding: %s: type=%s enc=%s", p->path, p->type, p->enc);
 		goto fail;
 	}
 	f = sf_open(p->path, (p->mode == CODEC_MODE_WRITE) ? SFM_WRITE : SFM_READ, info);
 	if (f == NULL) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, sf_strerror(NULL));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", p->type, p->path, sf_strerror(NULL));
 		goto fail;
 	}
 

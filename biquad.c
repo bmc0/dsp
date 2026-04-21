@@ -523,7 +523,7 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 		GET_ARG(a2, argv[g.ind+5], "a2");
 		break;
 	default:
-		LOG_FMT(LL_ERROR, "%s: BUG: unknown filter type: %s (%d)", __FILE__, argv[0], ei->effect_number);
+		dsp_perror(DSP_ENOEFFNUM, __FILE__, NULL);
 		return NULL;
 	}
 	if (type == BIQUAD_BIQUAD) biquad_init(&b, b0, b1, b2, a0, a1, a2);

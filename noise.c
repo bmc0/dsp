@@ -26,17 +26,20 @@ struct noise_state {
 	sample_t mult;
 };
 
-double noise_parse_level(const char *s, char **endptr)
+double noise_parse_level(const char *s, char **r_endptr)
 {
-	const double v = strtod(s, endptr);
+	char *endptr;
+	const double v = strtod(s, &endptr);
 	double l = pow(10.0, v/20.0);
-	if (*endptr != NULL && *endptr != s) {
-		if (**endptr == 'b') {
+	if (endptr != s) {
+		if (*endptr == 'b') {
 			l = 2.0 / exp2(v);
-			++(*endptr);
+			++endptr;
 		}
-		if (**endptr != '\0') LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, *endptr);
+		if (*endptr != '\0')
+			dsp_perror(DSP_ETRCHAR, __func__, endptr);
 	}
+	if (r_endptr) *r_endptr = endptr;
 	return l;
 }
 

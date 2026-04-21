@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -184,7 +184,7 @@ static int get_new_frame(struct ffmpeg_state *state)
 			break;
 		default:
 			print_error:
-			LOG_FMT(LL_ERROR, "%s: decoding error: %s", codec_name, FFMPEG_ERRSTR(err));
+			dsp_perror(DSP_EREAD, codec_name, FFMPEG_ERRSTR(err));
 			return 1;
 		}
 	}

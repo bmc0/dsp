@@ -168,7 +168,7 @@ static int ec_lex_word(struct ec_token_list *tokens, const char *s, int line, in
 	}
 	struct ec_token *tok = calloc(1, sizeof(struct ec_token)+slen+1);
 	if (!tok) {
-		dsp_perror(DSP_ENOMEM, NULL);
+		dsp_perror(DSP_ENOMEM, NULL, NULL);
 		return 1;
 	}
 	tok->id = id;
@@ -424,7 +424,7 @@ static int ec_parse_file(const char *path, const char *dir, struct effects_chain
 	return ret;
 
 	fail_nomem:
-	dsp_perror(DSP_ENOMEM, NULL);
+	dsp_perror(DSP_ENOMEM, NULL, NULL);
 	fail:
 	ret = 1;
 	goto done;
@@ -474,7 +474,7 @@ static int ec_parse_argv(int argc, const char *const *argv, const char *dir, str
 	return ret;
 
 	fail_nomem:
-	dsp_perror(DSP_ENOMEM, NULL);
+	dsp_perror(DSP_ENOMEM, NULL, NULL);
 	fail:
 	ret = 1;
 	goto done;
@@ -495,8 +495,10 @@ static int ec_parse_effect_err(struct ec_parser_state *state, const char *msg, s
 	ec_print_escaped_str(tok->str, 0);
 	dsp_log_putc('\n');
 	dsp_log_release();
-	const int len = (hl_end->line == tok->line) ? hl_end->col + hl_end->len - tok->col : 0;
-	ec_parse_print_line("note", state, "defined here:", tok->line, tok->col, len);
+	if (!state->allow_fail || LOGLEVEL(LL_VERBOSE)) {
+		const int len = (hl_end->line == tok->line) ? hl_end->col + hl_end->len - tok->col : 0;
+		ec_parse_print_line("note", state, "defined here:", tok->line, tok->col, len);
+	}
 	return (state->allow_fail) ? 0 : 1;
 }
 
@@ -988,7 +990,7 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 {
 	char *s = strdup(cs);
 	if (!s) {
-		dsp_perror(DSP_ENOMEM, NULL);
+		dsp_perror(DSP_ENOMEM, NULL, NULL);
 		return 1;
 	}
 	if (ec_parse_string(s, path, dir, chain, stream, ch_mask)) {

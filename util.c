@@ -33,8 +33,12 @@
 int check_endptr(const char *name, const char *str, const char *endptr, const char *param_name)
 {
 	if (endptr == str || *endptr != '\0') {
-		if (name == NULL) LOG_FMT(LL_ERROR, "failed to parse %s: %s", param_name, str);
-		else LOG_FMT(LL_ERROR, "%s: failed to parse %s: %s", name, param_name, str);
+		if (!LOGLEVEL(LL_ERROR)) return 1;
+		dsp_log_acquire();
+		dsp_log_printf("%s: ", dsp_globals.prog_name);
+		if (name) dsp_log_printf("%s: ", name);
+		dsp_log_printf("failed to parse %s: %s\n", param_name, str);
+		dsp_log_release();
 		return 1;
 	}
 	return 0;
@@ -50,7 +54,7 @@ double parse_freq(const char *s, char **r_endptr)
 			++endptr;
 		}
 		if (*endptr != '\0')
-			LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
+			dsp_perror(DSP_ETRCHAR, __func__, endptr);
 	}
 	if (r_endptr) *r_endptr = endptr;
 	return f;
@@ -75,7 +79,7 @@ static double parse_len_frac_2(const char *s, double fs, char **r_endptr, int ve
 			break;
 		}
 		if (verbose && *endptr != '\0')
-			LOG_FMT(LL_ERROR, "%s(): trailing characters: %s", __func__, endptr);
+			dsp_perror(DSP_ETRCHAR, __func__, endptr);
 	}
 	if (r_endptr) *r_endptr = endptr;
 	return samples;
@@ -134,12 +138,12 @@ int parse_selector(const char *s, char *b, int n)
 		if (*s >= '0' && *s <= '9') {
 			v = atoi(s);
 			if (v > n - 1 || v < 0) {
-				LOG_FMT(LL_ERROR, "%s(): error: value out of range: %d", __func__, v);
+				LOG_FMT(LL_ERROR, "%s: error: value out of range: %d", __func__, v);
 				return 1;
 			}
 			if (dash) {
 				if (v < start) {
-					LOG_FMT(LL_ERROR, "%s(): error: malformed range: %d-%d", __func__, (start == -1) ? 0 : start, v);
+					LOG_FMT(LL_ERROR, "%s: error: malformed range: %d-%d", __func__, (start == -1) ? 0 : start, v);
 					return 1;
 				}
 				end = v;
@@ -151,7 +155,7 @@ int parse_selector(const char *s, char *b, int n)
 		}
 		else if (*s == '-') {
 			if (dash) {
-				LOG_FMT(LL_ERROR, "%s(): syntax error: '-' unexpected", __func__);
+				LOG_FMT(LL_ERROR, "%s: syntax error: '-' unexpected", __func__);
 				return 1;
 			}
 			dash = 1;
@@ -159,7 +163,7 @@ int parse_selector(const char *s, char *b, int n)
 		}
 		else if (*s == ',' || *s == '\0' ) {
 			if (start == -1 && end == -1 && !dash) {
-				LOG_FMT(LL_ERROR, "%s(): syntax error: ',' unexpected", __func__);
+				LOG_FMT(LL_ERROR, "%s: syntax error: ',' unexpected", __func__);
 				return 1;
 			}
 			set_range(b, n, start, end, dash);
@@ -169,12 +173,12 @@ int parse_selector(const char *s, char *b, int n)
 				++s;
 		}
 		else {
-			LOG_FMT(LL_ERROR, "%s(): syntax error: invalid character: %c", __func__, *s);
+			LOG_FMT(LL_ERROR, "%s: syntax error: invalid character: %c", __func__, *s);
 			return 1;
 		}
 	}
 	if (start == -1 && end == -1 && !dash) {
-		LOG_FMT(LL_ERROR, "%s(): syntax error: ',' unexpected", __func__);
+		LOG_FMT(LL_ERROR, "%s: syntax error: ',' unexpected", __func__);
 		return 1;
 	}
 	set_range(b, n, start, end, dash);
@@ -244,12 +248,12 @@ char * get_file_contents(const char *path)
 
 	if ((fd = open(path, O_RDONLY)) < 0)
 		return NULL;
-	c = malloc(s * sizeof(char));
+	if (!(c = malloc(s * sizeof(char)))) goto fail;
 	while ((r = read(fd, &c[p], s - p)) > -1) {
 		p += r;
 		if (p >= s) {
 			s += 2048;
-			c = realloc(c, s * sizeof(char));
+			if (!(c = realloc(c, s * sizeof(char)))) goto fail;
 		}
 		if (r == 0) {
 			c[p] = '\0';
@@ -259,6 +263,11 @@ char * get_file_contents(const char *path)
 	}
 	free(c);
 	close(fd);
+	return NULL;
+
+	fail:
+	close(fd);
+	dsp_perror(DSP_ENOMEM, NULL, NULL);
 	return NULL;
 }
 
@@ -383,11 +392,15 @@ int dsp_getopt(struct dsp_getopt_state *g, int argc, const char *const *argv, co
 
 void dsp_getopt_print_error(struct dsp_getopt_state *g, int opt, const char *name)
 {
+	if (!LOGLEVEL(LL_ERROR)) return;
 	const char *errmsg = (opt == ':')
 		? "expected argument to option"
 		: "unrecognized option";
-	if (name) LOG_FMT(LL_ERROR, "%s: %s '%c'", name, errmsg, g->opt);
-	else LOG_FMT(LL_ERROR, "%s '%c'", errmsg, g->opt);
+	dsp_log_acquire();
+	dsp_log_printf("%s: ", dsp_globals.prog_name);
+	if (name) dsp_log_printf("%s: ", name);
+	dsp_log_printf("%s '%c'\n", errmsg, g->opt);
+	dsp_log_release();
 }
 
 #ifdef HAVE_FFTW3
@@ -461,19 +474,32 @@ void dsp_fftw_save_wisdom(void)
 #endif
 
 const char *err_strs[] = {
-	[0]          = "no error",
-	[DSP_ENOMEM] = "no memory",
+	[DSP_ENONE]     = "no error",
+	[DSP_ENOMEM]    = "no memory",
+	[DSP_EREAD]     = "read",
+	[DSP_EWRITE]    = "write",
+	[DSP_ESEEK]     = "seek",
+	[DSP_EBADENC]   = "bad encoding",
+	[DSP_ERANGE]    = "parameter out of range",
+	[DSP_ENOEFFNUM] = "BUG: unknown effect number",
+	[DSP_ETRCHAR]   = "trailing characters",
 };
 
 const char * dsp_strerror(int e)
 {
 	if (e < 0 || e >= LENGTH(err_strs))
-		return "unknown error";
+		return "BUG: unknown error";
 	return err_strs[e];
 }
 
-void dsp_perror(int e, const char *msg)
+void dsp_perror(int e, const char *name, const char *msg)
 {
-	if (msg) LOG_FMT(LL_ERROR, "error: %s: %s", msg, dsp_strerror(e));
-	else LOG_FMT(LL_ERROR, "error: %s", dsp_strerror(e));
+	if (!LOGLEVEL(LL_ERROR)) return;
+	dsp_log_acquire();
+	dsp_log_printf("%s: ", dsp_globals.prog_name);
+	if (name) dsp_log_printf("%s: ", name);
+	dsp_log_printf("error: %s", dsp_strerror(e));
+	if (msg) dsp_log_printf(": %s", msg);
+	dsp_log_putc('\n');
+	dsp_log_release();
 }

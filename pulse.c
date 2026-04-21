@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2014-2025 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2014-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,15 +37,13 @@ struct pulse_state {
 	struct pulse_enc_info *enc_info;
 };
 
-static const char codec_name[] = "pulse";
-
 ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
 
 	if (pa_simple_read(state->s, buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
-		LOG_FMT(LL_ERROR, "%s: read: error: %s", codec_name, pa_strerror(err));
+		dsp_perror(DSP_EREAD, c->type, pa_strerror(err));
 		return 0;
 	}
 	state->enc_info->read_func(buf, buf, frames * c->channels);
@@ -59,7 +57,7 @@ ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 
 	state->enc_info->write_func(buf, buf, frames * c->channels);
 	if (pa_simple_write(state->s, buf, frames * c->channels * state->enc_info->bytes, &err) < 0) {
-		LOG_FMT(LL_ERROR, "%s: write: error: %s", codec_name, pa_strerror(err));
+		dsp_perror(DSP_EWRITE, c->type, pa_strerror(err));
 		return 0;
 	}
 	return frames;
@@ -128,7 +126,7 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	struct pulse_enc_info *enc_info;
 
 	if ((enc_info = pulse_get_enc_info(p->enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
+		dsp_perror(DSP_EBADENC, p->type, p->enc);
 		return NULL;
 	}
 	const pa_sample_spec ss = {
@@ -146,7 +144,7 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	s = pa_simple_new(NULL, dsp_globals.prog_name, (p->mode == CODEC_MODE_WRITE) ? PA_STREAM_PLAYBACK : PA_STREAM_RECORD,
 		(strcmp(p->path, CODEC_DEFAULT_DEVICE) == 0) ? NULL : p->path, dsp_globals.prog_name, &ss, NULL, &buf_attr, &err);
 	if (s == NULL) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: failed to open device: %s", codec_name, pa_strerror(err));
+		LOG_FMT(LL_OPEN_ERROR, "%s: failed to open device: %s", p->type, pa_strerror(err));
 		return NULL;
 	}
 

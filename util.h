@@ -30,7 +30,7 @@
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 #define CHECK_RANGE(cond, name, action) \
 	do { if (!(cond)) { \
-		LOG_FMT(LL_ERROR, "%s: error: %s out of range", argv[0], name); \
+		dsp_perror(DSP_ERANGE, argv[0], name); \
 		action; \
 	} } while (0)
 #define CHECK_FREQ(var, fs, name, action) \
@@ -84,9 +84,19 @@ int dsp_fftw_load_wisdom(void);   /* Not MT-safe. Call before planning; returns 
 void dsp_fftw_save_wisdom(void);  /* Called at exit--do not use anywhere else. */
 #endif
 
-enum { DSP_ENOMEM = 1 };
+enum {
+	DSP_ENONE = 0,
+	DSP_ENOMEM,
+	DSP_EREAD,
+	DSP_EWRITE,
+	DSP_ESEEK,
+	DSP_EBADENC,
+	DSP_ERANGE,
+	DSP_ENOEFFNUM,
+	DSP_ETRCHAR,
+};
 const char * dsp_strerror(int);
-void dsp_perror(int, const char *);
+void dsp_perror(int, const char *, const char *);
 
 #ifdef INT64_MAX
 #define PM_RAND_R_DEFINE_FUNC(func_name, A) \

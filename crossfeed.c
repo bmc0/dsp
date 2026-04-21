@@ -110,7 +110,7 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 		if (GET_BIT(channel_selector, i))
 			++n_channels;
 	if (n_channels != 2) {
-		LOG_FMT(LL_ERROR, "%s: error: number of input channels must be 2", argv[0]);
+		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
 		return NULL;
 	}
 
