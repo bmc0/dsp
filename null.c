@@ -37,26 +37,6 @@ static ssize_t null_seek(struct codec *c, ssize_t pos)
 	return (pos > 0) ? pos : 0;
 }
 
-static ssize_t null_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void null_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void null_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
-static void null_destroy(struct codec *c)
-{
-	/* nothing to clean up */
-}
-
 struct codec * null_codec_init(const struct codec_params *p)
 {
 	struct codec *c = calloc(1, sizeof(struct codec));
@@ -71,10 +51,9 @@ struct codec * null_codec_init(const struct codec_params *p)
 	if (p->mode == CODEC_MODE_READ) c->read = null_read;
 	else c->write = null_write;
 	c->seek = null_seek;
-	c->delay = null_delay;
-	c->drop = null_drop;
-	c->pause = null_pause;
-	c->destroy = null_destroy;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->data = NULL;
 
 	return c;

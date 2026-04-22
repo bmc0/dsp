@@ -230,9 +230,8 @@ struct codec * init_codec(const struct codec_params *p_in)
 
 void destroy_codec(struct codec *c)
 {
-	if (c == NULL)
-		return;
-	c->destroy(c);
+	if (!c) return;
+	if (c->destroy) c->destroy(c);
 	free(c);
 }
 
@@ -246,4 +245,24 @@ void print_all_codecs(void)
 		codecs[i].print_encodings(codecs[i].type);
 		fputc('\n', stdout);
 	}
+}
+
+ssize_t codec_seek_noop(struct codec *c, ssize_t pos)
+{
+	return -1;
+}
+
+ssize_t codec_delay_noop(struct codec *c)
+{
+	return 0;
+}
+
+void codec_drop_noop(struct codec *c)
+{
+	/* do nothing */
+}
+
+void codec_pause_noop(struct codec *c, int p)
+{
+	/* do nothing */
 }

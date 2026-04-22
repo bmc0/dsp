@@ -245,21 +245,6 @@ static ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 	return pos;
 }
 
-static ssize_t ffmpeg_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void ffmpeg_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void ffmpeg_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void ffmpeg_dl_cleanup(void)
 {
 	if (dl_handle_libavcodec) dlclose(dl_handle_libavcodec);
@@ -447,9 +432,9 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 		c->frames = -1;
 	c->read = ffmpeg_read;
 	c->seek = ffmpeg_seek;
-	c->delay = ffmpeg_delay;
-	c->drop = ffmpeg_drop;
-	c->pause = ffmpeg_pause;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = ffmpeg_destroy;
 	c->data = state;
 

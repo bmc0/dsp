@@ -84,11 +84,6 @@ static void pulse_drop(struct codec *c)
 	pa_simple_flush(state->s, NULL);
 }
 
-static void pulse_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void pulse_destroy(struct codec *c)
 {
 	struct pulse_state *state = (struct pulse_state *) c->data;
@@ -169,7 +164,7 @@ struct codec * pulse_codec_init(const struct codec_params *p)
 	c->seek = pulse_seek;
 	c->delay = pulse_delay;
 	c->drop = pulse_drop;
-	c->pause = pulse_pause;
+	c->pause = codec_pause_noop;
 	c->destroy = pulse_destroy;
 	c->data = state;
 

@@ -133,21 +133,6 @@ static ssize_t mp3_seek(struct codec *c, ssize_t pos)
 	return fpos;
 }
 
-static ssize_t mp3_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void mp3_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void mp3_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void mp3_destroy(struct codec *c)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
@@ -248,9 +233,9 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 	c->frames = nframes;
 	c->read = mp3_read;
 	c->seek = mp3_seek;
-	c->delay = mp3_delay;
-	c->drop = mp3_drop;
-	c->pause = mp3_pause;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = mp3_destroy;
 	c->data = state;
 

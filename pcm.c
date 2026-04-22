@@ -115,21 +115,6 @@ static ssize_t pcm_seek(struct codec *c, ssize_t pos)
 	return o / state->enc_info->bytes / c->channels;
 }
 
-static ssize_t pcm_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void pcm_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void pcm_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void pcm_destroy(struct codec *c)
 {
 	struct pcm_state *state = (struct pcm_state *) c->data;
@@ -181,9 +166,9 @@ struct codec * pcm_codec_init(const struct codec_params *p)
 	if (p->mode == CODEC_MODE_READ) c->read = pcm_read;
 	else c->write = pcm_write;
 	c->seek = pcm_seek;
-	c->delay = pcm_delay;
-	c->drop = pcm_drop;
-	c->pause = pcm_pause;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = pcm_destroy;
 	c->data = state;
 

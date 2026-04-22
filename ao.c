@@ -66,26 +66,6 @@ static ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-static ssize_t ao_seek(struct codec *c, ssize_t pos)
-{
-	return -1;
-}
-
-static ssize_t ao_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void ao_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void ao_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void ao_destroy(struct codec *c)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
@@ -153,10 +133,10 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	c->buf_ratio = p->buf_ratio;
 	c->frames = -1;
 	c->write = ao_write;
-	c->seek = ao_seek;
-	c->delay = ao_delay;
-	c->drop = ao_drop;
-	c->pause = ao_pause;
+	c->seek = codec_seek_noop;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = ao_destroy;
 	c->data = state;
 

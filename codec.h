@@ -73,4 +73,9 @@ struct codec * init_codec(const struct codec_params *);
 void destroy_codec(struct codec *);
 void print_all_codecs(void);
 
+ssize_t codec_seek_noop(struct codec *, ssize_t);
+ssize_t codec_delay_noop(struct codec *);
+void codec_drop_noop(struct codec *);
+void codec_pause_noop(struct codec *, int);
+
 #endif

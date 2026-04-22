@@ -151,21 +151,6 @@ static ssize_t sndfile_seek(struct codec *c, ssize_t pos)
 	return (ssize_t) r;
 }
 
-static ssize_t sndfile_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void sndfile_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void sndfile_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void sndfile_destroy(struct codec *c)
 {
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
@@ -271,9 +256,9 @@ struct codec * sndfile_codec_init(const struct codec_params *p)
 	if (p->mode == CODEC_MODE_READ) c->read = sndfile_read;
 	else c->write = sndfile_write;
 	c->seek = sndfile_seek;
-	c->delay = sndfile_delay;
-	c->drop = sndfile_drop;
-	c->pause = sndfile_pause;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = sndfile_destroy;
 	c->data = state;
 

@@ -95,21 +95,6 @@ static ssize_t sgen_seek(struct codec *c, ssize_t pos)
 	return pos;
 }
 
-static ssize_t sgen_delay(struct codec *c)
-{
-	return 0;
-}
-
-static void sgen_drop(struct codec *c)
-{
-	/* do nothing */
-}
-
-static void sgen_pause(struct codec *c, int p)
-{
-	/* do nothing */
-}
-
 static void sgen_destroy(struct codec *c)
 {
 	struct sgen_state *state = (struct sgen_state *) c->data;
@@ -200,9 +185,9 @@ struct codec * sgen_codec_init(const struct codec_params *p)
 	c->frames = -1;
 	c->read = sgen_read;
 	c->seek = sgen_seek;
-	c->delay = sgen_delay;
-	c->drop = sgen_drop;
-	c->pause = sgen_pause;
+	c->delay = codec_delay_noop;
+	c->drop = codec_drop_noop;
+	c->pause = codec_pause_noop;
 	c->destroy = sgen_destroy;
 
 	state = calloc(1, sizeof(struct sgen_state));
