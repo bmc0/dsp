@@ -322,9 +322,10 @@ struct ec_parser_state {
 	int allow_fail, last_stream_ch;
 };
 
+#define EC_PARSE_MAX_RDEPTH 512  /* surely enough for any practical use... */
 enum ec_nest { EC_NEST_NONE = 0, EC_NEST_BLOCK };
 
-static struct ec_token * ec_parse(struct ec_parser_state *, struct ec_token *, enum ec_nest);
+static struct ec_token * ec_parse(struct ec_parser_state *, struct ec_token *, enum ec_nest, int);
 
 static int ec_parser_state_ch_sel_mask(struct ec_parser_state *state, const char *initial_ch_mask)
 {
@@ -342,7 +343,7 @@ static void ec_parser_state_cleanup(struct ec_parser_state *state)
 	free(state->ch_mask);
 }
 
-static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_parser_state *parent_state)
+static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_parser_state *parent_state, int rdepth)
 {
 	struct ec_parser_state state = {
 		.chain = parent_state->chain,
@@ -353,13 +354,13 @@ static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_pa
 	};
 	if (ec_parser_state_ch_sel_mask(&state, parent_state->ch_sel))
 		return tok;
-	tok = ec_parse(&state, tok, EC_NEST_BLOCK);
+	tok = ec_parse(&state, tok, EC_NEST_BLOCK, rdepth+1);
 	ec_parser_state_cleanup(&state);
 	return tok;
 }
 
 static int ec_parse_string(char *s, const char *path, const char *dir, struct effects_chain *chain,
-	struct stream_info *stream, const char *initial_ch_mask)
+	struct stream_info *stream, const char *initial_ch_mask, int rdepth)
 {
 	int lines = 0;
 	struct ec_token_list tokens = {0};
@@ -384,7 +385,7 @@ static int ec_parse_string(char *s, const char *path, const char *dir, struct ef
 		}
 	}
 
-	struct ec_token *tok = ec_parse(&state, tokens.head, EC_NEST_NONE);
+	struct ec_token *tok = ec_parse(&state, tokens.head, EC_NEST_NONE, rdepth+1);
 	ec_token_list_destroy(&tokens);
 	free(state.line_strs);
 	ec_parser_state_cleanup(&state);
@@ -392,7 +393,7 @@ static int ec_parse_string(char *s, const char *path, const char *dir, struct ef
 }
 
 static int ec_parse_file(const char *path, const char *dir, struct effects_chain *chain,
-	struct stream_info *stream, const char *ch_mask, int enforce_eof_marker)
+	struct stream_info *stream, const char *ch_mask, int enforce_eof_marker, int rdepth)
 {
 	int ret = 0;
 	char *p = NULL, *c = NULL, *d = NULL;
@@ -414,7 +415,7 @@ static int ec_parse_file(const char *path, const char *dir, struct effects_chain
 	char *b = strrchr(p, '/');
 	if (b && !(d = strndup(p, b-p))) goto fail_nomem;
 	LOG_FMT(LL_VERBOSE, "info: begin effects file: %s", p);
-	if (ec_parse_string(c, p, (d)?d:".", chain, stream, ch_mask))
+	if (ec_parse_string(c, p, (d)?d:".", chain, stream, ch_mask, rdepth+1))
 		goto fail;
 	LOG_FMT(LL_VERBOSE, "info: end effects file: %s", p);
 	done:
@@ -464,7 +465,7 @@ static int ec_parse_argv(int argc, const char *const *argv, const char *dir, str
 	state.last_stream_ch = stream->channels;
 	if (ec_parser_state_ch_sel_mask(&state, ch_mask))
 		goto fail;
-	if (ec_parse(&state, tokens.head, EC_NEST_NONE) != NULL)
+	if (ec_parse(&state, tokens.head, EC_NEST_NONE, 1) != NULL)
 		goto fail;
 
 	done:
@@ -502,9 +503,13 @@ static int ec_parse_effect_err(struct ec_parser_state *state, const char *msg, s
 	return (state->allow_fail) ? 0 : 1;
 }
 
-static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token *tok, enum ec_nest nest)
+static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token *tok, enum ec_nest nest, int rdepth)
 {
 	struct ec_token *prev_effect = NULL;
+	if (rdepth > EC_PARSE_MAX_RDEPTH) {
+		ec_parse_err(state, "maximum recursion depth exceeded", tok);
+		return tok;
+	}
 	while (tok) {
 		if (nest == EC_NEST_BLOCK && tok->id == EC_TOKEN_BLOCK_END)
 			return tok;
@@ -563,12 +568,12 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 			state->last_stream_ch = state->stream->channels;
 		}
 		if (tok->id == EC_TOKEN_SOURCE) {
-			if (ec_parse_file(tok->str, state->dir, state->chain, state->stream, state->ch_sel, 0))
+			if (ec_parse_file(tok->str, state->dir, state->chain, state->stream, state->ch_sel, 0, rdepth))
 				return tok;
 			tok = tok->next; continue;
 		}
 		if (tok->id == EC_TOKEN_BLOCK_START) {
-			struct ec_token *end = ec_parse_child_block(tok->next, state);
+			struct ec_token *end = ec_parse_child_block(tok->next, state, rdepth);
 			if (!end) {
 				ec_parse_err(state, "unterminated block", tok);
 				return tok;
@@ -993,7 +998,7 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 		dsp_perror(DSP_ENOMEM, NULL, NULL);
 		return 1;
 	}
-	if (ec_parse_string(s, path, dir, chain, stream, ch_mask)) {
+	if (ec_parse_string(s, path, dir, chain, stream, ch_mask, 0)) {
 		free(s);
 		return 1;
 	}
@@ -1004,7 +1009,7 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 int build_effects_chain_from_file(const char *path, struct effects_chain *chain,
 	struct stream_info *stream, const char *ch_mask, const char *dir, int enforce_eof_marker)
 {
-	if (ec_parse_file(path, dir, chain, stream, ch_mask, enforce_eof_marker))
+	if (ec_parse_file(path, dir, chain, stream, ch_mask, enforce_eof_marker, 0))
 		return 1;
 	return build_effects_chain_finish(chain);
 }
