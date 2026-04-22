@@ -42,23 +42,22 @@ struct alsa_state {
 	int pause;
 };
 
-static const char codec_name[] = "alsa";
-
-static int alsa_prepare_device(struct alsa_state *state)
+static int alsa_prepare_device(struct codec *c)
 {
 	int err;
+	struct alsa_state *state = (struct alsa_state *) c->data;
 	if ((err = snd_pcm_prepare(state->dev)) < 0)
-		LOG_FMT(LL_ERROR, "%s: error: failed to prepare device: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to prepare device: %s", c->type, snd_strerror(err));
 	return err;
 }
 
-ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
+static ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 {
 	ssize_t n, r = 0;
 	uint8_t *buf = (uint8_t *) sbuf;
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
-	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(c) < 0)
 		return 0;
 
 	try_again:
@@ -67,10 +66,10 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 		if (n == -EAGAIN)
 			goto try_again;
 		if (n == -EPIPE)
-			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", codec_name);
+			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", c->type);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			dsp_perror(DSP_EREAD, codec_name, snd_strerror(n));
+			dsp_perror(DSP_EREAD, c->type, snd_strerror(n));
 			return r;
 		}
 		else
@@ -85,13 +84,13 @@ ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 	return r;
 }
 
-ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
+static ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 {
 	ssize_t n, w = 0;
 	uint8_t *buf = (uint8_t *) sbuf;
 	struct alsa_state *state = (struct alsa_state *) c->data;
 
-	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(state) < 0)
+	if (snd_pcm_state(state->dev) == SND_PCM_STATE_SETUP && alsa_prepare_device(c) < 0)
 		return 0;
 
 	state->enc_info->write_func(sbuf, sbuf, frames * c->channels);
@@ -101,10 +100,10 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 		if (n == -EAGAIN)
 			goto try_again;
 		if (n == -EPIPE)
-			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", codec_name);
+			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", c->type);
 		n = snd_pcm_recover(state->dev, n, 1);
 		if (n < 0) {
-			dsp_perror(DSP_EWRITE, codec_name, snd_strerror(n));
+			dsp_perror(DSP_EWRITE, c->type, snd_strerror(n));
 			return w;
 		}
 		else
@@ -118,7 +117,7 @@ ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 	return w;
 }
 
-ssize_t alsa_seek(struct codec *c, ssize_t pos)
+static ssize_t alsa_seek(struct codec *c, ssize_t pos)
 {
 	if (pos <= 0) {
 		c->drop(c);
@@ -136,7 +135,7 @@ ssize_t alsa_delay(struct codec *c)
 	return state->delay;
 }
 
-void alsa_drop(struct codec *c)
+static void alsa_drop(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
 	if (c->write) {
@@ -145,7 +144,7 @@ void alsa_drop(struct codec *c)
 	}
 }
 
-void alsa_pause(struct codec *c, int p)
+static void alsa_pause(struct codec *c, int p)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING) {
@@ -158,7 +157,7 @@ void alsa_pause(struct codec *c, int p)
 	state->pause = p;
 }
 
-void alsa_destroy(struct codec *c)
+static void alsa_destroy(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
 	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING)
@@ -202,91 +201,91 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	struct alsa_enc_info *enc_info;
 
 	if ((err = snd_pcm_open(&dev, p->path, (p->mode == CODEC_MODE_WRITE) ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0)) < 0) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open device: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open device: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((enc_info = alsa_get_enc_info(p->enc)) == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", codec_name, p->enc);
+		LOG_FMT(LL_ERROR, "%s: error: bad encoding: %s", p->type, p->enc);
 		goto fail;
 	}
 
 	if ((err = snd_pcm_hw_params_malloc(&hw_p)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to allocate hw params: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to allocate hw params: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_any(dev, hw_p)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to initialize hw params: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to initialize hw params: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_set_access(dev, hw_p, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set access: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set access: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_set_format(dev, hw_p, enc_info->fmt)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set format: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set format: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_set_rate(dev, hw_p, (unsigned int) p->fs, 0)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set rate: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set rate: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_set_channels(dev, hw_p, p->channels)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set channels: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set channels: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_get_buffer_size_min(hw_p, &buf_frames_min)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to get minimum buffer size: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to get minimum buffer size: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_get_buffer_size_max(hw_p, &buf_frames_max)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to get maximum buffer size: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to get maximum buffer size: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	buf_frames = MINIMUM(MAXIMUM(p->block_frames, buf_frames_min), buf_frames_max);
 	if ((err = snd_pcm_hw_params_set_buffer_size_min(dev, hw_p, &buf_frames)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set minimum buffer size: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set minimum buffer size: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	buf_frames = MINIMUM(MAXIMUM(p->block_frames * p->buf_ratio, buf_frames), buf_frames_max);
 	if ((err = snd_pcm_hw_params_set_buffer_size_near(dev, hw_p, &buf_frames)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set buffer size: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set buffer size: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_get_periods_min(hw_p, &periods_min, NULL)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to get minimum periods: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to get minimum periods: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	if ((err = snd_pcm_hw_params_get_periods_max(hw_p, &periods_max, NULL)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to get maximum periods: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to get maximum periods: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 	periods = MINIMUM(MAXIMUM(2, periods_min), periods_max);
 	if ((err = snd_pcm_hw_params_set_periods_near(dev, hw_p, &periods, NULL)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set periods: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set periods: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
-	LOG_FMT(LL_VERBOSE, "%s: info: buffer: %lu frames [%lu %lu]; %u periods [%u %u]", codec_name,
+	LOG_FMT(LL_VERBOSE, "%s: info: buffer: %lu frames [%lu %lu]; %u periods [%u %u]", p->type,
 		buf_frames, buf_frames_min, buf_frames_max, periods, periods_min, periods_max);
 	if ((err = snd_pcm_hw_params(dev, hw_p)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to set hw params: %s", codec_name, snd_strerror(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to set hw params: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
 
 	if (p->mode == CODEC_MODE_WRITE) {
 		if ((err = snd_pcm_sw_params_malloc(&sw_p)) < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: failed to allocate sw params: %s", codec_name, snd_strerror(err));
+			LOG_FMT(LL_ERROR, "%s: error: failed to allocate sw params: %s", p->type, snd_strerror(err));
 			goto fail;
 		}
 		if ((err = snd_pcm_sw_params_current(dev, sw_p)) < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: failed to get current sw params: %s", codec_name, snd_strerror(err));
+			LOG_FMT(LL_ERROR, "%s: error: failed to get current sw params: %s", p->type, snd_strerror(err));
 			goto fail;
 		}
 		if ((err = snd_pcm_sw_params_set_start_threshold(dev, sw_p, MINIMUM(p->block_frames * 2, buf_frames))) < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: failed to set start threshold: %s", codec_name, snd_strerror(err));
+			LOG_FMT(LL_ERROR, "%s: error: failed to set start threshold: %s", p->type, snd_strerror(err));
 			goto fail;
 		}
 		if ((err = snd_pcm_sw_params(dev, sw_p)) < 0) {
-			LOG_FMT(LL_ERROR, "%s: error: failed to set sw params: %s", codec_name, snd_strerror(err));
+			LOG_FMT(LL_ERROR, "%s: error: failed to set sw params: %s", p->type, snd_strerror(err));
 			goto fail;
 		}
 	}

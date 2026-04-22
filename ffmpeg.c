@@ -40,43 +40,41 @@ struct ffmpeg_state {
 	int64_t last_ts;
 };
 
-static const char codec_name[] = "ffmpeg";
-
 static pthread_mutex_t ffmpeg_init_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ffmpeg_open_count = 0;
-void *dl_handle_libavcodec  = NULL;
-void *dl_handle_libavformat = NULL;
-void *dl_handle_libavutil   = NULL;
+static void *dl_handle_libavcodec  = NULL;
+static void *dl_handle_libavformat = NULL;
+static void *dl_handle_libavutil   = NULL;
 
 /* libavcodec symbols */
-DLSYM_PROTOTYPE(avcodec_find_decoder);
-DLSYM_PROTOTYPE(avcodec_alloc_context3);
-DLSYM_PROTOTYPE(avcodec_parameters_to_context);
-DLSYM_PROTOTYPE(avcodec_open2);
-DLSYM_PROTOTYPE(avcodec_receive_frame);
-DLSYM_PROTOTYPE(avcodec_send_packet);
-DLSYM_PROTOTYPE(avcodec_flush_buffers);
-DLSYM_PROTOTYPE(avcodec_free_context);
-DLSYM_PROTOTYPE(av_packet_unref);
+static DLSYM_PROTOTYPE(avcodec_find_decoder);
+static DLSYM_PROTOTYPE(avcodec_alloc_context3);
+static DLSYM_PROTOTYPE(avcodec_parameters_to_context);
+static DLSYM_PROTOTYPE(avcodec_open2);
+static DLSYM_PROTOTYPE(avcodec_receive_frame);
+static DLSYM_PROTOTYPE(avcodec_send_packet);
+static DLSYM_PROTOTYPE(avcodec_flush_buffers);
+static DLSYM_PROTOTYPE(avcodec_free_context);
+static DLSYM_PROTOTYPE(av_packet_unref);
 
 /* libavformat symbols */
-DLSYM_PROTOTYPE(avformat_open_input);
-DLSYM_PROTOTYPE(avformat_find_stream_info);
-DLSYM_PROTOTYPE(av_find_best_stream);
-DLSYM_PROTOTYPE(av_read_frame);
-DLSYM_PROTOTYPE(avformat_seek_file);
-DLSYM_PROTOTYPE(avformat_close_input);
+static DLSYM_PROTOTYPE(avformat_open_input);
+static DLSYM_PROTOTYPE(avformat_find_stream_info);
+static DLSYM_PROTOTYPE(av_find_best_stream);
+static DLSYM_PROTOTYPE(av_read_frame);
+static DLSYM_PROTOTYPE(avformat_seek_file);
+static DLSYM_PROTOTYPE(avformat_close_input);
 
 /* libavutil symbols */
-DLSYM_PROTOTYPE(av_log_set_level);
-DLSYM_PROTOTYPE(av_strerror);
-DLSYM_PROTOTYPE(av_frame_alloc);
-DLSYM_PROTOTYPE(av_sample_fmt_is_planar);
-DLSYM_PROTOTYPE(av_get_bytes_per_sample);
-DLSYM_PROTOTYPE(av_get_sample_fmt_name);
-DLSYM_PROTOTYPE(av_rescale);
-DLSYM_PROTOTYPE(av_frame_free);
-DLSYM_PROTOTYPE(av_frame_unref);
+static DLSYM_PROTOTYPE(av_log_set_level);
+static DLSYM_PROTOTYPE(av_strerror);
+static DLSYM_PROTOTYPE(av_frame_alloc);
+static DLSYM_PROTOTYPE(av_sample_fmt_is_planar);
+static DLSYM_PROTOTYPE(av_get_bytes_per_sample);
+static DLSYM_PROTOTYPE(av_get_sample_fmt_name);
+static DLSYM_PROTOTYPE(av_rescale);
+static DLSYM_PROTOTYPE(av_frame_free);
+static DLSYM_PROTOTYPE(av_frame_unref);
 
 /* Planar sample conversion functions */
 
@@ -148,8 +146,9 @@ static char * ffmpeg_get_err_str(int err, char *err_buf)
 
 #define FFMPEG_ERRSTR(err) ffmpeg_get_err_str(err, (char [AV_ERROR_MAX_STRING_SIZE]){0})
 
-static int get_new_frame(struct ffmpeg_state *state)
+static int get_new_frame(struct codec *c)
 {
+	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	AVPacket packet;
 	int err;
 	if (state->got_frame)
@@ -175,7 +174,7 @@ static int get_new_frame(struct ffmpeg_state *state)
 			if ((err = sym_avcodec_send_packet(state->cc, &packet)) < 0) {
 				sym_av_packet_unref(&packet);
 				if (err == AVERROR_INVALIDDATA) {
-					LOG_FMT(LL_VERBOSE, "%s: warning: skipping invalid data", codec_name);
+					LOG_FMT(LL_VERBOSE, "%s: warning: skipping invalid data", c->type);
 					goto skip_packet;
 				}
 				goto print_error;
@@ -184,7 +183,7 @@ static int get_new_frame(struct ffmpeg_state *state)
 			break;
 		default:
 			print_error:
-			dsp_perror(DSP_EREAD, codec_name, FFMPEG_ERRSTR(err));
+			dsp_perror(DSP_EREAD, c->type, FFMPEG_ERRSTR(err));
 			return 1;
 		}
 	}
@@ -192,7 +191,7 @@ static int get_new_frame(struct ffmpeg_state *state)
 	return 0;
 }
 
-ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	int r, done = 0;  /* set to 1 at EOF */
@@ -201,7 +200,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 		avail = state->frame->nb_samples - state->frame_pos;
 	while (buf_pos < frames && !(done && avail == 0)) {
 		if (avail == 0) {
-			r = get_new_frame(state);
+			r = get_new_frame(c);
 			if (r < 0) {
 				done = 1;
 				continue;
@@ -225,7 +224,7 @@ ssize_t ffmpeg_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return buf_pos;
 }
 
-ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
+static ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 {
 	AVStream *st;
 	int64_t seek_ts;
@@ -241,22 +240,22 @@ ssize_t ffmpeg_seek(struct codec *c, ssize_t pos)
 	if (sym_avformat_seek_file(state->container, state->stream_index, INT64_MIN, seek_ts, INT64_MAX, 0) < 0)
 		return -1;
 	sym_avcodec_flush_buffers(state->cc);
-	get_new_frame(state);
+	get_new_frame(c);
 	pos = sym_av_rescale(state->last_ts, st->time_base.num * c->fs, st->time_base.den);
 	return pos;
 }
 
-ssize_t ffmpeg_delay(struct codec *c)
+static ssize_t ffmpeg_delay(struct codec *c)
 {
 	return 0;
 }
 
-void ffmpeg_drop(struct codec *c)
+static void ffmpeg_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void ffmpeg_pause(struct codec *c, int p)
+static void ffmpeg_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
@@ -268,7 +267,7 @@ static void ffmpeg_dl_cleanup(void)
 	if (dl_handle_libavutil) dlclose(dl_handle_libavutil);
 }
 
-void ffmpeg_destroy(struct codec *c)
+static void ffmpeg_destroy(struct codec *c)
 {
 	struct ffmpeg_state *state = (struct ffmpeg_state *) c->data;
 	sym_av_frame_free(&state->frame);
@@ -346,18 +345,18 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 	/* open input and find stream info */
 	state = calloc(1, sizeof(struct ffmpeg_state));
 	if ((err = sym_avformat_open_input(&state->container, p->path, NULL, NULL)) < 0) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open input: %s: %s", codec_name, p->path, FFMPEG_ERRSTR(err));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open input: %s: %s", p->type, p->path, FFMPEG_ERRSTR(err));
 		goto fail;
 	}
 	if ((err = sym_avformat_find_stream_info(state->container, NULL)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: could not find stream info: %s", codec_name, FFMPEG_ERRSTR(err));
+		LOG_FMT(LL_ERROR, "%s: error: could not find stream info: %s", p->type, FFMPEG_ERRSTR(err));
 		goto fail;
 	}
 
 	/* find audio stream */
 	state->stream_index = sym_av_find_best_stream(state->container, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
 	if (state->stream_index < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: could not find an audio stream", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: could not find an audio stream", p->type);
 		goto fail;
 	}
 	st = state->container->streams[state->stream_index];
@@ -365,26 +364,26 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 	/* open codec */
 	codec = sym_avcodec_find_decoder(st->codecpar->codec_id);
 	if (!codec) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to find decoder", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: failed to find decoder", p->type);
 		goto fail;
 	}
 	state->cc = sym_avcodec_alloc_context3(codec);
 	if (!state->cc) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to allocate codec context", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: failed to allocate codec context", p->type);
 		goto fail;
 	}
 	if ((err = sym_avcodec_parameters_to_context(state->cc, st->codecpar)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to copy codec parameters to decoder context: %s", codec_name, FFMPEG_ERRSTR(err));
+		LOG_FMT(LL_ERROR, "%s: error: failed to copy codec parameters to decoder context: %s", p->type, FFMPEG_ERRSTR(err));
 		goto fail;
 	}
 	if ((err = sym_avcodec_open2(state->cc, codec, NULL)) < 0) {
-		LOG_FMT(LL_ERROR, "%s: error: could not open required decoder: %s", codec_name, FFMPEG_ERRSTR(err));
+		LOG_FMT(LL_ERROR, "%s: error: could not open required decoder: %s", p->type, FFMPEG_ERRSTR(err));
 		goto fail;
 	}
 
 	state->frame = sym_av_frame_alloc();
 	if (state->frame == NULL) {
-		LOG_FMT(LL_ERROR, "%s: error: failed to allocate frame", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: failed to allocate frame", p->type);
 		goto fail;
 	}
 	state->planar = sym_av_sample_fmt_is_planar(state->cc->sample_fmt);
@@ -437,7 +436,7 @@ struct codec * ffmpeg_codec_init(const struct codec_params *p)
 		state->readp_func = read_buf_doublep;
 		break;
 	default:
-		LOG_FMT(LL_ERROR, "%s: error: unhandled sample format", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: unhandled sample format", p->type);
 		goto fail;
 	}
 	if (st->duration != AV_NOPTS_VALUE)

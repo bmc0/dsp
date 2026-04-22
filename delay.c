@@ -51,7 +51,7 @@ DELAY_RUN_CHANNEL_DEFINE_FN(_frac_1, *ibuf_p = ap1_run(&cs->fd_ap.first, *ibuf_p
 DELAY_RUN_CHANNEL_DEFINE_FN(_frac_2, *ibuf_p = ap2_run(&cs->fd_ap.second, *ibuf_p);   )
 DELAY_RUN_CHANNEL_DEFINE_FN(_frac_n, *ibuf_p = thiran_ap_run(cs->fd_ap.nth, *ibuf_p); )
 
-sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -61,12 +61,12 @@ sample_t * delay_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-sample_t * delay_effect_run_noop(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * delay_effect_run_noop(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	return ibuf;
 }
 
-void delay_effect_reset(struct effect *e)
+static void delay_effect_reset(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -80,7 +80,7 @@ void delay_effect_reset(struct effect *e)
 	}
 }
 
-void delay_effect_plot(struct effect *e, int i)
+static void delay_effect_plot(struct effect *e, int i)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -102,14 +102,14 @@ void delay_effect_plot(struct effect *e, int i)
 	}
 }
 
-void delay_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void delay_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
 		drain_samples[k] += state->cs[k].fd_ap_n;
 }
 
-void delay_effect_destroy(struct effect *e)
+static void delay_effect_destroy(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -120,7 +120,7 @@ void delay_effect_destroy(struct effect *e)
 	free(state);
 }
 
-int delay_effect_merge(struct effect *dest, struct effect *src)
+static int delay_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dest->merge == src->merge) {
 		struct delay_state *dest_state = (struct delay_state *) dest->data;
@@ -136,14 +136,14 @@ int delay_effect_merge(struct effect *dest, struct effect *src)
 	return 0;
 }
 
-void delay_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+static void delay_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)
 		req_delay[k] += state->cs[k].samples_int;
 }
 
-int delay_effect_prepare(struct effect *e)
+static int delay_effect_prepare(struct effect *e)
 {
 	struct delay_state *state = (struct delay_state *) e->data;
 	int is_noop = 1;

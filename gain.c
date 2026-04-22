@@ -22,7 +22,7 @@
 #include "gain.h"
 #include "util.h"
 
-sample_t * gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	const ssize_t samples = *frames * e->ostream.channels;
 	sample_t *state = (sample_t *) e->data;
@@ -32,7 +32,7 @@ sample_t * gain_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sa
 	return ibuf;
 }
 
-sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	const ssize_t samples = *frames * e->ostream.channels;
 	sample_t *state = (sample_t *) e->data;
@@ -42,19 +42,19 @@ sample_t * add_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 	return ibuf;
 }
 
-void gain_effect_plot(struct effect *e, int i)
+static void gain_effect_plot(struct effect *e, int i)
 {
 	sample_t *state = (sample_t *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
 		printf("H%d_%d(w)=%.15e\n", k, i, state[k]);
 }
 
-void gain_effect_destroy(struct effect *e)
+static void gain_effect_destroy(struct effect *e)
 {
 	free(e->data);
 }
 
-int gain_effect_merge(struct effect *dest, struct effect *src)
+static int gain_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dest->merge == src->merge) {
 		sample_t *dest_state = (sample_t *) dest->data;
@@ -66,7 +66,7 @@ int gain_effect_merge(struct effect *dest, struct effect *src)
 	return 0;
 }
 
-int add_effect_merge(struct effect *dest, struct effect *src)
+static int add_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dest->merge == src->merge) {
 		sample_t *dest_state = (sample_t *) dest->data;

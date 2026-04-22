@@ -124,7 +124,7 @@ static inline void fft_part_group_transfer_bufs(struct effect *e, struct fft_par
 	}
 }
 
-sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 
@@ -180,7 +180,7 @@ sample_t * fir_p_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-void fir_p_effect_reset(struct effect *e)
+static void fir_p_effect_reset(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	state->part0.p = 0;
@@ -206,7 +206,7 @@ void fir_p_effect_reset(struct effect *e)
 	}
 }
 
-void fir_p_effect_plot(struct effect *e, int i)
+static void fir_p_effect_plot(struct effect *e, int i)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	for (int k = 0, n = 0; k < e->istream.channels; ++k) {
@@ -232,14 +232,14 @@ void fir_p_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_p_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void fir_p_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
 		if (state->part0.buf[k]) drain_samples[k] += state->filter_frames-1;
 }
 
-void fir_p_effect_destroy(struct effect *e)
+static void fir_p_effect_destroy(struct effect *e)
 {
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	for (int j = 0; j < state->n; ++j) {

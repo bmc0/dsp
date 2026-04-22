@@ -25,7 +25,7 @@ struct st2ms_state {
 	int c0, c1;
 };
 
-sample_t * st2ms_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * st2ms_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, samples = *frames * e->ostream.channels;
 	sample_t s0, s1;
@@ -40,7 +40,7 @@ sample_t * st2ms_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-sample_t * ms2st_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * ms2st_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, samples = *frames * e->ostream.channels;
 	sample_t s0, s1;
@@ -55,7 +55,7 @@ sample_t * ms2st_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-void st2ms_effect_plot(struct effect *e, int i)
+static void st2ms_effect_plot(struct effect *e, int i)
 {
 	struct st2ms_state *state = (struct st2ms_state *) e->data;
 	const int is_ms2st = (e->run == ms2st_effect_run);
@@ -71,12 +71,12 @@ void st2ms_effect_plot(struct effect *e, int i)
 	}
 }
 
-void st2ms_effect_destroy(struct effect *e)
+static void st2ms_effect_destroy(struct effect *e)
 {
 	free(e->data);
 }
 
-void st2ms_effect_channel_deps(struct effect *e, char **deps)
+static void st2ms_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct st2ms_state *state = (struct st2ms_state *) e->data;
 	SET_BIT(deps[state->c0], state->c1);

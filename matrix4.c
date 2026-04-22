@@ -95,7 +95,7 @@ static sample_t dyn_shelf_run(struct dyn_shelf_state *state, sample_t s, sample_
 	return r;
 }
 
-sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -291,7 +291,7 @@ sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	return obuf;
 }
 
-void matrix4_effect_reset(struct effect *e)
+static void matrix4_effect_reset(struct effect *e)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	state->p = 0;
@@ -299,7 +299,7 @@ void matrix4_effect_reset(struct effect *e)
 	memset(state->bufs[1], 0, state->len * sizeof(sample_t));
 }
 
-void matrix4_effect_signal(struct effect *e)
+static void matrix4_effect_signal(struct effect *e)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	state->disable = !state->disable;
@@ -308,7 +308,7 @@ void matrix4_effect_signal(struct effect *e)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
-void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	drain_samples[state->c0] += state->len;
@@ -317,7 +317,7 @@ void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 		drain_samples[i] += state->len;
 }
 
-void matrix4_effect_destroy(struct effect *e)
+static void matrix4_effect_destroy(struct effect *e)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	free(state->bufs[0]);
@@ -337,7 +337,7 @@ void matrix4_effect_destroy(struct effect *e)
 	free(state);
 }
 
-void matrix4_effect_channel_deps(struct effect *e, char **deps)
+static void matrix4_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	SET_BIT(deps[state->c0], state->c1);
@@ -348,7 +348,7 @@ void matrix4_effect_channel_deps(struct effect *e, char **deps)
 	}
 }
 
-void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+static void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	latency[state->c0] += state->len;

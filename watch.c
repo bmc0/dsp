@@ -128,7 +128,7 @@ static void watch_finish_xfade(struct watch_node *node)
 	effects_chain_xfade_reset(&node->xfade);
 }
 
-sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	pthread_mutex_lock(&node->lock);
@@ -153,26 +153,26 @@ sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return run_effects_chain(&node->chain, frames, ibuf, obuf);
 }
 
-ssize_t watch_effect_delay(struct effect *e)
+static ssize_t watch_effect_delay(struct effect *e)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	return rint(get_effects_chain_delay(&node->chain) * e->ostream.fs);
 }
 
-void watch_effect_reset(struct effect *e)
+static void watch_effect_reset(struct effect *e)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	if (node->xfade.pos > 0) watch_finish_xfade(node);
 	reset_effects_chain(&node->chain);
 }
 
-void watch_effect_signal(struct effect *e)
+static void watch_effect_signal(struct effect *e)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	signal_effects_chain(&node->chain);
 }
 
-sample_t * watch_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+static sample_t * watch_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	if (node->xfade.pos > 0) watch_finish_xfade(node);
@@ -191,7 +191,7 @@ static void watch_node_destroy(struct watch_node *node)
 	free(node);
 }
 
-void watch_effect_destroy(struct effect *e)
+static void watch_effect_destroy(struct effect *e)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 
@@ -209,7 +209,7 @@ void watch_effect_destroy(struct effect *e)
 	pthread_mutex_unlock(&watch_state.init_lock);
 }
 
-ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
+static ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	pthread_mutex_lock(&node->lock);
@@ -225,7 +225,7 @@ ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 	return buf_frames;
 }
 
-void watch_effect_channel_deps(struct effect *e, char **deps)
+static void watch_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	for (int i = 0; i < e->ostream.channels; ++i) {

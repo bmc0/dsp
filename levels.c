@@ -48,7 +48,7 @@ static void draw_levels_bar(char *s, double avg, double peak)
 	s[60] = '\0';
 }
 
-sample_t * levels_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * levels_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct levels_state *state = (struct levels_state *) e->data;
 	const int stride = e->istream.channels;
@@ -88,7 +88,7 @@ sample_t * levels_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, 
 	return ibuf;
 }
 
-void levels_effect_destroy(struct effect *e)
+static void levels_effect_destroy(struct effect *e)
 {
 	struct levels_state *state = (struct levels_state *) e->data;
 	if (state->statuslines_registered) {

@@ -43,7 +43,7 @@ static inline void align_channel_run(struct align_channel_state *cs, ssize_t fra
 	}
 }
 
-sample_t * align_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * align_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct align_state *state = (struct align_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -63,13 +63,13 @@ sample_t * align_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-ssize_t align_effect_delay(struct effect *e)
+static ssize_t align_effect_delay(struct effect *e)
 {
 	struct align_state *state = (struct align_state *) e->data;
 	return state->discard_frames;
 }
 
-void align_effect_reset(struct effect *e)
+static void align_effect_reset(struct effect *e)
 {
 	struct align_state *state = (struct align_state *) e->data;
 	state->frames = -state->discard_frames;
@@ -80,14 +80,14 @@ void align_effect_reset(struct effect *e)
 	}
 }
 
-void align_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void align_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct align_state *state = (struct align_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)
 		drain_samples[k] += state->cs[k].len;
 }
 
-void align_effect_destroy(struct effect *e)
+static void align_effect_destroy(struct effect *e)
 {
 	struct align_state *state = (struct align_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)

@@ -41,7 +41,7 @@ struct sgen_state {
 	struct sgen_generator *g;
 };
 
-void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf, ssize_t frames)
+static void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf, ssize_t frames)
 {
 	ssize_t samples;
 	switch (g->type) {
@@ -68,7 +68,7 @@ void sgen_run_generator(struct sgen_generator *g, struct codec *c, sample_t *buf
 	}
 }
 
-ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct sgen_state *state = (struct sgen_state *) c->data;
 	if (c->frames > 0 && state->w + frames > c->frames)
@@ -82,7 +82,7 @@ ssize_t sgen_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-ssize_t sgen_seek(struct codec *c, ssize_t pos)
+static ssize_t sgen_seek(struct codec *c, ssize_t pos)
 {
 	struct sgen_state *state = (struct sgen_state *) c->data;
 	if (pos < 0)
@@ -95,22 +95,22 @@ ssize_t sgen_seek(struct codec *c, ssize_t pos)
 	return pos;
 }
 
-ssize_t sgen_delay(struct codec *c)
+static ssize_t sgen_delay(struct codec *c)
 {
 	return 0;
 }
 
-void sgen_drop(struct codec *c)
+static void sgen_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void sgen_pause(struct codec *c, int p)
+static void sgen_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void sgen_destroy(struct codec *c)
+static void sgen_destroy(struct codec *c)
 {
 	struct sgen_state *state = (struct sgen_state *) c->data;
 	for (int i = 0; i < state->n; ++i)

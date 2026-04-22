@@ -26,7 +26,7 @@ struct noise_state {
 	sample_t mult;
 };
 
-double noise_parse_level(const char *s, char **r_endptr)
+static double noise_parse_level(const char *s, char **r_endptr)
 {
 	char *endptr;
 	const double v = strtod(s, &endptr);
@@ -43,7 +43,7 @@ double noise_parse_level(const char *s, char **r_endptr)
 	return l;
 }
 
-sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, k, samples = *frames * e->ostream.channels;
 	struct noise_state *state = (struct noise_state *) e->data;
@@ -54,7 +54,7 @@ sample_t * noise_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, s
 	return ibuf;
 }
 
-void noise_effect_plot(struct effect *e, int i)
+static void noise_effect_plot(struct effect *e, int i)
 {
 	struct noise_state *state = (struct noise_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -71,7 +71,7 @@ void noise_effect_plot(struct effect *e, int i)
 	}
 }
 
-void noise_effect_destroy(struct effect *e)
+static void noise_effect_destroy(struct effect *e)
 {
 	free(e->data);
 	free(e->channel_selector);

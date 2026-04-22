@@ -33,7 +33,7 @@ struct zita_convolver_state {
 	ssize_t filter_frames, len, p;
 };
 
-sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -60,14 +60,14 @@ sample_t * zita_convolver_effect_run(struct effect *e, ssize_t *frames, sample_t
 	return ibuf;
 }
 
-void zita_convolver_effect_reset(struct effect *e)
+static void zita_convolver_effect_reset(struct effect *e)
 {
 	/* Note: This doesn't reset zita_convolver's internal state */
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	state->p = 0;
 }
 
-void zita_convolver_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void zita_convolver_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -76,7 +76,7 @@ void zita_convolver_effect_drain_samples(struct effect *e, ssize_t *drain_sample
 	}
 }
 
-void zita_convolver_effect_destroy(struct effect *e)
+static void zita_convolver_effect_destroy(struct effect *e)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	if (!state->cproc->check_stop())
@@ -89,7 +89,7 @@ void zita_convolver_effect_destroy(struct effect *e)
 	free(state);
 }
 
-void zita_convolver_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+static void zita_convolver_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct zita_convolver_state *state = (struct zita_convolver_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)

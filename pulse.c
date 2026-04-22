@@ -37,7 +37,7 @@ struct pulse_state {
 	struct pulse_enc_info *enc_info;
 };
 
-ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
@@ -50,7 +50,7 @@ ssize_t pulse_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int err;
 	struct pulse_state *state = (struct pulse_state *) c->data;
@@ -63,7 +63,7 @@ ssize_t pulse_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-ssize_t pulse_seek(struct codec *c, ssize_t pos)
+static ssize_t pulse_seek(struct codec *c, ssize_t pos)
 {
 	if (pos <= 0) {
 		c->drop(c);
@@ -72,24 +72,24 @@ ssize_t pulse_seek(struct codec *c, ssize_t pos)
 	return -1;
 }
 
-ssize_t pulse_delay(struct codec *c)
+static ssize_t pulse_delay(struct codec *c)
 {
 	struct pulse_state *state = (struct pulse_state *) c->data;
 	return pa_simple_get_latency(state->s, NULL) * c->fs / 1000000;
 }
 
-void pulse_drop(struct codec *c)
+static void pulse_drop(struct codec *c)
 {
 	struct pulse_state *state = (struct pulse_state *) c->data;
 	pa_simple_flush(state->s, NULL);
 }
 
-void pulse_pause(struct codec *c, int p)
+static void pulse_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void pulse_destroy(struct codec *c)
+static void pulse_destroy(struct codec *c)
 {
 	struct pulse_state *state = (struct pulse_state *) c->data;
 	pa_simple_drain(state->s, NULL);

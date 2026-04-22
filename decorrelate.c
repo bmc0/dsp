@@ -84,7 +84,7 @@ static void sch_ap_destroy(struct sch_ap_state *ap)
 	free(ap->my);
 }
 
-sample_t * decorrelate_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * decorrelate_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, samples = *frames * e->ostream.channels;
 	int k, j;
@@ -97,7 +97,7 @@ sample_t * decorrelate_effect_run(struct effect *e, ssize_t *frames, sample_t *i
 	return ibuf;
 }
 
-void decorrelate_effect_reset(struct effect *e)
+static void decorrelate_effect_reset(struct effect *e)
 {
 	int k, j;
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
@@ -107,7 +107,7 @@ void decorrelate_effect_reset(struct effect *e)
 				sch_ap_reset(&state->ap[k][j]);
 }
 
-void decorrelate_effect_plot(struct effect *e, int i)
+static void decorrelate_effect_plot(struct effect *e, int i)
 {
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -125,7 +125,7 @@ void decorrelate_effect_plot(struct effect *e, int i)
 	}
 }
 
-void decorrelate_effect_destroy(struct effect *e)
+static void decorrelate_effect_destroy(struct effect *e)
 {
 	int k, j;
 	struct decorrelate_state *state = (struct decorrelate_state *) e->data;

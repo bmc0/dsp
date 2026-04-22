@@ -40,7 +40,7 @@ struct fir_state {
 	fftw_plan r2c_plan, c2r_plan;
 };
 
-sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -61,7 +61,7 @@ sample_t * fir_direct_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	return ibuf;
 }
 
-void fir_direct_effect_reset(struct effect *e)
+static void fir_direct_effect_reset(struct effect *e)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	state->p = 0;
@@ -69,7 +69,7 @@ void fir_direct_effect_reset(struct effect *e)
 		if (state->buf[k]) memset(state->buf[k], 0, state->len * sizeof(sample_t));
 }
 
-void fir_direct_effect_plot(struct effect *e, int i)
+static void fir_direct_effect_plot(struct effect *e, int i)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -84,14 +84,14 @@ void fir_direct_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_direct_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void fir_direct_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
 		if (state->buf[k]) drain_samples[k] += state->filter_frames-1;
 }
 
-void fir_direct_effect_destroy(struct effect *e)
+static void fir_direct_effect_destroy(struct effect *e)
 {
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	free(state->lbuf);
@@ -100,7 +100,7 @@ void fir_direct_effect_destroy(struct effect *e)
 	free(state);
 }
 
-sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -142,7 +142,7 @@ sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sam
 	return ibuf;
 }
 
-void fir_effect_reset(struct effect *e)
+static void fir_effect_reset(struct effect *e)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	state->p = 0;
@@ -154,7 +154,7 @@ void fir_effect_reset(struct effect *e)
 	}
 }
 
-void fir_effect_plot(struct effect *e, int i)
+static void fir_effect_plot(struct effect *e, int i)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -172,7 +172,7 @@ void fir_effect_plot(struct effect *e, int i)
 	}
 }
 
-void fir_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void fir_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -181,7 +181,7 @@ void fir_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 	}
 }
 
-void fir_effect_destroy(struct effect *e)
+static void fir_effect_destroy(struct effect *e)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -200,7 +200,7 @@ void fir_effect_destroy(struct effect *e)
 	free(state);
 }
 
-void fir_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+static void fir_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)

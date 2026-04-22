@@ -36,7 +36,7 @@ struct remix_state {
 	} fast_sel;
 };
 
-sample_t * remix_effect_run_generic(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * remix_effect_run_generic(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	sample_t *ibuf_p = ibuf, *obuf_p = obuf;
@@ -54,7 +54,7 @@ sample_t * remix_effect_run_generic(struct effect *e, ssize_t *frames, sample_t 
 	return obuf;
 }
 
-sample_t * remix_effect_run_1a(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * remix_effect_run_1a(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	sample_t *ibuf_p = ibuf, *obuf_p = obuf;
@@ -67,7 +67,7 @@ sample_t * remix_effect_run_1a(struct effect *e, ssize_t *frames, sample_t *ibuf
 	return obuf;
 }
 
-sample_t * remix_effect_run_4(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * remix_effect_run_4(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	sample_t *ibuf_p = ibuf, *obuf_p = obuf;
@@ -100,7 +100,7 @@ sample_t * remix_effect_run_4(struct effect *e, ssize_t *frames, sample_t *ibuf,
 	return obuf;
 }
 
-void remix_effect_plot(struct effect *e, int i)
+static void remix_effect_plot(struct effect *e, int i)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -113,7 +113,7 @@ void remix_effect_plot(struct effect *e, int i)
 	}
 }
 
-void remix_effect_destroy(struct effect *e)
+static void remix_effect_destroy(struct effect *e)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
@@ -123,7 +123,7 @@ void remix_effect_destroy(struct effect *e)
 	free(state);
 }
 
-void remix_effect_channel_deps(struct effect *e, char **deps)
+static void remix_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct remix_state *state = (struct remix_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)

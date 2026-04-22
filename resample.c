@@ -86,7 +86,7 @@ static double norm_sinc(const double x, const double fc)
 	return sin(M_PI*fc*x) / (M_PI*x);
 }
 
-sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	ssize_t iframes = 0, oframes = 0;
@@ -151,7 +151,7 @@ sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf
 	return obuf;
 }
 
-ssize_t resample_effect_delay(struct effect *e)
+static ssize_t resample_effect_delay(struct effect *e)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	ssize_t frames = state->out_delay;  /* filter delay */
@@ -161,7 +161,7 @@ ssize_t resample_effect_delay(struct effect *e)
 	return frames;
 }
 
-void resample_effect_reset(struct effect *e)
+static void resample_effect_reset(struct effect *e)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	state->in_buf_pos = state->out_buf_pos = 0;
@@ -170,7 +170,7 @@ void resample_effect_reset(struct effect *e)
 		memset(state->overlap[i], 0, state->out_len * sizeof(sample_t));
 }
 
-sample_t * resample_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+static sample_t * resample_effect_drain2(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	sample_t *rbuf = buf1;
@@ -197,7 +197,7 @@ sample_t * resample_effect_drain2(struct effect *e, ssize_t *frames, sample_t *b
 	return rbuf;
 }
 
-void resample_effect_destroy(struct effect *e)
+static void resample_effect_destroy(struct effect *e)
 {
 	struct resample_state *state = (struct resample_state *) e->data;
 	fftw_free(state->sinc_fr);

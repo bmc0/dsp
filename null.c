@@ -21,38 +21,38 @@
 #include <string.h>
 #include "null.h"
 
-ssize_t null_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t null_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	memset(buf, 0, frames * c->channels * sizeof(sample_t));
 	return frames;
 }
 
-ssize_t null_write(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t null_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	return frames;
 }
 
-ssize_t null_seek(struct codec *c, ssize_t pos)
+static ssize_t null_seek(struct codec *c, ssize_t pos)
 {
 	return (pos > 0) ? pos : 0;
 }
 
-ssize_t null_delay(struct codec *c)
+static ssize_t null_delay(struct codec *c)
 {
 	return 0;
 }
 
-void null_drop(struct codec *c)
+static void null_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void null_pause(struct codec *c, int p)
+static void null_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void null_destroy(struct codec *c)
+static void null_destroy(struct codec *c)
 {
 	/* nothing to clean up */
 }

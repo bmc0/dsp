@@ -45,7 +45,7 @@ struct ladspa_host_state {
 	#endif
 };
 
-sample_t * ladspa_host_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * ladspa_host_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t f = 0, len;
 	struct ladspa_host_state *state = (struct ladspa_host_state *) e->data;
@@ -92,7 +92,7 @@ sample_t * ladspa_host_effect_run(struct effect *e, ssize_t *frames, sample_t *i
 	return obuf;
 }
 
-void ladspa_host_effect_destroy(struct effect *e)
+static void ladspa_host_effect_destroy(struct effect *e)
 {
 	struct ladspa_host_state *state = (struct ladspa_host_state *) e->data;
 	if (state->handles != NULL) {
@@ -114,7 +114,7 @@ void ladspa_host_effect_destroy(struct effect *e)
 	free(e->channel_selector);
 }
 
-void ladspa_host_effect_channel_deps(struct effect *e, char **deps)
+static void ladspa_host_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct ladspa_host_state *state = (struct ladspa_host_state *) e->data;
 	if (state->n_handles > 1) {

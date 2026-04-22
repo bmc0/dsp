@@ -293,7 +293,7 @@ void biquad_init_using_type(struct biquad_state *b, int type, double fs, double 
 	biquad_init(b, b0, b1, b2, a0, a1, a2);
 }
 
-sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	const ssize_t samples = *frames * e->ostream.channels;
 	struct biquad_state *state = (struct biquad_state *) e->data;
@@ -304,7 +304,7 @@ sample_t * biquad_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, 
 	return ibuf;
 }
 
-sample_t * biquad_effect_run_all(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * biquad_effect_run_all(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	const ssize_t samples = *frames * e->ostream.channels;
 	struct biquad_state *state = (struct biquad_state *) e->data;
@@ -314,7 +314,7 @@ sample_t * biquad_effect_run_all(struct effect *e, ssize_t *frames, sample_t *ib
 	return ibuf;
 }
 
-void biquad_effect_reset(struct effect *e)
+static void biquad_effect_reset(struct effect *e)
 {
 	struct biquad_state *state = (struct biquad_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
@@ -322,7 +322,7 @@ void biquad_effect_reset(struct effect *e)
 			biquad_reset(&state[k]);
 }
 
-void biquad_effect_plot(struct effect *e, int i)
+static void biquad_effect_plot(struct effect *e, int i)
 {
 	struct biquad_state *state = (struct biquad_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -335,7 +335,7 @@ void biquad_effect_plot(struct effect *e, int i)
 	}
 }
 
-void biquad_effect_destroy(struct effect *e)
+static void biquad_effect_destroy(struct effect *e)
 {
 	free(e->data);
 	free(e->channel_selector);
@@ -358,7 +358,7 @@ static void biquad_effect_set_run_func(struct effect *e)
 	else e->run = biquad_effect_run;
 }
 
-int biquad_effect_merge(struct effect *dest, struct effect *src)
+static int biquad_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (biquad_effect_can_merge(dest, src)) {
 		struct biquad_state *dest_state = (struct biquad_state *) dest->data;

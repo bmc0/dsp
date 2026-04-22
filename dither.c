@@ -205,7 +205,7 @@ static void dither_init(struct dither_state *state, int quantize_bits, double no
 	dither_reset(state);
 }
 
-sample_t * dither_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * dither_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct dither_state *state = (struct dither_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
@@ -214,7 +214,7 @@ sample_t * dither_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, 
 	return ibuf;
 }
 
-void dither_effect_reset(struct effect *e)
+static void dither_effect_reset(struct effect *e)
 {
 	struct dither_state *state = (struct dither_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k)
@@ -222,7 +222,7 @@ void dither_effect_reset(struct effect *e)
 			dither_reset(&state[k]);
 }
 
-void dither_effect_destroy(struct effect *e)
+static void dither_effect_destroy(struct effect *e)
 {
 	free(e->data);
 	free(e->channel_selector);
@@ -237,7 +237,7 @@ static int dither_effect_can_merge(struct effect *dest, struct effect *src)
 	return 1;
 }
 
-int dither_effect_merge(struct effect *dest, struct effect *src)
+static int dither_effect_merge(struct effect *dest, struct effect *src)
 {
 	if (dither_effect_can_merge(dest, src)) {
 		struct dither_state *dest_state = (struct dither_state *) dest->data;

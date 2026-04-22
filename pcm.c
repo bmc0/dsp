@@ -64,7 +64,7 @@ static struct pcm_enc_info * pcm_get_enc_info(const char *enc)
 	return NULL;
 }
 
-ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
@@ -80,7 +80,7 @@ ssize_t pcm_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return n;
 }
 
-ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	ssize_t n;
 	struct pcm_state *state = (struct pcm_state *) c->data;
@@ -96,7 +96,7 @@ ssize_t pcm_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return n;
 }
 
-ssize_t pcm_seek(struct codec *c, ssize_t pos)
+static ssize_t pcm_seek(struct codec *c, ssize_t pos)
 {
 	off_t o;
 	struct pcm_state *state = (struct pcm_state *) c->data;
@@ -115,22 +115,22 @@ ssize_t pcm_seek(struct codec *c, ssize_t pos)
 	return o / state->enc_info->bytes / c->channels;
 }
 
-ssize_t pcm_delay(struct codec *c)
+static ssize_t pcm_delay(struct codec *c)
 {
 	return 0;
 }
 
-void pcm_drop(struct codec *c)
+static void pcm_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void pcm_pause(struct codec *c, int p)
+static void pcm_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void pcm_destroy(struct codec *c)
+static void pcm_destroy(struct codec *c)
 {
 	struct pcm_state *state = (struct pcm_state *) c->data;
 	close(state->fd);

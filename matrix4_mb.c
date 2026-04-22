@@ -307,7 +307,7 @@ static void filter_bank_run(struct filter_bank *fb, sample_t s)
 }
 
 #if DO_FILTER_BANK_TEST
-sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -343,14 +343,14 @@ sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, samp
 	return obuf;
 }
 
-void matrix4_mb_test_fb_effect_destroy(struct effect *e)
+static void matrix4_mb_test_fb_effect_destroy(struct effect *e)
 {
 	free(e->data);
 }
 
 #else
 
-sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
@@ -571,7 +571,7 @@ sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ib
 	return obuf;
 }
 
-void matrix4_mb_effect_reset(struct effect *e)
+static void matrix4_mb_effect_reset(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->fb_buf_p = 0;
@@ -579,7 +579,7 @@ void matrix4_mb_effect_reset(struct effect *e)
 	memset(state->fb_buf[1], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
 }
 
-void matrix4_mb_effect_signal(struct effect *e)
+static void matrix4_mb_effect_signal(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->disable = !state->disable;
@@ -588,7 +588,7 @@ void matrix4_mb_effect_signal(struct effect *e)
 		LOG_FMT(LL_NORMAL, "%s: %s", e->name, (state->disable) ? "disabled" : "enabled");
 }
 
-void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
+static void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	drain_samples[state->c0] += state->fb_buf_len;
@@ -597,7 +597,7 @@ void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 		drain_samples[i] += state->fb_buf_len;
 }
 
-void matrix4_mb_effect_destroy(struct effect *e)
+static void matrix4_mb_effect_destroy(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	free(state->fb_buf[0]);
@@ -619,7 +619,7 @@ void matrix4_mb_effect_destroy(struct effect *e)
 	free(state);
 }
 
-void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
+static void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	SET_BIT(deps[state->c0], state->c1);
@@ -630,7 +630,7 @@ void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
 	}
 }
 
-void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+static void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	latency[state->c0] += state->len;

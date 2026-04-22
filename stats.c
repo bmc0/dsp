@@ -44,7 +44,7 @@ struct stats_state {
 	int width, n_cs;
 };
 
-sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * stats_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
@@ -138,7 +138,7 @@ static void stats_interp_peak(struct stats_state *state, struct stats_ch_state *
 		++cs->peak_count;
 }
 
-sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * stats_effect_run_interp(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t samples = *frames * e->ostream.channels;
 	struct stats_state *state = (struct stats_state *) e->data;
@@ -213,7 +213,7 @@ static void stats_print_channels(struct effect *e, int start, int end)
 	dsp_log_printf("\n");
 }
 
-void stats_effect_destroy(struct effect *e)
+static void stats_effect_destroy(struct effect *e)
 {
 	struct stats_state *state = (struct stats_state *) e->data;
 	if (e->run == stats_effect_run_interp) {

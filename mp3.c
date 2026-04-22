@@ -40,14 +40,12 @@ struct mp3_state {
 	unsigned char *buf;
 };
 
-static const char codec_name[] = "mp3";
-
-static ssize_t refill_buffer(struct mp3_state *state)
+static ssize_t refill_buffer(struct mp3_state *state, const char *type)
 {
 	ssize_t r, rem = state->stream.bufend - state->stream.next_frame;
 	memmove(state->buf, state->stream.next_frame, rem);
 	if ((r = read(state->fd, state->buf + rem, MP3_BUF_SIZE - rem)) == -1) {
-		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, type, strerror(errno));
 		return 0;
 	}
 	if (r == 0)
@@ -57,7 +55,7 @@ static ssize_t refill_buffer(struct mp3_state *state)
 	return r;
 }
 
-ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
 	ssize_t buf_pos = 0, samples = frames * c->channels;
@@ -68,11 +66,11 @@ ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
 				if (MAD_RECOVERABLE(state->stream.error))
 					continue;
 				if (state->stream.error == MAD_ERROR_BUFLEN) {
-					if (refill_buffer(state) == 0)
+					if (refill_buffer(state, c->type) == 0)
 						return 0;
 					continue;
 				}
-				LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", codec_name);
+				LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", c->type);
 				return 0;
 			}
 			mad_synth_frame(&state->synth, &state->frame);
@@ -85,7 +83,7 @@ ssize_t mp3_read(struct codec *c, sample_t *buf, ssize_t frames)
 	return buf_pos / c->channels;
 }
 
-ssize_t mp3_seek(struct codec *c, ssize_t pos)
+static ssize_t mp3_seek(struct codec *c, ssize_t pos)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
 	ssize_t fpos = 0;
@@ -96,7 +94,7 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 		pos = c->frames - 1;
 
 	if (lseek(state->fd, 0, SEEK_SET) < 0) {
-		dsp_perror(DSP_ESEEK, codec_name, strerror(errno));
+		dsp_perror(DSP_ESEEK, c->type, strerror(errno));
 		return -1;
 	}
 
@@ -109,7 +107,7 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, c->type, strerror(errno));
 		return -1;
 	}
 	mad_stream_buffer(&state->stream, state->buf, MP3_BUF_SIZE);
@@ -119,11 +117,11 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 			if (MAD_RECOVERABLE(state->stream.error))
 				continue;
 			if (state->stream.error == MAD_ERROR_BUFLEN) {
-				if (refill_buffer(state) == 0)
+				if (refill_buffer(state, c->type) == 0)
 					return pos;
 				continue;
 			}
-			LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", codec_name);
+			LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", c->type);
 			return pos;
 		}
 		fpos += mad_timer_count(state->frame.header.duration, state->frame.header.samplerate);
@@ -135,22 +133,22 @@ ssize_t mp3_seek(struct codec *c, ssize_t pos)
 	return fpos;
 }
 
-ssize_t mp3_delay(struct codec *c)
+static ssize_t mp3_delay(struct codec *c)
 {
 	return 0;
 }
 
-void mp3_drop(struct codec *c)
+static void mp3_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void mp3_pause(struct codec *c, int p)
+static void mp3_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void mp3_destroy(struct codec *c)
+static void mp3_destroy(struct codec *c)
 {
 	struct mp3_state *state = (struct mp3_state *) c->data;
 	close(state->fd);
@@ -161,7 +159,7 @@ void mp3_destroy(struct codec *c)
 	free(state);
 }
 
-static ssize_t mp3_get_nframes(struct mp3_state *state)
+static ssize_t mp3_get_nframes(struct mp3_state *state, const char *type)
 {
 	ssize_t len = 0;
 
@@ -170,7 +168,7 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, type, strerror(errno));
 		len = -1;
 		goto done;
 	}
@@ -181,11 +179,11 @@ static ssize_t mp3_get_nframes(struct mp3_state *state)
 			if (MAD_RECOVERABLE(state->stream.error))
 				continue;
 			if (state->stream.error == MAD_ERROR_BUFLEN) {
-				if (refill_buffer(state) == 0)
+				if (refill_buffer(state, type) == 0)
 					goto done;
 				continue;
 			}
-			LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", codec_name);
+			LOG_FMT(LL_ERROR, "%s: non-recoverable MAD error", type);
 			len = -1;
 			goto done;
 		}
@@ -208,12 +206,12 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 
 	state = calloc(1, sizeof(struct mp3_state));
 	if ((state->fd = open(p->path, O_RDONLY)) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", codec_name, p->path, strerror(errno));
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed to open file: %s: %s", p->type, p->path, strerror(errno));
 		goto fail;
 	}
 	state->buf = calloc(MP3_BUF_SIZE, 1);
 
-	if ((nframes = mp3_get_nframes(state)) < 0)
+	if ((nframes = mp3_get_nframes(state, p->type)) < 0)
 		goto fail;
 
 	mad_stream_init(&state->stream);
@@ -221,7 +219,7 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 	mad_synth_init(&state->synth);
 
 	if (read(state->fd, state->buf, MP3_BUF_SIZE) == -1) {
-		dsp_perror(DSP_EREAD, codec_name, strerror(errno));
+		dsp_perror(DSP_EREAD, p->type, strerror(errno));
 		goto fail;
 	}
 	mad_stream_buffer(&state->stream, state->buf, MP3_BUF_SIZE);
@@ -230,12 +228,12 @@ struct codec * mp3_codec_init(const struct codec_params *p)
 		if (MAD_RECOVERABLE(state->stream.error))
 			continue;
 		if (state->stream.error == MAD_ERROR_BUFLEN) {
-			if (refill_buffer(state) == 0)
+			if (refill_buffer(state, p->type) == 0)
 				goto buf_fill_fail;
 			continue;
 		}
 		buf_fill_fail:
-		LOG_FMT(LL_ERROR, "%s: error: no valid frame found", codec_name);
+		LOG_FMT(LL_ERROR, "%s: error: no valid frame found", p->type);
 		goto fail;
 	}
 	mad_synth_frame(&state->synth, &state->frame);

@@ -30,7 +30,7 @@ struct crossfeed_state {
 	struct biquad_state lp[2], hp[2];
 };
 
-sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+static sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	ssize_t i, samples = *frames * e->ostream.channels;
 	sample_t s0, s1;
@@ -49,7 +49,7 @@ sample_t * crossfeed_effect_run(struct effect *e, ssize_t *frames, sample_t *ibu
 	return ibuf;
 }
 
-void crossfeed_effect_reset(struct effect *e)
+static void crossfeed_effect_reset(struct effect *e)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
 	biquad_reset(&state->lp[0]);
@@ -69,7 +69,7 @@ static void crossfeed_plot_channel(struct crossfeed_state *state, int fs, int i,
 	puts(":0/0");
 }
 
-void crossfeed_effect_plot(struct effect *e, int i)
+static void crossfeed_effect_plot(struct effect *e, int i)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
@@ -82,12 +82,12 @@ void crossfeed_effect_plot(struct effect *e, int i)
 	}
 }
 
-void crossfeed_effect_destroy(struct effect *e)
+static void crossfeed_effect_destroy(struct effect *e)
 {
 	free(e->data);
 }
 
-void crossfeed_effect_channel_deps(struct effect *e, char **deps)
+static void crossfeed_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct crossfeed_state *state = (struct crossfeed_state *) e->data;
 	SET_BIT(deps[state->c0], state->c1);

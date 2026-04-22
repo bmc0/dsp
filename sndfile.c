@@ -105,7 +105,7 @@ static struct sndfile_enc_info encodings[] = {
 	{ "mpeg2.3",      24, 0, 0, SF_FORMAT_MPEG_LAYER_III },
 };
 
-ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t sndfile_read(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
@@ -124,7 +124,7 @@ static inline void buf_scale_int(sample_t *buf, const sample_t s, ssize_t sample
 	}
 }
 
-ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
@@ -135,7 +135,7 @@ ssize_t sndfile_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return (ssize_t) r;
 }
 
-ssize_t sndfile_seek(struct codec *c, ssize_t pos)
+static ssize_t sndfile_seek(struct codec *c, ssize_t pos)
 {
 	int e = 0;
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
@@ -151,22 +151,22 @@ ssize_t sndfile_seek(struct codec *c, ssize_t pos)
 	return (ssize_t) r;
 }
 
-ssize_t sndfile_delay(struct codec *c)
+static ssize_t sndfile_delay(struct codec *c)
 {
 	return 0;
 }
 
-void sndfile_drop(struct codec *c)
+static void sndfile_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void sndfile_pause(struct codec *c, int p)
+static void sndfile_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void sndfile_destroy(struct codec *c)
+static void sndfile_destroy(struct codec *c)
 {
 	struct sndfile_state *state = (struct sndfile_state *) c->data;
 	sf_close(state->f);

@@ -35,7 +35,6 @@ struct ao_enc_info {
 	void (*write_func)(sample_t *, void *, ssize_t);
 };
 
-static const char codec_name[] = "ao";
 static int ao_open_count = 0;
 
 static struct ao_enc_info encodings[] = {
@@ -55,7 +54,7 @@ static struct ao_enc_info * ao_get_enc_info(const char *enc)
 	return NULL;
 }
 
-ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
+static ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
 
@@ -67,27 +66,27 @@ ssize_t ao_write(struct codec *c, sample_t *buf, ssize_t frames)
 	return frames;
 }
 
-ssize_t ao_seek(struct codec *c, ssize_t pos)
+static ssize_t ao_seek(struct codec *c, ssize_t pos)
 {
 	return -1;
 }
 
-ssize_t ao_delay(struct codec *c)
+static ssize_t ao_delay(struct codec *c)
 {
 	return 0;
 }
 
-void ao_drop(struct codec *c)
+static void ao_drop(struct codec *c)
 {
 	/* do nothing */
 }
 
-void ao_pause(struct codec *c, int p)
+static void ao_pause(struct codec *c, int p)
 {
 	/* do nothing */
 }
 
-void ao_destroy(struct codec *c)
+static void ao_destroy(struct codec *c)
 {
 	struct ao_state *state = (struct ao_state *) c->data;
 	ao_close(state->dev);
@@ -111,7 +110,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	if (ao_open_count == 0)
 		ao_initialize();
 	if ((driver = ao_default_driver_id()) == -1) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed get default driver id", codec_name);
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: failed get default driver id", p->type);
 		goto fail;
 	}
 	if ((enc_info = ao_get_enc_info(p->enc)) == NULL) {
@@ -132,7 +131,7 @@ struct codec * ao_codec_init(const struct codec_params *p)
 	ao_append_option(&opts, "client_name", dsp_globals.prog_name);
 	ao_append_option(&opts, "buffer_time", buf_time_str);
 	if ((dev = ao_open_live(driver, &format, opts)) == NULL) {
-		LOG_FMT(LL_OPEN_ERROR, "%s: error: could not open device", codec_name);
+		LOG_FMT(LL_OPEN_ERROR, "%s: error: could not open device", p->type);
 		goto fail;
 	}
 	ao_free_options(opts);
