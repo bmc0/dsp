@@ -124,7 +124,7 @@ ssize_t wavpipe_write(struct codec *c, sample_t *buf, ssize_t frames)
 	memcpy(h.wave,     "WAVE", 4);
 	memcpy(h.fmt,      "fmt ", 4);
 	memcpy(h.chunk_id, "data", 4);
-	h.filesize = 0xFFFFFFFFU-8;
+	h.filesize = 0xFFFFFFFFU;
 	h.chunksize = 0x10;
 	h.audioformat = (state->enc_info->can_dither) ? 0x1 : 0x3;
 	h.channels = c->channels;
@@ -132,7 +132,7 @@ ssize_t wavpipe_write(struct codec *c, sample_t *buf, ssize_t frames)
 	h.bytes_frame = c->channels * state->enc_info->bytes;
 	h.bytes_sec = h.bytes_frame * c->fs;
 	h.bits_sample = state->enc_info->bytes * 8;
-	h.datasize = 0xFFFFFFFFU-44;
+	h.datasize = 0xFFFFFFFFU;
 	if (write(state->fd, &h, sizeof(h)) == -1) {
 		LOG_FMT(LL_ERROR, "%s: write failed: %s", __func__, strerror(errno));
 		return 0;
