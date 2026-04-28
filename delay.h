@@ -27,6 +27,6 @@ struct effect * delay_effect_init_frac(const char *, const struct stream_info *,
 struct effect * delay_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define DELAY_EFFECT_INFO \
-	{ "delay", "[-f[order]] delay[s|m|S]", delay_effect_init, 0 }
+	{ "delay", "[-f[order]] [-m|M depth[s|m|S|%]] [-b bw[k]] [-q quality] delay[s|m|S]", delay_effect_init, 0 }
 
 #endif

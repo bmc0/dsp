@@ -375,7 +375,7 @@ Convert stereo to mid/side.
 \fBms2st\fR
 Convert mid/side to stereo.
 .TP
-\fBdelay\fR [\fB\-f\fR[\fIorder\fR]] \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
+\fBdelay\fR [\fB\-f\fR[\fIorder\fR]] [\fB\-m\fR|\fBM\fR \fIdepth\fR[\fBs\fR|\fBm\fR|\fBS\fR|\fB%\fR]] [\fB\-b\fR \fIbw\fR] [\fB\-q\fR \fIquality\fR] \fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
 Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 `\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples. If
 \fIdelay\fR is negative, a positive delay is applied to all channels which are
@@ -386,6 +386,23 @@ By default, the delay is rounded to whole samples. The \fB\-f\fR option enables
 fractional delay using Thiran allpass interpolation. The \fIorder\fR argument
 sets the allpass filter order and may be any integer from 1 through 50. The
 default value is 2.
+.sp 0.5
+If \fB\-m\fR or \fB\-M\fR are given, the delay is randomly modulated in the range
+\fIdelay\fR±\fIdepth\fR with an approximately Gaussian distribution. Modulation is
+either uncorrelated (\fB\-m\fR) or linked (\fB\-M\fR) across all input channels. The
+\fB\-b\fR option sets the modulation bandwidth (default is 1Hz). Interpolation
+quality may be set via the \fB\-q\fR option:
+
+.TS
+tab (|);
+lB lB
+l l.
+Quality|Interpolation method
+_
+0|Cubic Hermite (fastest).
+1|Polyphase FIR (6x) → cubic B-spline (default).
+2|Polyphase FIR (16x) → cubic B-spline (best quality).
+.TE
 .TP
 \fBresample\fR [\fIbandwidth\fR] \fIfs\fR[\fBk\fR]|x{\fImult\fR}|/{\fIdiv\fR}
 High-quality sinc resampler with >230dB SNR. The default \fIbandwidth\fR is

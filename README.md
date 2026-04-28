@@ -358,7 +358,7 @@ Example:
 	Convert stereo to mid/side.
 * `ms2st`
 	Convert mid/side to stereo.
-* `delay [-f[order]] delay[s|m|S]`  
+* `delay [-f[order]] [-m|M depth[s|m|S|%]] [-b bw[k]] [-q quality] delay[s|m|S]`  
 	Delay line. The unit for the delay argument depends on the suffix used:
 	`s` is seconds (the default), `m` is milliseconds, and `S` is samples. If
 	`delay` is negative, a positive delay is applied to all channels which are
@@ -369,6 +369,19 @@ Example:
 	fractional delay using Thiran allpass interpolation. The `order` argument
 	sets the allpass filter order and may be any integer from 1 through 50. The
 	default value is 2.
+
+	If `-m` or `-M` are given, the delay is randomly modulated in the range
+	`delay`±`depth` with an approximately Gaussian distribution. Modulation is
+	either uncorrelated (`-m`) or linked (`-M`) across all input channels. The
+	`-b` option sets the modulation bandwidth (default is 1Hz). Interpolation
+	quality may be set via the `-q` option:
+
+	Quality | Interpolation method
+	------- | ----------------------------------------------------
+	0       | Cubic Hermite (fastest).
+	1       | Polyphase FIR (6x) → cubic B-spline (default).
+	2       | Polyphase FIR (16x) → cubic B-spline (best quality).
+
 * `resample [bandwidth] fs[k]|x{mult}|/{div}`  
 	High-quality sinc resampler with >230dB SNR. The default `bandwidth` is
 	0.939.
