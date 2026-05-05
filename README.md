@@ -369,8 +369,13 @@ Example:
 	fractional delay using Thiran allpass interpolation. The `order` argument
 	sets the allpass filter order and may be any integer from 1 through 50. The
 	default value is 2.
-* `resample [bandwidth] fs[k]`  
-	Sinc resampler. Ignores the channel selector.
+* `resample [bandwidth] fs[k]|x{mult}|/{div}`  
+	High-quality sinc resampler with >230dB SNR. The default `bandwidth` is
+	0.939.
+
+	**Note:** Changing the sample rate of only a subset of channels within an
+	effects chain is not currently supported. Consequently, `resample` ignores
+	any active channel selector.
 * `fir [-a[offset[s|m|S]]] [input_options] [file:][~/]filter_path|coefs:list[/list...]`  
 	Non-partitioned 64-bit direct or FFT convolution. Latency is zero for
 	filters up to 16 taps. For longer filters, the latency is equal to the

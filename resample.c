@@ -223,6 +223,7 @@ static void resample_effect_destroy(struct effect *e)
 struct effect * resample_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	char *endptr;
+	const char *rate_arg = NULL, *bw_arg = NULL;
 	int rate;
 	double bw = DEFAULT_BANDWIDTH;
 	sample_t *sinc = NULL;
@@ -232,16 +233,32 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 		return NULL;
 	}
 	if (argc == 3) {
-		bw = strtod(argv[1], &endptr);
-		CHECK_ENDPTR(argv[1], endptr, "bandwidth", return NULL);
-		rate = lround(parse_freq(argv[2], &endptr));
-		CHECK_ENDPTR(argv[2], endptr, "fs", return NULL);
+		bw_arg = argv[1];
+		rate_arg = argv[2];
+	}
+	else rate_arg = argv[1];
+	if (bw_arg) {
+		bw = strtod(bw_arg, &endptr);
+		CHECK_ENDPTR(bw_arg, endptr, "bandwidth", return NULL);
+		CHECK_RANGE(bw >= 0.7 && bw <= 0.999, "bandwidth", return NULL);
+	}
+	if (rate_arg[0] == 'x') {
+		rate = istream->fs * strtol(rate_arg+1, &endptr, 10);
+		CHECK_ENDPTR(rate_arg, endptr, "fs multiplier", return NULL);
+	}
+	else if (rate_arg[0] == '/') {
+		const int rate_div = strtol(rate_arg+1, &endptr, 10);
+		CHECK_ENDPTR(rate_arg, endptr, "fs divisor", return NULL);
+		if (istream->fs % rate_div != 0) {
+			LOG_FMT(LL_ERROR, "%s: error: %d is not a factor of %d", argv[0], rate_div, istream->fs);
+			return NULL;
+		}
+		rate = istream->fs / rate_div;
 	}
 	else {
-		rate = lround(parse_freq(argv[1], &endptr));
-		CHECK_ENDPTR(argv[1], endptr, "fs", return NULL);
+		rate = lround(parse_freq(rate_arg, &endptr));
+		CHECK_ENDPTR(rate_arg, endptr, "fs", return NULL);
 	}
-	CHECK_RANGE(bw >= 0.7 && bw <= 0.999, "bandwidth", return NULL);
 	CHECK_RANGE(rate > 0, "rate", return NULL);
 
 	struct effect *e = calloc(1, sizeof(struct effect));

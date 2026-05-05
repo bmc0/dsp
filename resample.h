@@ -26,7 +26,7 @@
 struct effect * resample_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define RESAMPLE_EFFECT_INFO \
-	{ "resample", "[bandwidth] fs[k]", resample_effect_init, 0 }
+	{ "resample", "[bandwidth] fs[k]|x{mult}|/{div}", resample_effect_init, 0 }
 #else
 #define RESAMPLE_EFFECT_INFO \
 	{ "resample", NULL, NULL, 0 }
