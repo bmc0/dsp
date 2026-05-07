@@ -332,8 +332,8 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 		else {
 			d->buf1 = buf1_tmp;
 			d->buf2 = buf2_tmp;
-			d->frames = s;
 		}
+		d->frames = s;
 	}
 	if (!d->buf1 || !d->buf2) {
 		/* failed to allocate buffer(s); output silence */
