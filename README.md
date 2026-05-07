@@ -300,7 +300,7 @@ Example:
 		rear steering so that stongly rear-encoded sounds are in phase. The
 		default is `true`.
 	* `signal[=true|false]`  
-		Toggle the effect when `effect.signal()` is called.
+		Toggle the effect on effects chain signal.
 	* `direct_path[=true|false]`  
 		Redirect strongly rear-encoded sounds to two additional surround
 		outputs which are not delayed. Enables sharper localization of such
