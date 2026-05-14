@@ -25,6 +25,6 @@
 struct effect * matrix4_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #define MATRIX4_EFFECT_INFO \
-	{ "matrix4", "[options] [surround_level][/surround_level_rear]", matrix4_effect_init, 0 }
+	{ "matrix4", "[options ...] [surround_level][/surround_level_rear]", matrix4_effect_init, 0 }
 
 #endif

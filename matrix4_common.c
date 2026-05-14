@@ -24,71 +24,10 @@
 #include "matrix4_common.h"
 #include "delay.h"
 
-void calc_matrix_coefs_v1(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
-void calc_matrix_coefs_v4(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
-
-int get_args_and_channels(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, int argc, const char *const *argv, struct matrix4_config *config)
-{
-	double surr_level[2] = {NAN, NAN};
-	char *endptr;
-	if (argc > 3) {
-		print_effect_usage(ei);
-		return 1;
-	}
-	int surr_level_idx = -1;
-	config->opt_str_idx = -1;
-	if (argc == 3) {
-		config->opt_str_idx = 1;
-		surr_level_idx = 2;
-	}
-	else if (argc == 2) {
-		strtod(argv[1], &endptr);
-		if (endptr == argv[1] || (*endptr != '\0' && *endptr != '/'))
-			config->opt_str_idx = 1;
-		else surr_level_idx = 1;
-	}
-	if (surr_level_idx > 0) {
-		const char *arg = argv[surr_level_idx];
-		double v = strtod(arg, &endptr);
-		if (endptr != arg) surr_level[0] = v;
-		if (*endptr == '/') {
-			arg = endptr+1;
-			surr_level[1] = strtod(arg, &endptr);
-			CHECK_ENDPTR(arg, endptr, "surround_level_rear", return 1);
-		}
-		else {
-			CHECK_ENDPTR(arg, endptr, "surround_level", return 1);
-			if (!isnan(surr_level[0]))
-				surr_level[1] = MINIMUM(surr_level[0]+6.02, 0.0);
-		}
-	}
-	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
-	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);
-	if (config->surr_mult[0] > 1.0 || config->surr_mult[1] > 1.0)
-		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", argv[0]);
-	if (config->surr_mult[0] > config->surr_mult[1])
-		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", argv[0]);
-
-	if (istream->fs < 32000) {
-		dsp_perror(DSP_ERANGE, argv[0], "input sample rate");
-		return 1;
-	}
-	config->n_channels = num_bits_set(channel_selector, istream->channels);
-	if (config->n_channels != 2) {
-		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
-		return 1;
-	}
-	config->c0 = config->c1 = -1;
-	for (int i = 0; i < istream->channels; ++i) {
-		if (GET_BIT(channel_selector, i)) {
-			if (config->c0 == -1)
-				config->c0 = i;
-			else
-				config->c1 = i;
-		}
-	}
-	return 0;
-}
+void calc_matrix_coefs_v1(const struct axes *, const struct axes *, double, double,
+	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v4(const struct axes *, const struct axes *, double, double,
+	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 static int optcmp(const char *opt, const char *name, char sep)
 {
@@ -122,17 +61,32 @@ static void set_fb_stop_default(struct matrix4_config *config)
 #define HANDLE_BOOLEAN_ARG(s) \
 	do { \
 		char *opt_arg = isolate(opt, '='); \
-		if (*opt_arg == '\0' || strcmp(opt_arg, "true") == 0) (s) = 1; \
-		else if (strcmp(opt_arg, "false") == 0) (s) = 0; \
+		size_t opt_arg_len = strlen(opt_arg); \
+		if (opt_arg_len == 0 || strncasecmp(opt_arg, "true", opt_arg_len) == 0) (s) = 1; \
+		else if (strncasecmp(opt_arg, "false", opt_arg_len) == 0) (s) = 0; \
 		else { \
-			LOG_FMT(LL_ERROR, "%s: error: unrecognized argument: %s", argv[0], opt_arg); \
-			goto fail; \
+			LOG_FMT(LL_ERROR, "%s: error: unrecognized argument to option '%s': %s", argv[0], opt, opt_arg); \
+			goto opt_fail; \
 		} \
 	} while (0)
 #define CALC_LOOKAHEAD_FRAMES(x, fs) TIME_TO_FRAMES(EVENT_SAMPLE_TIME + RISE_TIME_FAST*(x), fs)
-int parse_effect_opts(const char *const *argv, const char *dir, const struct stream_info *istream, const int is_mb, struct matrix4_config *config)
+
+int matrix4_config_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector,
+	const char *dir, int argc, const char *const *argv, int is_mb, struct matrix4_config *config)
 {
-	char *opt_str = NULL;
+	double surr_level[2] = {NAN, NAN};
+	char *endptr, *opt_str = NULL;
+
+	if (istream->fs < 32000) {
+		dsp_perror(DSP_ERANGE, argv[0], "input sample rate");
+		return 1;
+	}
+	if (num_bits_set(channel_selector, istream->channels) != 2) {
+		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
+		return 1;
+	}
+
+	/* set config defaults */
 	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
 	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
 	config->lookahead_frames = CALC_LOOKAHEAD_FRAMES((is_mb)?LOOKAHEAD_MB_DEFAULT:LOOKAHEAD_DEFAULT, istream->fs);
@@ -149,218 +103,254 @@ int parse_effect_opts(const char *const *argv, const char *dir, const struct str
 	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
 	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
-	if (config->opt_str_idx > 0) {
-		opt_str = strdup(argv[config->opt_str_idx]);
-		if (check_alloc(__func__, opt_str)) goto fail;
-		char *opt = opt_str, *next_opt, *endptr;
-		while (*opt != '\0') {
-			next_opt = isolate(opt, ',');
-			if (*opt == '\0') /* do nothing */;
-			else if (is_opt(opt, "status=") || is_opt(opt, "show_status=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0' || strcmp(opt_arg, "bars") == 0)
-					config->status_type = STATUS_TYPE_BARS;
-				else if (strcmp(opt_arg, "text") == 0)
-					config->status_type = STATUS_TYPE_TEXT;
-				else if (strcmp(opt_arg, "none") == 0)
-					config->status_type = STATUS_TYPE_NONE;
-				else {
-					LOG_FMT(LL_ERROR, "%s: error: unrecognized argument: %s", argv[0], opt_arg);
-					goto fail;
-				}
+
+	/* parse args */
+	for (int i = 1; i < argc; ++i) {
+		double tmp_surr_level = strtod(argv[i], &endptr);
+		if (*endptr == '\0' || *endptr == '/') {
+			if (endptr != argv[i])
+				surr_level[0] = tmp_surr_level;
+			if (*endptr == '/') {
+				const char *arg = endptr+1;
+				surr_level[1] = strtod(arg, &endptr);
+				CHECK_ENDPTR(arg, endptr, "surround_level_rear", return 1);
 			}
-			else if (is_opt(opt, "matrix=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				if (is_opt_arg(opt_arg, "v1"))
-					config->calc_matrix_coefs = calc_matrix_coefs_v1;
-				else if (is_opt_arg(opt_arg, "v2")) {
-					config->calc_matrix_coefs = calc_matrix_coefs_v4;
-					config->calc_matrix_coefs_param = 0.0;
-				}
-				else if (is_opt_arg(opt_arg, "v3")) {
-					config->calc_matrix_coefs = calc_matrix_coefs_v4;
-					config->calc_matrix_coefs_param = 1.0;
-				}
-				else if (is_opt_arg(opt_arg, "v4:")) {
-					config->calc_matrix_coefs = calc_matrix_coefs_v4;
-					config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
-					char *opt_subarg = isolate(opt_arg, ':');
-					if (*opt_subarg != '\0') {
-						const double param = strtod(opt_subarg, &endptr);
-						CHECK_ENDPTR(opt_subarg, endptr, "matrix: v4: param", goto fail);
-						CHECK_RANGE(param >= 0.0 && param <= 1.0, "matrix: v4: param", goto fail);
-						config->calc_matrix_coefs_param = param;
-					}
-				}
-				else {
-					LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
-					goto fail;
-				}
+			else if (!isnan(surr_level[0]))
+				surr_level[1] = MINIMUM(surr_level[0]+6.02, 0.0);
+			if (i != argc-1) {
+				print_effect_usage(ei);
+				return 1;
 			}
-			else if (is_opt(opt, "shelf=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				char *opt_subarg = isolate(opt_arg, ':');
-				char *opt_subarg1 = isolate(opt_subarg, ':');
-				if (*opt_arg != '\0') {
-					if (strcmp(opt_arg, "none") == 0) config->shelf_mult = 1.0;
-					else {
-						double shelf_gain = strtod(opt_arg, &endptr);
-						CHECK_ENDPTR(opt_arg, endptr, "shelf: gain", goto fail);
-						if (shelf_gain > 0.0)
-							LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", argv[0]);
-						config->shelf_mult = pow(10.0, shelf_gain / 20.0);
-					}
-				}
-				if (*opt_subarg != '\0') {
-					config->shelf_f0 = parse_freq(opt_subarg, &endptr);
-					CHECK_ENDPTR(opt_subarg, endptr, "shelf: f0", goto fail);
-					CHECK_RANGE(config->shelf_f0 >= 100.0 && config->shelf_f0 <= 6000.0, "shelf: f0", goto fail);
-				}
-				if (*opt_subarg1 != '\0') {
-					config->contour_pwrcmp = strtod(opt_subarg1, &endptr);
-					CHECK_ENDPTR(opt_subarg1, endptr, "shelf: pwrcmp", goto fail);
-					CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, "shelf: pwrcmp", goto fail);
-					LOG_FMT(LL_ERROR, "%s: warning: shelf: pwrcmp argument deprecated; use contour_pwrcmp option instead", argv[0]);
-				}
-			}
-			else if (is_opt(opt, "lowpass=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				if (strcmp(opt_arg, "none") == 0) config->lowpass_f0 = 0.0;
-				else {
-					config->lowpass_f0 = parse_freq(opt_arg, &endptr);
-					CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto fail);
-					CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto fail);
-				}
-			}
-			else if (is_opt(opt, "contour_pwrcmp=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				config->contour_pwrcmp = strtod(opt_arg, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
-				CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, opt, goto fail);
-			}
-			else if (is_opt(opt, "phase_flip=")) {
-				HANDLE_BOOLEAN_ARG(config->do_phase_flip);
-			}
-			else if (is_opt(opt, "signal=")) {
-				HANDLE_BOOLEAN_ARG(config->enable_signal);
-			}
-			else if (is_opt(opt, "direct_path=")) {
-				HANDLE_BOOLEAN_ARG(config->do_direct_path);
-			}
-			else if (is_opt(opt, "rear_event_mask=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				config->rear_ev_mask = strtod(opt_arg, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
-				CHECK_RANGE(config->rear_ev_mask >= 0.0 && config->rear_ev_mask <= 100.0, opt, goto fail);
-			}
-			else if (is_opt(opt, "surround_delay=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				config->surr_delay_frames = parse_len(opt_arg, istream->fs, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
-			}
-			else if (is_opt(opt, "filter_type=")) {
-				char *opt_arg = isolate(opt, '=');
-				if (!is_mb) goto mb_only;
-				if (*opt_arg == '\0') goto needs_arg;
-				if (is_opt_arg(opt_arg, "butterworth"))
-					config->fb_type = FILTER_BANK_TYPE_BUTTERWORTH;
-				else if (is_opt_arg(opt_arg, "chebyshev1:"))
-					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV1;
-				else if (is_opt_arg(opt_arg, "chebyshev2:"))
-					config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV2;
-				else if (is_opt_arg(opt_arg, "elliptic:"))
-					config->fb_type = FILTER_BANK_TYPE_ELLIPTIC;
-				else {
-					LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", argv[0], opt_arg);
-					goto fail;
-				}
-				set_fb_stop_default(config);
-				char *opt_subarg = isolate(opt_arg, ':'), *opt_subarg1;
-				if (*opt_subarg != '\0') {
-					switch (config->fb_type) {
-					case FILTER_BANK_TYPE_CHEBYSHEV1:
-					case FILTER_BANK_TYPE_CHEBYSHEV2:
-						config->fb_stop[0] = strtod(opt_subarg, &endptr);
-						CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto fail);
-						if (config->fb_stop[0] < 10.0) {
-							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
-							goto fail;
-						}
-						break;
-					case FILTER_BANK_TYPE_ELLIPTIC:
-						opt_subarg1 = isolate(opt_subarg, ':');
-						config->fb_stop[0] = strtod(opt_subarg, &endptr);
-						CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto fail);
-						if (*opt_subarg1 != '\0') {
-							config->fb_stop[1] = strtod(opt_subarg1, &endptr);
-							CHECK_ENDPTR(opt_subarg1, endptr, "stop_dB", goto fail);
-						}
-						else config->fb_stop[1] = config->fb_stop[0];
-						if (config->fb_stop[0] < 20.0 || config->fb_stop[1] < 20.0) {
-							LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 20dB", argv[0], opt_arg);
-							goto fail;
-						}
-						break;
-					case FILTER_BANK_TYPE_BUTTERWORTH:
-						break; /* no params */
-					}
-				}
-			}
-			else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
-				char *opt_arg = isolate(opt, '=');
-				if (!is_mb) goto mb_only;
-				if (*opt_arg == '\0') goto needs_arg;
-				config->freq_mask = strtod(opt_arg, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
-				CHECK_RANGE(config->freq_mask >= 0.0 && config->freq_mask <= 1.0, opt, goto fail);
-			}
-			else if (is_opt(opt, "lookahead=")) {  /* undocumented; for testing */
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				double v = strtod(opt_arg, &endptr);
-				CHECK_ENDPTR(opt_arg, endptr, opt, goto fail);
-				CHECK_RANGE(v >= 0.0 && v <= 2.0, opt, goto fail);
-				config->lookahead_frames = CALC_LOOKAHEAD_FRAMES(v, istream->fs);
-			}
-			else if (is_opt(opt, "dpwr_decouple=")) {  /* undocumented; for testing */
-				HANDLE_BOOLEAN_ARG(config->do_dpwr_decouple);
-			}
-		#if DEBUG_POWER_ERROR
-			else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
-				char *opt_arg = isolate(opt, '=');
-				if (*opt_arg == '\0') goto needs_arg;
-				char *path = construct_full_path(dir, opt_arg, istream->fs, config->n_channels);
-				config->pwr_err_file = fopen(path, "w");
-				if (!config->pwr_err_file) {
-					LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", argv[0], path);
-					free(path);
-					goto fail;
-				}
-				free(path);
-			}
-		#endif
-			else {
-				LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
-				goto fail;
-				needs_arg:
-				LOG_FMT(LL_ERROR, "%s: error: option requires argument: %s", argv[0], opt);
-				goto fail;
-				mb_only:
-				LOG_FMT(LL_ERROR, "%s: warning: ignoring option: %s", argv[0], opt);
-			}
-			opt = next_opt;
 		}
-		free(opt_str);
+		else {
+			opt_str = strdup(argv[i]);
+			if (check_alloc(__func__, opt_str)) goto opt_fail;
+			char *opt = opt_str, *next_opt, *endptr;
+			while (*opt != '\0') {
+				next_opt = isolate(opt, ',');
+				opt = trim_whitespace(opt);
+				if (*opt == '\0') /* do nothing */;
+				else if (is_opt(opt, "status=") || is_opt(opt, "show_status=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0' || strcmp(opt_arg, "bars") == 0)
+						config->status_type = STATUS_TYPE_BARS;
+					else if (strcmp(opt_arg, "text") == 0)
+						config->status_type = STATUS_TYPE_TEXT;
+					else if (strcmp(opt_arg, "none") == 0)
+						config->status_type = STATUS_TYPE_NONE;
+					else {
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized status type: %s", argv[0], opt_arg);
+						goto opt_fail;
+					}
+				}
+				else if (is_opt(opt, "matrix=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					if (is_opt_arg(opt_arg, "v1"))
+						config->calc_matrix_coefs = calc_matrix_coefs_v1;
+					else if (is_opt_arg(opt_arg, "v2")) {
+						config->calc_matrix_coefs = calc_matrix_coefs_v4;
+						config->calc_matrix_coefs_param = 0.0;
+					}
+					else if (is_opt_arg(opt_arg, "v3")) {
+						config->calc_matrix_coefs = calc_matrix_coefs_v4;
+						config->calc_matrix_coefs_param = 1.0;
+					}
+					else if (is_opt_arg(opt_arg, "v4:")) {
+						config->calc_matrix_coefs = calc_matrix_coefs_v4;
+						config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
+						char *opt_subarg = isolate(opt_arg, ':');
+						if (*opt_subarg != '\0') {
+							const double param = strtod(opt_subarg, &endptr);
+							CHECK_ENDPTR(opt_subarg, endptr, "matrix: v4: param", goto opt_fail);
+							CHECK_RANGE(param >= 0.0 && param <= 1.0, "matrix: v4: param", goto opt_fail);
+							config->calc_matrix_coefs_param = param;
+						}
+					}
+					else {
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
+						goto opt_fail;
+					}
+				}
+				else if (is_opt(opt, "shelf=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					char *opt_subarg = isolate(opt_arg, ':');
+					char *opt_subarg1 = isolate(opt_subarg, ':');
+					if (*opt_arg != '\0') {
+						if (strcmp(opt_arg, "none") == 0) config->shelf_mult = 1.0;
+						else {
+							double shelf_gain = strtod(opt_arg, &endptr);
+							CHECK_ENDPTR(opt_arg, endptr, "shelf: gain", goto opt_fail);
+							if (shelf_gain > 0.0)
+								LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", argv[0]);
+							config->shelf_mult = pow(10.0, shelf_gain / 20.0);
+						}
+					}
+					if (*opt_subarg != '\0') {
+						config->shelf_f0 = parse_freq(opt_subarg, &endptr);
+						CHECK_ENDPTR(opt_subarg, endptr, "shelf: f0", goto opt_fail);
+						CHECK_RANGE(config->shelf_f0 >= 100.0 && config->shelf_f0 <= 6000.0, "shelf: f0", goto opt_fail);
+					}
+					if (*opt_subarg1 != '\0') {
+						config->contour_pwrcmp = strtod(opt_subarg1, &endptr);
+						CHECK_ENDPTR(opt_subarg1, endptr, "shelf: pwrcmp", goto opt_fail);
+						CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, "shelf: pwrcmp", goto opt_fail);
+						LOG_FMT(LL_ERROR, "%s: warning: shelf: pwrcmp argument deprecated; use contour_pwrcmp option instead", argv[0]);
+					}
+				}
+				else if (is_opt(opt, "lowpass=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					if (strcmp(opt_arg, "none") == 0) config->lowpass_f0 = 0.0;
+					else {
+						config->lowpass_f0 = parse_freq(opt_arg, &endptr);
+						CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto opt_fail);
+						CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto opt_fail);
+					}
+				}
+				else if (is_opt(opt, "contour_pwrcmp=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					config->contour_pwrcmp = strtod(opt_arg, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
+					CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, opt, goto opt_fail);
+				}
+				else if (is_opt(opt, "phase_flip=")) {
+					HANDLE_BOOLEAN_ARG(config->do_phase_flip);
+				}
+				else if (is_opt(opt, "signal=")) {
+					HANDLE_BOOLEAN_ARG(config->enable_signal);
+				}
+				else if (is_opt(opt, "direct_path=")) {
+					HANDLE_BOOLEAN_ARG(config->do_direct_path);
+				}
+				else if (is_opt(opt, "rear_event_mask=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					config->rear_ev_mask = strtod(opt_arg, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
+					CHECK_RANGE(config->rear_ev_mask >= 0.0 && config->rear_ev_mask <= 100.0, opt, goto opt_fail);
+				}
+				else if (is_opt(opt, "surround_delay=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					config->surr_delay_frames = parse_len(opt_arg, istream->fs, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
+				}
+				else if (is_opt(opt, "filter_type=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (!is_mb) goto mb_only;
+					if (*opt_arg == '\0') goto needs_arg;
+					if (is_opt_arg(opt_arg, "butterworth"))
+						config->fb_type = FILTER_BANK_TYPE_BUTTERWORTH;
+					else if (is_opt_arg(opt_arg, "chebyshev1:"))
+						config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV1;
+					else if (is_opt_arg(opt_arg, "chebyshev2:"))
+						config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV2;
+					else if (is_opt_arg(opt_arg, "elliptic:"))
+						config->fb_type = FILTER_BANK_TYPE_ELLIPTIC;
+					else {
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", argv[0], opt_arg);
+						goto opt_fail;
+					}
+					set_fb_stop_default(config);
+					char *opt_subarg = isolate(opt_arg, ':'), *opt_subarg1;
+					if (*opt_subarg != '\0') {
+						switch (config->fb_type) {
+						case FILTER_BANK_TYPE_CHEBYSHEV1:
+						case FILTER_BANK_TYPE_CHEBYSHEV2:
+							config->fb_stop[0] = strtod(opt_subarg, &endptr);
+							CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto opt_fail);
+							if (config->fb_stop[0] < 10.0) {
+								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
+								goto opt_fail;
+							}
+							break;
+						case FILTER_BANK_TYPE_ELLIPTIC:
+							opt_subarg1 = isolate(opt_subarg, ':');
+							config->fb_stop[0] = strtod(opt_subarg, &endptr);
+							CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto opt_fail);
+							if (*opt_subarg1 != '\0') {
+								config->fb_stop[1] = strtod(opt_subarg1, &endptr);
+								CHECK_ENDPTR(opt_subarg1, endptr, "stop_dB", goto opt_fail);
+							}
+							else config->fb_stop[1] = config->fb_stop[0];
+							if (config->fb_stop[0] < 20.0 || config->fb_stop[1] < 20.0) {
+								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 20dB", argv[0], opt_arg);
+								goto opt_fail;
+							}
+							break;
+						case FILTER_BANK_TYPE_BUTTERWORTH:
+							break; /* no params */
+						}
+					}
+				}
+				else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
+					char *opt_arg = isolate(opt, '=');
+					if (!is_mb) goto mb_only;
+					if (*opt_arg == '\0') goto needs_arg;
+					config->freq_mask = strtod(opt_arg, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
+					CHECK_RANGE(config->freq_mask >= 0.0 && config->freq_mask <= 1.0, opt, goto opt_fail);
+				}
+				else if (is_opt(opt, "lookahead=")) {  /* undocumented; for testing */
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					double v = strtod(opt_arg, &endptr);
+					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
+					CHECK_RANGE(v >= 0.0 && v <= 2.0, opt, goto opt_fail);
+					config->lookahead_frames = CALC_LOOKAHEAD_FRAMES(v, istream->fs);
+				}
+				else if (is_opt(opt, "dpwr_decouple=")) {  /* undocumented; for testing */
+					HANDLE_BOOLEAN_ARG(config->do_dpwr_decouple);
+				}
+			#if DEBUG_POWER_ERROR
+				else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					char *path = construct_full_path(dir, opt_arg, istream->fs, config->n_channels);
+					config->pwr_err_file = fopen(path, "w");
+					if (!config->pwr_err_file) {
+						LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", argv[0], path);
+						free(path);
+						goto opt_fail;
+					}
+					free(path);
+				}
+			#endif
+				else {
+					LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
+					goto opt_fail;
+					needs_arg:
+					LOG_FMT(LL_ERROR, "%s: error: option requires argument: %s", argv[0], opt);
+					goto opt_fail;
+					mb_only:
+					LOG_FMT(LL_ERROR, "%s: warning: ignoring option: %s", argv[0], opt);
+				}
+				opt = next_opt;
+			}
+			free(opt_str);
+		}
+	}
+
+	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
+	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);
+	if (config->surr_mult[0] > 1.0 || config->surr_mult[1] > 1.0)
+		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", argv[0]);
+	if (config->surr_mult[0] > config->surr_mult[1])
+		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", argv[0]);
+
+	config->c0 = config->c1 = -1;
+	for (int i = 0; i < istream->channels; ++i) {
+		if (GET_BIT(channel_selector, i)) {
+			if (config->c0 == -1) config->c0 = i;
+			else config->c1 = i;
+		}
 	}
 	return 0;
 
-	fail:
+	opt_fail:
 	free(opt_str);
 	return 1;
 }
@@ -462,7 +452,9 @@ static inline double drift_err_scale(const struct axes *ax0, const struct axes *
 	return 1.0 + (lr_err+cs_err)*sens_err;
 }
 
-void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double norm_accom_factor, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
+void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env,
+	const struct envs *pwr_env, double norm_accom_factor, double thresh_scale,
+	struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
 	const struct axes ord = {
 		.lr = CALC_LR(env->l, env->r, env->l/env->r),
@@ -675,7 +667,8 @@ static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 /*
  * No steering of rear-encoded signals.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear, double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear,
+	double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -773,7 +766,8 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
  * cs=0° to cs=-22.5°, and adjustable steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear, double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear,
+	double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);

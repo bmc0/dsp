@@ -171,10 +171,11 @@ union cmc_shelf_mult {
 	double arg;
 	struct { double front, surr; } ret;
 };
-typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, double, double, double, struct matrix_coefs *, union cmc_shelf_mult *, int);
+typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, double, double,
+	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
-	int n_channels, opt_str_idx, c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple;
+	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
 	ssize_t lookahead_frames, surr_delay_frames;
@@ -202,8 +203,8 @@ struct phase_flip_params {
 #define CBUF_NEXT(x, len) (((x)+1<(len))?(x)+1:0)
 #define CBUF_PREV(x, len) (((x)>0)?(x)-1:(len)-1)
 
-int get_args_and_channels(const struct effect_info *, const struct stream_info *, const char *, int, const char *const *, struct matrix4_config *);
-int parse_effect_opts(const char *const *, const char *, const struct stream_info *, const int, struct matrix4_config *);
+int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
+	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void event_state_cleanup(struct event_state *);
@@ -219,7 +220,9 @@ void draw_steering_bar(double, int, struct steering_bar *);
 /* private functions */
 int event_state_init_priv(struct event_state *, double, double);
 void event_config_init_priv(struct event_config *, double, double, double);
-void process_events_priv(struct event_state *, const struct event_config *, const struct envs *, const struct envs *, double, double, struct axes *, struct axes *, struct axes *);
+void process_events_priv(struct event_state *, const struct event_config *, const struct envs *,
+	const struct envs *, double, double,
+	struct axes *, struct axes *, struct axes *);
 
 static inline double smoothstep_nc(double x)
 {
@@ -245,7 +248,8 @@ static void event_config_init(struct event_config *evc, const struct stream_info
 	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), rear_ev_mask, DIFF_OVERSHOOT);
 }
 
-static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env, const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
+static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env,
+	const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
 	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev, ax_dpwr);
 }

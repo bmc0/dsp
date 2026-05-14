@@ -648,10 +648,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	struct matrix4_mb_state *state = NULL;
 	struct matrix4_config config = {0};
 
-	if (get_args_and_channels(ei, istream, channel_selector, argc, argv, &config))
-		return NULL;
-	if (parse_effect_opts(argv, dir, istream, 1, &config))
-		goto fail;  /* may need to free config.pwr_err_file */
+	if (matrix4_config_init(ei, istream, channel_selector, dir, argc, argv, 1, &config))
+		goto fail;  /* may need to close config.pwr_err_file */
 
 	e = calloc(1, sizeof(struct effect));
 	if (check_alloc(ei->name, e)) goto fail;
