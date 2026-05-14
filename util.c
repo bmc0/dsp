@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <math.h>
 #include <sys/stat.h>
@@ -346,6 +347,21 @@ char * isolate(char *s, char c)
 	while (*s && *s != c) ++s;
 	if (*s != '\0') *s++ = '\0';
 	return s;
+}
+
+char * trim_whitespace(char *s)
+{
+	while (*s && isspace((unsigned char) *s)) ++s;
+	char *r = s;
+	if (*s) {
+		char *l = s;
+		while (*s) {
+			if (!isspace((unsigned char) *s)) l = s;
+			++s;
+		}
+		l[1] = '\0';
+	}
+	return r;
 }
 
 /*

@@ -61,6 +61,7 @@ sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_inf
 			char *coef = ch;
 			for (i = 0; *coef != '\0'; ++i) {
 				char *next_coef = isolate(coef, ',');
+				coef = trim_whitespace(coef);
 				if (*coef != '\0') {
 					ch_data[filter_channels * i] = strtod(coef, &endptr);
 					if (check_endptr(ei->name, coef, endptr, "coefficient")) {

@@ -74,6 +74,7 @@ int num_bits_set(const char *, int);
 char * get_file_contents(const char *);
 char * construct_full_path(const char *, const char *, int, int);
 char * isolate(char *, char);
+char * trim_whitespace(char *);
 int dsp_getopt(struct dsp_getopt_state *, int, const char *const *, const char *);
 void dsp_getopt_print_error(struct dsp_getopt_state *, int, const char *);
 #ifdef HAVE_FFTW3
