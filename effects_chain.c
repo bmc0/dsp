@@ -838,6 +838,13 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 			offsets[i] += delays[i]-chain->delay_offset;  /* cumulative latency */
 		if (e->channel_offsets)  /* query effect latency and requested delay */
 			e->channel_offsets(e, offsets, delays);
+		else if (e->ostream.fs != e->istream.fs) {
+			/* FIXME: should store fractional samples as well, but the error is generally small */
+			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;
+			for (int i = 0; i < e->ostream.channels; ++i)
+				delays[i] = ratio_mult_ceil(delays[i], ratio_n, ratio_d);
+		}
 		chain->delay_offset = 0;
 		for (int i = 0; i < e->ostream.channels; ++i)
 			chain->delay_offset = MINIMUM(chain->delay_offset, delays[i]);
@@ -892,7 +899,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 		}
 		if (e->drain_samples)
 			e->drain_samples(e, samples);
-		if (!e->drain_samples && e->ostream.fs != e->istream.fs) {
+		else if (e->ostream.fs != e->istream.fs) {
 			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;
 			for (int i = 0; i < e->ostream.channels; ++i)
