@@ -921,11 +921,19 @@ static int effects_chain_prepare(struct effects_chain *chain)
 	return 0;
 }
 
+static int build_effects_chain_start(struct effects_chain *chain, struct stream_info *istream)
+{
+	memcpy(&chain->istream, istream, sizeof(struct stream_info));
+	memcpy(&chain->ostream, istream, sizeof(struct stream_info));
+	return 0;
+}
+
 static int build_effects_chain_finish(struct effects_chain *chain)
 {
 	if (chain->head == NULL) return 0;
 	struct effects_chain_postproc_state state;
 
+	memcpy(&chain->ostream, &chain->tail->ostream, sizeof(struct stream_info));
 	effects_chain_optimize(chain);
 	if (effects_chain_prepare(chain)) return 1;
 	if (effects_chain_postproc_state_init(&state, chain)) return 1;
@@ -941,8 +949,8 @@ static int build_effects_chain_finish(struct effects_chain *chain)
 int build_effects_chain_from_argv(int argc, const char *const *argv, struct effects_chain *chain,
 	struct stream_info *stream, const char *ch_mask, const char *dir)
 {
-	if (ec_parse_argv(argc, argv, dir, chain, stream, ch_mask))
-		return 1;
+	if (build_effects_chain_start(chain, stream)) return 1;
+	if (ec_parse_argv(argc, argv, dir, chain, stream, ch_mask)) return 1;
 	return build_effects_chain_finish(chain);
 }
 
@@ -951,6 +959,7 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 {
 	char *s = strdup(cs);
 	if (check_alloc(__func__, s)) return 1;
+	if (build_effects_chain_start(chain, stream)) return 1;
 	if (ec_parse_string(s, path, dir, chain, stream, ch_mask, 0)) {
 		free(s);
 		return 1;
@@ -962,8 +971,8 @@ int build_effects_chain_from_string(const char *cs, const char *path, struct eff
 int build_effects_chain_from_file(const char *path, struct effects_chain *chain,
 	struct stream_info *stream, const char *ch_mask, const char *dir, int enforce_eof_marker)
 {
-	if (ec_parse_file(path, dir, chain, stream, ch_mask, enforce_eof_marker, 0))
-		return 1;
+	if (build_effects_chain_start(chain, stream)) return 1;
+	if (ec_parse_file(path, dir, chain, stream, ch_mask, enforce_eof_marker, 0)) return 1;
 	return build_effects_chain_finish(chain);
 }
 
@@ -1034,8 +1043,7 @@ static sample_t * run_effect_list(struct effect *e, ssize_t *frames, sample_t *b
 
 sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
-	if (*frames < 1)
-		return buf1;
+	if (*frames < 1) return buf1;
 	chain->frames += *frames;
 	return run_effect_list(chain->head, frames, buf1, buf2);
 }
@@ -1089,10 +1097,11 @@ static const char gnuplot_header_phase[] =
 	"set y2tics -180,90,180 format '%g°'\n"
 	"set y2range [-180:720]\n";
 
-void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_channels, int plot_phase)
+void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 {
+	struct stream_info stream;
 	struct effect *e = chain->head;
-	int fs = input_fs;
+	memcpy(&stream, &chain->istream, sizeof(struct stream_info));
 	while (e != NULL) {
 		if (e->plot == NULL) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
@@ -1102,14 +1111,13 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 			LOG_FMT(LL_ERROR, "plot: BUG: effect '%s' changed the number of channels but does not have EFFECT_FLAG_PLOT_MIX set!", e->name);
 			return;
 		}
-		fs = e->ostream.fs;
+		stream.fs = e->ostream.fs;
 		e = e->next;
 	}
 	printf("%sset xrange [10:%d/2]\n%s\n",
-		gnuplot_header, fs, (plot_phase)?gnuplot_header_phase:"");
-	struct effect *start_e = chain->head;
-	e = start_e;
-	int channels = input_channels, start_idx = 0;
+		gnuplot_header, stream.fs, (plot_phase)?gnuplot_header_phase:"");
+	struct effect *start_e = e = chain->head;
+	int start_idx = 0;
 	for (int i = 0; e != NULL; ++i) {
 		if (e->flags & EFFECT_FLAG_PLOT_MIX) {
 			for (int k = 0; k < e->istream.channels; ++k) {
@@ -1123,12 +1131,12 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 			}
 			start_idx = i;
 			start_e = e;
-			channels = e->ostream.channels;
+			stream.channels = e->ostream.channels;
 		}
 		e->plot(e, i);
 		e = e->next;
 	}
-	for (int k = 0; k < channels; ++k) {
+	for (int k = 0; k < stream.channels; ++k) {
 		printf("Ht%d(f)=1.0", k);
 		e = start_e;
 		for (int i = start_idx; e != NULL; ++i) {
@@ -1143,7 +1151,7 @@ void plot_effects_chain(struct effects_chain *chain, int input_fs, int input_cha
 		printf("Hsum%d(f)=Ht%d_mag_dB(f)\n", k, k);
 	}
 	printf("\nplot ");
-	for (int k = 0; k < channels; ++k) {
+	for (int k = 0; k < stream.channels; ++k) {
 		printf("%sHt%d_mag_dB(x) lt %d lw 2 title 'Channel %d'", (k==0)?"":", ", k, k+1, k);
 		if (plot_phase)
 			printf(", Ht%d_phase_deg(x) axes x1y2 lt %d lw 1 dt '-' notitle", k, k+1);

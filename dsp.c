@@ -1174,7 +1174,7 @@ int main(int argc, char *argv[])
 	if (plot) {
 		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
 			cleanup_and_exit(1);
-		plot_effects_chain(&chain, input_list.head->codec->fs, input_list.head->codec->channels, (plot > 1));
+		plot_effects_chain(&chain, (plot > 1));
 	}
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));
