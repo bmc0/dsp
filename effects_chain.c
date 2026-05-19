@@ -580,10 +580,11 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 				if (ec_parse_effect_err(state, "failed to initialize effect", tok, argv_end))
 					return tok;
 			}
-			while (e != NULL) {
+			for (int i = 0; e != NULL; ++i) {
 				struct effect *e_n = e->next;
 				if (e->run == NULL) {
-					LOG_FMT(LL_VERBOSE, "info: not using effect: %s", tok->str);
+					if (e_n || i > 0) LOG_FMT(LL_VERBOSE, "info: not using sub-effect #%d of %s: %s", i+1, tok->str, e->name);
+					else LOG_FMT(LL_VERBOSE, "info: not using effect: %s", e->name);
 					destroy_effect(e);
 				}
 				else {
