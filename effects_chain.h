@@ -25,7 +25,9 @@
 struct effects_chain {
 	struct effect *head, *tail;
 	struct stream_info istream, ostream;
-	ssize_t frames, drain_frames, delay_offset;
+	struct { int n, d; } ratio;
+	ssize_t iframes, oframes, drain_frames;
+	int delay, frac;
 };
 
 #define EFFECTS_CHAIN_INITIALIZER {0}

@@ -45,7 +45,6 @@ struct effect {
 	/* All functions may be NULL */
 	int (*prepare)(struct effect *);
 	sample_t * (*run)(struct effect *, ssize_t *, sample_t *, sample_t *);  /* if NULL, the effect will not be used */
-	ssize_t (*delay)(struct effect *);  /* returns the latency in frames at ostream.fs */
 	void (*reset)(struct effect *);
 	void (*signal)(struct effect *);
 	void (*plot)(struct effect *, int);

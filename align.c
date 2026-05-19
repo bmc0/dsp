@@ -63,12 +63,6 @@ static sample_t * align_effect_run(struct effect *e, ssize_t *frames, sample_t *
 	return ibuf;
 }
 
-static ssize_t align_effect_delay(struct effect *e)
-{
-	struct align_state *state = (struct align_state *) e->data;
-	return state->discard_frames;
-}
-
 static void align_effect_reset(struct effect *e)
 {
 	struct align_state *state = (struct align_state *) e->data;
@@ -123,7 +117,6 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	e->istream.channels = e->ostream.channels = prev->ostream.channels;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = align_effect_run;
-	e->delay = align_effect_delay;
 	e->reset = align_effect_reset;
 	e->plot = effect_plot_noop;
 	e->drain_samples = align_effect_drain_samples;

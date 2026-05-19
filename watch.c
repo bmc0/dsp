@@ -154,12 +154,6 @@ static sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *
 	return run_effects_chain(&node->chain, frames, ibuf, obuf);
 }
 
-static ssize_t watch_effect_delay(struct effect *e)
-{
-	struct watch_node *node = (struct watch_node *) e->data;
-	return rint(get_effects_chain_delay(&node->chain) * e->ostream.fs);
-}
-
 static void watch_effect_reset(struct effect *e)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
@@ -290,7 +284,6 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	e->ostream = stream;
 
 	e->run = watch_effect_run;
-	e->delay = watch_effect_delay;
 	e->reset = watch_effect_reset;
 	e->signal = watch_effect_signal;
 	e->drain2 = watch_effect_drain2;

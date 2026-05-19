@@ -732,7 +732,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 		goto fail;
 	}
 
-	chain->delay_offset = 0;
+	ssize_t delay_offset = 0;
 	ssize_t *offsets = state->samples[0], *delays = state->samples[1];
 	memset(offsets, 0, state->max_ch * sizeof(ssize_t));
 	memset(delays, 0, state->max_ch * sizeof(ssize_t));
@@ -835,7 +835,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 			delays[i] = offsets[i] = 0;
 		/* recalculate offsets */
 		for (int i = 0; i < e->ostream.channels; ++i)
-			offsets[i] += delays[i]-chain->delay_offset;  /* cumulative latency */
+			offsets[i] += delays[i]-delay_offset;  /* cumulative latency */
 		if (e->channel_offsets)  /* query effect latency and requested delay */
 			e->channel_offsets(e, offsets, delays);
 		else if (e->ostream.fs != e->istream.fs) {
@@ -845,14 +845,14 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 			for (int i = 0; i < e->ostream.channels; ++i)
 				delays[i] = ratio_mult_ceil(delays[i], ratio_n, ratio_d);
 		}
-		chain->delay_offset = 0;
+		delay_offset = 0;
 		for (int i = 0; i < e->ostream.channels; ++i)
-			chain->delay_offset = MINIMUM(chain->delay_offset, delays[i]);
-		/* LOG_FMT(LL_VERBOSE, "%s(): delay_offset=%zd", __func__, chain->delay_offset); */
+			delay_offset = MINIMUM(delay_offset, delays[i]);
+		/* LOG_FMT(LL_VERBOSE, "%s(): delay_offset=%zd", __func__, delay_offset); */
 		for (int i = 0; i < e->ostream.channels; ++i) {
 			/* LOG_FMT(LL_VERBOSE, "%s(): output channel %d: offset=%zd latency=%zd delay=%zd",
-				__func__, i, offsets[i]-(delays[i]-chain->delay_offset), offsets[i], delays[i]); */
-			offsets[i] -= delays[i]-chain->delay_offset;
+				__func__, i, offsets[i]-(delays[i]-delay_offset), offsets[i], delays[i]); */
+			offsets[i] -= delays[i]-delay_offset;
 		}
 
 		prev = e;
@@ -932,6 +932,7 @@ static int build_effects_chain_start(struct effects_chain *chain, struct stream_
 {
 	memcpy(&chain->istream, istream, sizeof(struct stream_info));
 	memcpy(&chain->ostream, istream, sizeof(struct stream_info));
+	chain->ratio.d = chain->ratio.n = 1;
 	return 0;
 }
 
@@ -941,6 +942,9 @@ static int build_effects_chain_finish(struct effects_chain *chain)
 	struct effects_chain_postproc_state state;
 
 	memcpy(&chain->ostream, &chain->tail->ostream, sizeof(struct stream_info));
+	const int gcd = find_gcd(chain->ostream.fs, chain->istream.fs);
+	chain->ratio.n = chain->ostream.fs / gcd;
+	chain->ratio.d = chain->istream.fs / gcd;
 	effects_chain_optimize(chain);
 	if (effects_chain_prepare(chain)) return 1;
 	if (effects_chain_postproc_state_init(&state, chain)) return 1;
@@ -1051,32 +1055,40 @@ static sample_t * run_effect_list(struct effect *e, ssize_t *frames, sample_t *b
 sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	if (*frames < 1) return buf1;
-	chain->frames += *frames;
-	return run_effect_list(chain->head, frames, buf1, buf2);
+	const ssize_t iframes = *frames;
+	sample_t *obuf = run_effect_list(chain->head, frames, buf1, buf2);
+	const ssize_t oframes = *frames;
+
+	chain->iframes += iframes;
+	chain->oframes += oframes;
+	if (chain->istream.fs == chain->ostream.fs)
+		chain->delay += iframes - oframes;
+	else {
+		const long long int n = (long long int) iframes * chain->ratio.n;
+		ssize_t oframes_nd = n / chain->ratio.d;
+		chain->frac += n % chain->ratio.d;
+		if (chain->frac >= chain->ratio.d) {
+			chain->frac -= chain->ratio.d;
+			++oframes_nd;
+		}
+		chain->delay += oframes_nd - oframes;
+	}
+
+	return obuf;
 }
 
 double get_effects_chain_delay(struct effects_chain *chain)
 {
-	int out_fs = 0;
-	double delay = 0.0, delay_lim = 0.0;
-	struct effect *e = chain->head;
-	if (e) delay_lim = (double) chain->frames / e->istream.fs;
-	while (e) {
-		out_fs = e->ostream.fs;
-		if (e->delay)
-			delay += (double) e->delay(e) / out_fs;
-		e = e->next;
-	}
-	if (out_fs && chain->delay_offset < 0)
-		delay += (double) -chain->delay_offset / out_fs;
-	return MINIMUM(delay, delay_lim);
+	const double frac_f = (double) chain->frac / chain->ratio.d;
+	return (frac_f + chain->delay) / chain->ostream.fs;
 }
 
 void reset_effects_chain(struct effects_chain *chain)
 {
 	LIST_FOREACH(chain, e)
 		if (e->reset != NULL) e->reset(e);
-	chain->frames = 0;
+	chain->oframes = chain->iframes = 0;
+	chain->frac = chain->delay = 0;
 }
 
 void signal_effects_chain(struct effects_chain *chain)
@@ -1169,7 +1181,7 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
 {
 	struct effect *e = chain->head;
-	if (e == NULL || chain->frames < 1 || *frames < 1) {
+	if (e == NULL || chain->iframes < 1 || *frames < 1) {
 		*frames = -1;
 		return buf1;
 	}
