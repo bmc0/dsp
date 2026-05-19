@@ -30,6 +30,7 @@
 
 #include "dsp.h"
 #include "effect.h"
+#include "effects_chain.h"
 #include "util.h"
 
 #define DEFAULT_CONFIG_DIR     "/ladspa_dsp"

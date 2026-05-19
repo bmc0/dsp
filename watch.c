@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <pthread.h>
 #include "watch.h"
+#include "effects_chain.h"
 #include "util.h"
 #include "list_util.h"
 

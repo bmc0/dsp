@@ -33,6 +33,7 @@
 #include <time.h>
 #include "dsp.h"
 #include "effect.h"
+#include "effects_chain.h"
 #include "codec.h"
 #include "codec_buf.h"
 #include "util.h"
