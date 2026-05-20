@@ -1338,11 +1338,9 @@ int main(int argc, char *argv[])
 							if (!is_paused && !drain_effects) {  /* attempt crossfade */
 								stream.fs = input_list.head->codec->fs;
 								stream.channels = input_list.head->codec->channels;
-								xfade_state.istream = stream;
 								xfade_state.chain[0] = chain;
 								if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL, NULL))
 									cleanup_and_exit(1);
-								xfade_state.ostream = stream;
 								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 								xfade_state.pos = xfade_state.frames;
 								if (xfade_state.pos == 0 || stream.fs != out_codec->fs || stream.channels != out_codec->channels)

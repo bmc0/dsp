@@ -1227,7 +1227,6 @@ void effects_chain_xfade_reset(struct effects_chain_xfade_state *state)
 	state->chain[0] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 	state->chain[1] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 	state->pos = 0;
-	state->has_output = 0;
 }
 
 static inline double xfade_mult(ssize_t pos, ssize_t n)
@@ -1237,35 +1236,35 @@ static inline double xfade_mult(ssize_t pos, ssize_t n)
 
 sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *state, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
-	ssize_t tmp_frames = *frames, adj_xfade_frames = state->frames;
+	if (*frames < 1) return ibuf;
 	sample_t *rbuf[2];
+	ssize_t tmp_f = *frames, adj_xf_f = state->frames;
+	const int in_ch = state->chain[0].istream.channels, out_ch = state->chain[0].ostream.channels;
+	const int has_output = (state->chain[1].oframes > 0);
 
-	memcpy(state->buf, ibuf, *frames * state->istream.channels * sizeof(sample_t));
+	memcpy(state->buf, ibuf, *frames*in_ch*sizeof(sample_t));
 	rbuf[0] = run_effects_chain(&state->chain[0], frames, ibuf, obuf);
 	rbuf[1] = (rbuf[0] == obuf) ? ibuf : obuf;
-	rbuf[1] = run_effects_chain(&state->chain[1], &tmp_frames, state->buf, rbuf[1]);
+	rbuf[1] = run_effects_chain(&state->chain[1], &tmp_f, state->buf, rbuf[1]);
+	if (state->chain[1].oframes <= 0) return rbuf[0];
 
-	const ssize_t min_frames = MINIMUM(*frames, tmp_frames);
-	const ssize_t offset_samples = (state->has_output) ? 0 : (*frames-min_frames)*state->ostream.channels;
-	if (state->has_output && *frames != tmp_frames) {
-		if (min_frames < state->pos) {
-			adj_xfade_frames = lround((double) min_frames / state->pos * state->frames);
-			/* LOG_FMT(LL_VERBOSE, "%s(): truncated crossfade: %zd -> %zd", __func__, state->frames, adj_xfade_frames); */
-			state->pos = min_frames;
+	const ssize_t min_f = MINIMUM(*frames, tmp_f);
+	ssize_t offset_s = 0;
+	if (!has_output) offset_s = (*frames-min_f)*out_ch;
+	else if (*frames != tmp_f) {
+		if (min_f < state->pos) {
+			adj_xf_f = lround((double)min_f/state->pos*state->frames);
+			/* LOG_FMT(LL_VERBOSE, "%s(): truncated crossfade: %zd -> %zd", __func__, state->frames, adj_xf_f); */
+			state->pos = min_f;
 		}
-		*frames = tmp_frames;
+		*frames = tmp_f;
 	}
-	if (tmp_frames > 0) state->has_output = 1;
 
-	const ssize_t xfade_samples = MINIMUM(state->pos, min_frames) * state->ostream.channels;
-	for (size_t i = 0; i < xfade_samples; i += state->ostream.channels) {
-		const double m = xfade_mult(state->pos--, adj_xfade_frames);
-		for (int k = 0; k < state->ostream.channels; ++k)
-			rbuf[0][i+offset_samples+k] = rbuf[1][i+k]*m + rbuf[0][i+offset_samples+k]*(1.0-m);
+	const ssize_t end_s = min_f*out_ch;
+	for (ssize_t i = 0; i < end_s; i += out_ch) {
+		const double m = (state->pos > 0) ? xfade_mult(state->pos--, adj_xf_f) : 1.0;
+		for (int k = 0; k < out_ch; ++k)
+			rbuf[0][i+offset_s+k] = rbuf[1][i+k]*m + rbuf[0][i+offset_s+k]*(1.0-m);
 	}
-	const ssize_t rem_samples = tmp_frames*state->ostream.channels - xfade_samples;
-	if (rem_samples > 0)
-		memcpy(&rbuf[0][offset_samples+xfade_samples], &rbuf[1][xfade_samples], rem_samples*sizeof(sample_t));
-
 	return rbuf[0];
 }

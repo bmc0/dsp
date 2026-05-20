@@ -26,7 +26,7 @@ struct effects_chain {
 	struct effect *head, *tail;
 	struct stream_info istream, ostream;
 	struct { int n, d; } ratio;
-	ssize_t iframes, oframes, drain_frames;
+	ssize_t drain_frames, iframes, oframes;
 	int delay, frac;
 };
 
@@ -54,9 +54,7 @@ void destroy_effects_chain(struct effects_chain *);
 struct effects_chain_xfade_state {
 	sample_t *buf;
 	struct effects_chain chain[2];
-	struct stream_info istream, ostream;
 	ssize_t frames, pos;
-	int has_output;
 };
 
 #define EFFECTS_CHAIN_XFADE_TIME 100  /* milliseconds */

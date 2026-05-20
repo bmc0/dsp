@@ -273,8 +273,6 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	node->chain = chain;
 	node->enforce_eof_marker = enforce_eof_marker;
 	node->xfade = (struct effects_chain_xfade_state) EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
-	node->xfade.istream = *istream;
-	node->xfade.ostream = stream;
 	node->xfade.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 
 	e = calloc(1, sizeof(struct effect));
