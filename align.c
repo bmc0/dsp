@@ -127,8 +127,8 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	e->data = state;
 	state->cs = calloc(e->istream.channels, sizeof(struct align_channel_state));
 	if (check_alloc(e->name, state->cs)) goto fail;
-	ssize_t max_offset = offsets[0];
-	for (int k = 1; k < e->istream.channels; ++k)
+	ssize_t max_offset = (prev->next) ? offsets[0] : 0;  /* zero negative offsets at end of chain */
+	for (int k = 0; k < e->istream.channels; ++k)
 		max_offset = MAXIMUM(max_offset, offsets[k]);
 	ssize_t min_ref = max_offset;
 	for (int k = 0; k < e->istream.channels; ++k) {
