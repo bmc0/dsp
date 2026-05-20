@@ -43,7 +43,6 @@ struct delay_state {
 
 #define DELAY_MIN_FRAC 0.1
 #define DELAY_FD_AP_N_DEFAULT 2
-#define MOD_INTERP_FIR 1
 
 #define DELAY_RUN_CHANNEL_DEFINE_FN(X, C) \
 	static void delay_run_channel ## X (struct delay_channel_state *cs, ssize_t frames, sample_t *ibuf_p, int stride) \
