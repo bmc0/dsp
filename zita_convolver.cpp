@@ -88,6 +88,7 @@ static void zita_convolver_effect_destroy(struct effect *e)
 		free(state->buf[k]);
 	free(state->buf);
 	free(state);
+	free(e->channel_selector);
 }
 
 static void zita_convolver_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
