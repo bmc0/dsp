@@ -28,7 +28,7 @@ extern "C" {
 #include "effect.h"
 #include "fir_util.h"
 
-struct effect * zita_convolver_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, int, int);
+struct effect * zita_convolver_effect_init_with_filter(const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, ssize_t, int, int);
 struct effect * zita_convolver_effect_init(const struct effect_info *, const struct stream_info *, const char *, const char *, int, const char *const *);
 
 #ifdef __cplusplus

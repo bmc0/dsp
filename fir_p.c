@@ -30,7 +30,6 @@
 #include "fir.h"
 #include "util.h"
 #include "codec.h"
-#include "delay.h"
 
 #define DIRECT_LEN           (1<<5)  /* must be >= 1<<4 */
 #define FFT_LEN_STEP_DEFAULT (1<<2)
@@ -58,7 +57,7 @@ struct fft_part_group {
 struct fir_p_state {
 	struct direct_part part0;
 	struct fft_part_group group[MAX_FFT_GROUPS];
-	ssize_t filter_frames;
+	ssize_t filter_frames, ref;
 	int n;
 };
 
@@ -212,7 +211,7 @@ static void fir_p_effect_plot(struct effect *e, int i)
 	struct fir_p_state *state = (struct fir_p_state *) e->data;
 	for (int k = 0, n = 0; k < e->istream.channels; ++k) {
 		if (state->part0.buf[k]) {
-			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			printf("H%d_%d(w)=(abs(w)<=pi)?exp(-j*w*%zd)*(0.0", k, i, -state->ref);
 			for (int m = 0; m < DIRECT_LEN; ++m)
 				printf("+exp(-j*w*%d)*%.15e", m, state->part0.filter[k][m]);
 			ssize_t z = DIRECT_LEN;
@@ -225,7 +224,7 @@ static void fir_p_effect_plot(struct effect *e, int i)
 						printf("+exp(-j*w*%zd)*%.15e", z, group->fft_buf[0][l] / (group->len * 2));
 				}
 			}
-			puts(":0/0");
+			puts("):0/0");
 			++n;
 		}
 		else
@@ -279,6 +278,13 @@ static void fir_p_effect_destroy(struct effect *e)
 	free(state->part0.filter);
 	free(state->part0.buf);
 	free(state);
+}
+
+static void fir_p_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+{
+	struct fir_p_state *state = (struct fir_p_state *) e->data;
+	for (int k = 0; k < e->istream.channels; ++k)
+		if (state->part0.buf[k]) req_delay[k] -= state->ref;
 }
 
 static void find_partitions(struct fir_p_state *state, int max_part_len, int single_thread)
@@ -353,10 +359,10 @@ static int verify_and_print_partitions(const struct effect_info *ei, struct fir_
 	return 0;
 }
 
-struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int max_part_len)
+struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t ref, int max_part_len)
 {
 	if (filter_frames <= DIRECT_LEN)
-		return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 1);
+		return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, ref, 1);
 
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
@@ -390,12 +396,14 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->plot = fir_p_effect_plot;
 	e->drain_samples = fir_p_effect_drain_samples;
 	e->destroy = fir_p_effect_destroy;
+	e->channel_offsets = fir_p_effect_channel_offsets;
 
 	struct fir_p_state *state = calloc(1, sizeof(struct fir_p_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
 
 	state->filter_frames = filter_frames;
+	state->ref = ref;
 	const int use_single_thread = (filter_frames < 4096 || FORCE_SINGLE_THREAD);
 	find_partitions(state, max_part_len, use_single_thread);
 	if (verify_and_print_partitions(ei, state, use_single_thread)) goto fail;
@@ -551,19 +559,8 @@ struct effect * fir_p_effect_init(const struct effect_info *ei, const struct str
 	config.p.path = argv[g.ind];
 	sample_t *filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
 	if (!filter_data) return NULL;
-	struct effect *e = fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, max_part_len);
-	if (!e) goto fail;
 	const ssize_t offset_frames = fir_get_offset(&config, filter_data, filter_channels, filter_frames);
-	if (offset_frames) {
-		struct effect *e_align = delay_effect_init_int(ei->name, istream, channel_selector, -offset_frames);
-		if (!e_align) goto fail;
-		effect_list_append(e, e_align);
-	}
+	struct effect *e = fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, offset_frames, max_part_len);
 	free(filter_data);
 	return e;
-
-	fail:
-	destroy_effect(e);
-	free(filter_data);
-	return NULL;
 }

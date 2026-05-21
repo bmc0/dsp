@@ -23,7 +23,6 @@
 #include "fir.h"
 #include "fir_p.h"
 #include "zita_convolver.h"
-#include "delay.h"
 #include "util.h"
 
 struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -76,26 +75,18 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 			h[i] = w_h * 2.0/(M_PI*k) * (0.42 - 0.5*cos(x) + 0.08*cos(2.0*x));
 		}
 	}
+	const ssize_t ref = (do_align) ? taps/2 : 0;
 	if (conv == 1)
-		e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+		e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
 	else if (conv == 2) {
 		#ifdef HAVE_ZITA_CONVOLVER
-			e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0, 0);
+			e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0, 0);
 		#else
 			LOG_FMT(LL_ERROR, "%s: warning: zita_convolver not available; using fir_p instead", argv[0]);
-			e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+			e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
 		#endif
 	}
-	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, 0);
+	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
 	free(h);
-	if (!e) return NULL;
-	if (do_align) {
-		struct effect *e_align = delay_effect_init_int(ei->name, istream, channel_selector, -taps/2);
-		if (!e_align) {
-			destroy_effect(e);
-			return NULL;
-		}
-		effect_list_append(e, e_align);
-	}
 	return e;
 }

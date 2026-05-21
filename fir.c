@@ -25,17 +25,16 @@
 #include "fir.h"
 #include "util.h"
 #include "codec.h"
-#include "delay.h"
 
 #define MAX_DIRECT_LEN (1<<4)
 
 struct fir_direct_state {
-	ssize_t len, mask, p, filter_frames;
+	ssize_t len, mask, p, filter_frames, ref;
 	sample_t *lbuf, **filter, **buf;
 };
 
 struct fir_state {
-	ssize_t len, fr_len, p, filter_frames;
+	ssize_t len, fr_len, p, filter_frames, ref;
 	fftw_complex **filter_fr, *tmp_fr, *filter_fr_1ch;
 	sample_t **buf, **olap;
 	fftw_plan r2c_plan, c2r_plan;
@@ -75,13 +74,12 @@ static void fir_direct_effect_plot(struct effect *e, int i)
 	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
 	for (int k = 0; k < e->ostream.channels; ++k) {
 		if (state->buf[k]) {
-			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			printf("H%d_%d(w)=(abs(w)<=pi)?exp(-j*w*%zd)*(0.0", k, i, -state->ref);
 			for (ssize_t j = 0; j < state->len; ++j)
 				printf("+exp(-j*w*%zd)*%.15e", j, state->filter[k][j]);
-			puts(":0/0");
+			puts("):0/0");
 		}
-		else
-			printf("H%d_%d(w)=1.0\n", k, i);
+		else printf("H%d_%d(w)=1.0\n", k, i);
 	}
 }
 
@@ -99,6 +97,13 @@ static void fir_direct_effect_destroy(struct effect *e)
 	free(state->filter);
 	free(state->buf);
 	free(state);
+}
+
+static void fir_direct_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
+{
+	struct fir_direct_state *state = (struct fir_direct_state *) e->data;
+	for (int k = 0; k < e->istream.channels; ++k)
+		if (state->buf[k]) req_delay[k] -= state->ref;
 }
 
 static sample_t * fir_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -163,13 +168,12 @@ static void fir_effect_plot(struct effect *e, int i)
 			for (ssize_t j = 0; j < state->fr_len; ++j)
 				state->tmp_fr[j] = state->filter_fr[k][j];
 			fftw_execute_dft_c2r(state->c2r_plan, state->tmp_fr, state->buf[k]);
-			printf("H%d_%d(w)=(abs(w)<=pi)?0.0", k, i);
+			printf("H%d_%d(w)=(abs(w)<=pi)?exp(-j*w*%zd)*(0.0", k, i, -state->ref);
 			for (ssize_t j = 0; j < state->len; ++j)
 				printf("+exp(-j*w*%zd)*%.15e", j, state->buf[k][j] / (state->len * 2));
-			puts(":0/0");
+			puts("):0/0");
 		}
-		else
-			printf("H%d_%d(w)=1.0\n", k, i);
+		else printf("H%d_%d(w)=1.0\n", k, i);
 	}
 }
 
@@ -204,11 +208,15 @@ static void fir_effect_destroy(struct effect *e)
 static void fir_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct fir_state *state = (struct fir_state *) e->data;
-	for (int k = 0; k < e->istream.channels; ++k)
-		if (state->buf[k]) latency[k] += state->len;
+	for (int k = 0; k < e->istream.channels; ++k) {
+		if (state->buf[k]) {
+			latency[k] += state->len;
+			req_delay[k] -= state->ref;
+		}
+	}
 }
 
-struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, int force_direct)
+struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t ref, int force_direct)
 {
 	const int n_channels = num_bits_set(channel_selector, istream->channels);
 	if (filter_channels != 1 && filter_channels != n_channels) {
@@ -234,12 +242,14 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->plot = fir_direct_effect_plot;
 		e->drain_samples = fir_direct_effect_drain_samples;
 		e->destroy = fir_direct_effect_destroy;
+		e->channel_offsets = fir_direct_effect_channel_offsets;
 
 		struct fir_direct_state *state = calloc(1, sizeof(struct fir_direct_state));
 		if (check_alloc(ei->name, state)) goto fail;
 		e->data = state;
 
 		state->filter_frames = filter_frames;
+		state->ref = ref;
 		state->len = 1;
 		while (state->len < filter_frames)
 			state->len <<= 1;
@@ -284,6 +294,7 @@ struct effect * fir_effect_init_with_filter(const struct effect_info *ei, const 
 		e->data = state;
 
 		state->filter_frames = filter_frames;
+		state->ref = ref;
 		state->len = next_fast_fftw_len(filter_frames);
 		LOG_FMT(LL_VERBOSE, "%s: info: filter_frames=%zd fft_len=%zd", ei->name, filter_frames, state->len);
 		state->fr_len = state->len + ((state->len&1)?1:2);
@@ -370,19 +381,8 @@ struct effect * fir_effect_init(const struct effect_info *ei, const struct strea
 	config.p.path = argv[g.ind];
 	sample_t *filter_data = fir_read_filter(ei, istream, channel_selector, dir, &config.p, &filter_channels, &filter_frames);
 	if (!filter_data) return NULL;
-	struct effect *e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, 0);
-	if (!e) goto fail;
 	const ssize_t offset_frames = fir_get_offset(&config, filter_data, filter_channels, filter_frames);
-	if (offset_frames) {
-		struct effect *e_align = delay_effect_init_int(ei->name, istream, channel_selector, -offset_frames);
-		if (!e_align) goto fail;
-		effect_list_append(e, e_align);
-	}
+	struct effect *e = fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, offset_frames, 0);
 	free(filter_data);
 	return e;
-
-	fail:
-	destroy_effect(e);
-	free(filter_data);
-	return NULL;
 }
