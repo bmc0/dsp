@@ -27,6 +27,7 @@ struct effects_chain {
 	struct stream_info istream, ostream;
 	struct { int n, d; } ratio;
 	ssize_t drain_frames, iframes, oframes;
+	ssize_t zero_ref;
 	int delay, frac;
 };
 
@@ -44,7 +45,7 @@ ssize_t get_effects_chain_max_out_frames(struct effects_chain *, ssize_t);
 int effects_chain_needs_dither(struct effects_chain *);
 int effects_chain_set_dither_params(struct effects_chain *, int, int);
 sample_t * run_effects_chain(struct effects_chain *, ssize_t *, sample_t *, sample_t *);
-double get_effects_chain_delay(struct effects_chain *);
+double get_effects_chain_delay(struct effects_chain *, int);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);
 void plot_effects_chain(struct effects_chain *, int);

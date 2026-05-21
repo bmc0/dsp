@@ -592,9 +592,9 @@ static void print_io_info(struct codec *c, int ll, const char *n)
 		n, c->path, c->type, c->enc, c->prec, c->channels, c->fs, c->frames, TIME_FMT_ARGS(c->frames, c->fs));
 }
 
-static void get_delay_sec(double *chain_delay, double *out_delay)
+static void get_delay_sec(double *chain_delay, double *out_delay, int seek)
 {
-	*chain_delay = get_effects_chain_delay(&chain);
+	*chain_delay = get_effects_chain_delay(&chain, seek);
 	*out_delay = (double) codec_write_buf_delay(out_codec_buf) / out_codec->fs;
 }
 
@@ -624,7 +624,7 @@ static void update_progress(ssize_t pos, ssize_t repeats, int is_paused, int for
 #endif
 		struct codec *in = input_list.head->codec;
 		double in_delay_s = 0.0, chain_delay_s, out_delay_s;
-		get_delay_sec(&chain_delay_s, &out_delay_s);
+		get_delay_sec(&chain_delay_s, &out_delay_s, 0);
 		ssize_t delay = get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 		ssize_t p = MAXIMUM(pos - delay, input_list.head->start);
 		ssize_t rem = MAXIMUM(in->frames - p, 0);
@@ -706,7 +706,7 @@ static ssize_t do_seek(ssize_t pos, ssize_t offset, int whence, int pause_state)
 		s = in->frames + offset;
 	else {
 		double chain_delay_s, out_delay_s;
-		get_delay_sec(&chain_delay_s, &out_delay_s);
+		get_delay_sec(&chain_delay_s, &out_delay_s, 1);
 		s = pos + offset - get_delay_frames(in->fs, chain_delay_s, out_delay_s);
 	}
 	if ((s = codec_read_buf_seek(in_codec_buf, s)) >= 0) {
