@@ -49,6 +49,7 @@
 #define ORD_NOTCH_GAIN_1     -8.5
 #define ORD_NOTCH_FREQ_2     12.0
 #define ORD_NOTCH_GAIN_2     -8.5
+#define ORD_NOTCH_SCALE_RT    2.0  /* seconds */
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
 #define ORD_DPWR_SENS_ERR     8.0
@@ -121,6 +122,10 @@ struct matrix_coefs {
 	double lsl, lsr, rsl, rsr;
 };
 
+struct svf_pk_state {
+	double m0, m1, a0, alpha, beta;
+};
+
 struct event_state {
 	char sample, hold;
 	enum {
@@ -131,8 +136,10 @@ struct event_state {
 		EVENT_FLAG_END = 1<<4,
 	} flags[2];
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4], drift_dpwr[4], drift_scale[2], pwrcmp_factor;
-	struct biquad_state ord_flt[6];
+	struct ewma_state drift[4], drift_dpwr[4], drift_scale[2];
+	struct ewma_state pwrcmp_factor, ord_notch_scale;
+	struct biquad_state ord_lp[2];
+	struct svf_pk_state ord_notch[4];
 	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
 	#if ENABLE_LOOKBACK
 		struct axes *diff_buf;
@@ -284,16 +291,6 @@ static inline void calc_input_envs(struct smooth_state *sm, double l, double r, 
 	pwr_env->r = ewma_run(&sm->pwr_env[1], r*r);
 	pwr_env->sum = ewma_run(&sm->pwr_env[2], sum*sum);
 	pwr_env->diff = ewma_run(&sm->pwr_env[3], diff*diff);
-}
-
-static inline void norm_axes(struct axes *ax)
-{
-	const double abs_sum = fabs(ax->lr)+fabs(ax->cs);
-	if (abs_sum > M_PI_4) {
-		const double norm = M_PI_4 / abs_sum;
-		ax->lr *= norm;
-		ax->cs *= norm;
-	}
 }
 
 static inline double phase_flip_pos_rs(struct axes *ax)

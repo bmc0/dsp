@@ -417,8 +417,6 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact*(1.0/(N_BANDS-1)));
 
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev, &band->ax_dpwr);
-				norm_axes(&band->ax);
-				norm_axes(&band->ax_dpwr);
 
 				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;

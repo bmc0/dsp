@@ -361,6 +361,32 @@ void smooth_state_init(struct smooth_state *sm, const struct stream_info *istrea
 	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
+/* SVF based on F. Adriaensen, "Digital State-Variable Filters" */
+static void svf_pk_init(struct svf_pk_state *state, double fs, double f0, double q, double g0)
+{
+	const double w0 = 2*M_PI*f0 / fs;
+	state->a0 = pow(10.0, g0/40.0);
+	state->alpha = sin(w0)/(2.0*q);
+	state->beta = cos(w0)-1.0;
+	state->m0 = state->m1 = 0.0;
+}
+
+static inline double svf_pk_run(struct svf_pk_state *state, double s, double scale)
+{
+	const double alpha = state->alpha, beta = state->beta;
+	const double a = (state->a0-1.0)*scale+1.0;
+	const double k0 = a*alpha, k1 = a*beta;
+	const double g0 = 1.0/(alpha+a), g1 = a/(k1-alpha);
+	const double c1 = 2.0*g0*(alpha-k1), c2 = g1*beta;
+	const double d0 = g0*a*(k0+1.0), d1 = g1*(beta-k0);
+
+	const double x = s - state->m0 - state->m1;
+	const double y = d0*x + d1*state->m0 + state->m1;
+	state->m1 += c2*state->m0;
+	state->m0 += c1*x;
+	return y;
+}
+
 int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_scale)
 {
 	for (int i = 0; i < 6; ++i) ewma_init(&ev->accom[i], fs, EWMA_RISE_TIME(ACCOM_TIME));
@@ -377,12 +403,12 @@ int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_
 	ewma_set(&ev->drift_scale[0], 1.0);
 	ewma_init(&ev->drift_scale[1], fs, EWMA_RISE_TIME(RISE_TIME_FAST*0.3));
 	ewma_init(&ev->pwrcmp_factor, fs, EWMA_RISE_TIME(PWRCMP_RISE_TIME));
-	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->ord_flt[i],
+	ewma_init(&ev->ord_notch_scale, fs, EWMA_RISE_TIME(ORD_NOTCH_SCALE_RT*1000.0));
+	ewma_set(&ev->ord_notch_scale, 1.0);
+	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->ord_lp[i],
 		BIQUAD_LOWPASS, fs, (0.34*1000*1.5)/RISE_TIME_FAST, 0.577, 0, 0, BIQUAD_WIDTH_Q);
-	for (int i = 2; i < 4; ++i) biquad_init_using_type(&ev->ord_flt[i],
-		BIQUAD_PEAK, fs, ORD_NOTCH_FREQ_1, 0.5, ORD_NOTCH_GAIN_1, 0, BIQUAD_WIDTH_Q);
-	for (int i = 4; i < 6; ++i) biquad_init_using_type(&ev->ord_flt[i],
-		BIQUAD_PEAK, fs, ORD_NOTCH_FREQ_2, 0.5, ORD_NOTCH_GAIN_2, 0, BIQUAD_WIDTH_Q);
+	for (int i = 0; i < 2; ++i) svf_pk_init(&ev->ord_notch[i], fs, ORD_NOTCH_FREQ_1, 0.5, ORD_NOTCH_GAIN_1);
+	for (int i = 2; i < 4; ++i) svf_pk_init(&ev->ord_notch[i], fs, ORD_NOTCH_FREQ_2, 0.5, ORD_NOTCH_GAIN_2);
 	ev->t_hold = -2;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME*0.5, fs);
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
@@ -445,11 +471,28 @@ void phase_flip_init_params(struct phase_flip_params *pf, double fs)
 	pf->c[1] = log(0.0005*(44100.0/fs));
 }
 
+static inline void norm_axes(struct axes *ax)
+{
+	const double abs_sum = fabs(ax->lr)+fabs(ax->cs);
+	if (abs_sum > M_PI_4) {
+		const double norm = M_PI_4 / abs_sum;
+		ax->lr *= norm;
+		ax->cs *= norm;
+	}
+}
+
 static inline double drift_err_scale(const struct axes *ax0, const struct axes *ax1, double sens_err)
 {
 	const double lr_err = fabs(ax1->lr - ax0->lr) * M_2_PI;
 	const double cs_err = fabs(ax1->cs - ax0->cs) * M_2_PI;
 	return 1.0 + (lr_err+cs_err)*sens_err;
+}
+
+static inline double ord_notch_scale(const struct axes *ax)
+{
+	double z = (fabs(ax->lr)+fabs(ax->cs))*(2/M_PI_4)-1.0;
+	if (z < 0.0) z = 0.0;
+	return 1.0 - z*z*0.99;
 }
 
 void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env,
@@ -461,13 +504,14 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		.cs = CALC_CS(env->sum, env->diff, env->sum/env->diff),
 	};
 	const struct axes ord_lp = {
-		.lr = biquad(&ev->ord_flt[0], ord.lr),
-		.cs = biquad(&ev->ord_flt[1], ord.cs),
+		.lr = biquad(&ev->ord_lp[0], ord.lr),
+		.cs = biquad(&ev->ord_lp[1], ord.cs),
 	};
 	const struct axes ord_lp_d = ev->ord_lp_buf[ev->buf_p];
+	const double ord_ns = ewma_get_last(&ev->ord_notch_scale);
 	const struct axes ord_lp_d_notched = {
-		.lr = biquad(&ev->ord_flt[4], biquad(&ev->ord_flt[2], ord_lp_d.lr)),
-		.cs = biquad(&ev->ord_flt[5], biquad(&ev->ord_flt[3], ord_lp_d.cs)),
+		.lr = svf_pk_run(&ev->ord_notch[2], svf_pk_run(&ev->ord_notch[0], ord_lp_d.lr, ord_ns), ord_ns),
+		.cs = svf_pk_run(&ev->ord_notch[3], svf_pk_run(&ev->ord_notch[1], ord_lp_d.cs, ord_ns), ord_ns),
 	};
 	const struct envs adapt = {
 		.l = pwr_env->l - ewma_run_set_max(&ev->accom[0], pwr_env->l),
@@ -651,6 +695,9 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ax_dpwr->lr = ewma_set(&ev->drift_dpwr[2], ewma_run_scale(&ev->drift_dpwr[0], ord_lp.lr, ds_dpwr));
 		ax_dpwr->cs = ewma_set(&ev->drift_dpwr[3], ewma_run_scale(&ev->drift_dpwr[1], ord_lp.cs, ds_dpwr));
 	}
+	norm_axes(ax);
+	norm_axes(ax_dpwr);
+	ewma_run_set_max(&ev->ord_notch_scale, ord_notch_scale(ax));
 	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
 	if (l_mask_norm_sm > ds_ord_thresh || r_mask_norm_sm > ds_ord_thresh) {
 		const double x = (MAXIMUM(l_mask_norm_sm, r_mask_norm_sm) - ds_ord_thresh) / (thresh*1.5 - ds_ord_thresh);

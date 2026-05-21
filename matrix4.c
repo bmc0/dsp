@@ -121,8 +121,6 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 		if (1) {
 		#endif
 			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
-			norm_axes(&state->ax);
-			norm_axes(&state->ax_dpwr);
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
