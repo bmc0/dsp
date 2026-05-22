@@ -46,9 +46,9 @@
 #define ORD_SENS_WEIGHT       3.0
 #define ORD_WEIGHT_THRESH     0.3
 #define ORD_NOTCH_FREQ_1      4.0
-#define ORD_NOTCH_GAIN_1     -8.5
+#define ORD_NOTCH_GAIN_1    -10.3
 #define ORD_NOTCH_FREQ_2     12.0
-#define ORD_NOTCH_GAIN_2     -8.5
+#define ORD_NOTCH_GAIN_2    -10.3
 #define ORD_NOTCH_SCALE_RT    2.0  /* seconds */
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
@@ -147,7 +147,7 @@ struct event_state {
 	#endif
 	struct envs *env_buf;
 	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
-	double ord_factor, adj, ds_diff, *ds_ord_buf, *max_buf;
+	double ord_factor, base_ord_ns, adj, ds_diff, *ds_ord_buf, *max_buf;
 	ssize_t t, t_sample, t_hold;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	ssize_t buf_len, buf_p;
@@ -225,7 +225,7 @@ void draw_steering_bar(double, int, struct steering_bar *);
 #endif
 
 /* private functions */
-int event_state_init_priv(struct event_state *, double, double);
+int event_state_init_priv(struct event_state *, double, double, double);
 void event_config_init_priv(struct event_config *, double, double, double);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *,
 	const struct envs *, double, double,
@@ -245,9 +245,10 @@ static inline double smoothstep(double x)
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS
 /* note: must call event_state_cleanup() even on failure */
-static int event_state_init(struct event_state *ev, const struct stream_info *istream, double base_thresh_scale)
+static int event_state_init(struct event_state *ev, const struct stream_info *istream,
+	double base_thresh_scale, double base_ord_notch_scale)
 {
-	return event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale);
+	return event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale, base_ord_notch_scale);
 }
 
 static void event_config_init(struct event_config *evc, const struct stream_info *istream, double rear_ev_mask)

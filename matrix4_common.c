@@ -387,7 +387,7 @@ static inline double svf_pk_run(struct svf_pk_state *state, double s, double sca
 	return y;
 }
 
-int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_scale)
+int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_scale, double base_ord_notch_scale)
 {
 	for (int i = 0; i < 6; ++i) ewma_init(&ev->accom[i], fs, EWMA_RISE_TIME(ACCOM_TIME));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->norm[i], fs, EWMA_RISE_TIME(NORM_TIME));
@@ -403,6 +403,7 @@ int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_
 	ewma_set(&ev->drift_scale[0], 1.0);
 	ewma_init(&ev->drift_scale[1], fs, EWMA_RISE_TIME(RISE_TIME_FAST*0.3));
 	ewma_init(&ev->pwrcmp_factor, fs, EWMA_RISE_TIME(PWRCMP_RISE_TIME));
+	ev->base_ord_ns = base_ord_notch_scale;
 	ewma_init(&ev->ord_notch_scale, fs, EWMA_RISE_TIME(ORD_NOTCH_SCALE_RT*1000.0));
 	ewma_set(&ev->ord_notch_scale, 1.0);
 	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->ord_lp[i],
@@ -508,7 +509,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		.cs = biquad(&ev->ord_lp[1], ord.cs),
 	};
 	const struct axes ord_lp_d = ev->ord_lp_buf[ev->buf_p];
-	const double ord_ns = ewma_get_last(&ev->ord_notch_scale);
+	const double ord_ns = ewma_get_last(&ev->ord_notch_scale)*ev->base_ord_ns;
 	const struct axes ord_lp_d_notched = {
 		.lr = svf_pk_run(&ev->ord_notch[2], svf_pk_run(&ev->ord_notch[0], ord_lp_d.lr, ord_ns), ord_ns),
 		.cs = svf_pk_run(&ev->ord_notch[3], svf_pk_run(&ev->ord_notch[1], ord_lp_d.cs, ord_ns), ord_ns),

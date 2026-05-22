@@ -30,6 +30,8 @@
 #define DOWNSAMPLE_FACTOR 32
 #include "matrix4_common.h"
 
+#define BASE_ORD_NOTCH_SCALE 0.7
+
 struct dyn_shelf_state {
 	sample_t c2, norm, sin_w0, cos_w0_p1;
 	sample_t m0;
@@ -415,8 +417,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	cs_interp_set(&state->m_surr_amb, 1.0);
 	cs_interp_set(&state->m_surr_dir, 0.0);
 	smooth_state_init(&state->sm, istream);
-	if (event_state_init(&state->ev, istream, 1.0))
-		goto fail;
+	if (event_state_init(&state->ev, istream, 1.0, BASE_ORD_NOTCH_SCALE)) goto fail;
 #if DEBUG_POWER_ERROR
 	for (int i = 0; i < 6; ++i) {
 		biquad_init_using_type(&state->pwr_err_bp.lp[i], BIQUAD_LOWPASS, istream->fs, 14000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);

@@ -33,6 +33,7 @@
 #define DIFF_OVERSHOOT    1.01
 #include "matrix4_common.h"
 
+#define BASE_ORD_NOTCH_SCALE_F0 700.0  /* -3dB point; Gaussian lowpass */
 #define EVENT_THRESH_MAX 3.6
 #define EVENT_THRESH_MIN 1.4
 #define N_BANDS 13
@@ -695,8 +696,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double ev_thresh_mult = 1.0-(x/(x+1.0))*1.46*0.6;
 		band->ev_thresh_max = EVENT_THRESH_MAX * ev_thresh_mult;
 		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
-		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH)))
-			goto fail;
+		const double ns_fc = fb_fc[k]/BASE_ORD_NOTCH_SCALE_F0;
+		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH),
+			exp(-3.465735902799727e-01*ns_fc*ns_fc))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
 		const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
