@@ -40,16 +40,16 @@ static int optcmp(const char *opt, const char *name, char sep)
 static void set_fb_stop_default(struct matrix4_config *config)
 {
 	switch (config->fb_type) {
-	case FILTER_BANK_TYPE_BUTTERWORTH:
+	case CAPN_FILTER_BUTTERWORTH:
 		config->fb_stop[0] = 0.0;
 		config->fb_stop[1] = 0.0;
 		break;
-	case FILTER_BANK_TYPE_CHEBYSHEV1:
-	case FILTER_BANK_TYPE_CHEBYSHEV2:
+	case CAPN_FILTER_CHEBYSHEV1:
+	case CAPN_FILTER_CHEBYSHEV2:
 		config->fb_stop[0] = 25.0;
 		config->fb_stop[1] = 0.0;
 		break;
-	case FILTER_BANK_TYPE_ELLIPTIC:
+	case CAPN_FILTER_ELLIPTIC:
 		config->fb_stop[0] = 35.0;
 		config->fb_stop[1] = 50.0;
 		break;
@@ -65,7 +65,7 @@ static void set_fb_stop_default(struct matrix4_config *config)
 		if (opt_arg_len == 0 || strncasecmp(opt_arg, "true", opt_arg_len) == 0) (s) = 1; \
 		else if (strncasecmp(opt_arg, "false", opt_arg_len) == 0) (s) = 0; \
 		else { \
-			LOG_FMT(LL_ERROR, "%s: error: unrecognized argument to option '%s': %s", argv[0], opt, opt_arg); \
+			LOG_FMT(LL_ERROR, "%s: error: unrecognized argument to option '%s': %s", ei->name, opt, opt_arg); \
 			goto opt_fail; \
 		} \
 	} while (0)
@@ -78,11 +78,11 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	char *endptr, *opt_str = NULL;
 
 	if (istream->fs < 32000) {
-		dsp_perror(DSP_ERANGE, argv[0], "input sample rate");
+		dsp_perror(DSP_ERANGE, ei->name, "input sample rate");
 		return 1;
 	}
 	if (num_bits_set(channel_selector, istream->channels) != 2) {
-		dsp_perror(DSP_ERANGE, argv[0], "input channels must be 2");
+		dsp_perror(DSP_ERANGE, ei->name, "input channels must be 2");
 		return 1;
 	}
 
@@ -101,6 +101,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->use_fir_p = USE_FIR_P_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
+	memset(config->fb_id, 0, sizeof(config->fb_id));
 	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
 	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
@@ -140,7 +141,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					else if (strcmp(opt_arg, "none") == 0)
 						config->status_type = STATUS_TYPE_NONE;
 					else {
-						LOG_FMT(LL_ERROR, "%s: error: unrecognized status type: %s", argv[0], opt_arg);
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized status type: %s", ei->name, opt_arg);
 						goto opt_fail;
 					}
 				}
@@ -169,7 +170,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 						}
 					}
 					else {
-						LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", argv[0], opt_arg);
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized matrix identifier: %s", ei->name, opt_arg);
 						goto opt_fail;
 					}
 				}
@@ -184,7 +185,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 							double shelf_gain = strtod(opt_arg, &endptr);
 							CHECK_ENDPTR(opt_arg, endptr, "shelf: gain", goto opt_fail);
 							if (shelf_gain > 0.0)
-								LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", argv[0]);
+								LOG_FMT(LL_ERROR, "%s: warning: shelf gain probably shouldn't be greater than 0dB", ei->name);
 							config->shelf_mult = pow(10.0, shelf_gain / 20.0);
 						}
 					}
@@ -197,7 +198,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 						config->contour_pwrcmp = strtod(opt_subarg1, &endptr);
 						CHECK_ENDPTR(opt_subarg1, endptr, "shelf: pwrcmp", goto opt_fail);
 						CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, "shelf: pwrcmp", goto opt_fail);
-						LOG_FMT(LL_ERROR, "%s: warning: shelf: pwrcmp argument deprecated; use contour_pwrcmp option instead", argv[0]);
+						LOG_FMT(LL_ERROR, "%s: warning: shelf: pwrcmp argument deprecated; use contour_pwrcmp option instead", ei->name);
 					}
 				}
 				else if (is_opt(opt, "lowpass=")) {
@@ -239,36 +240,42 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					config->surr_delay_frames = parse_len(opt_arg, istream->fs, &endptr);
 					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
 				}
+				else if (is_opt(opt, "filter_bank=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (!is_mb) goto mb_only;
+					if (*opt_arg == '\0') goto needs_arg;
+					strncpy(config->fb_id, opt_arg, LENGTH(config->fb_id)-1);
+				}
 				else if (is_opt(opt, "filter_type=")) {
 					char *opt_arg = isolate(opt, '=');
 					if (!is_mb) goto mb_only;
 					if (*opt_arg == '\0') goto needs_arg;
 					if (is_opt_arg(opt_arg, "butterworth"))
-						config->fb_type = FILTER_BANK_TYPE_BUTTERWORTH;
+						config->fb_type = CAPN_FILTER_BUTTERWORTH;
 					else if (is_opt_arg(opt_arg, "chebyshev1:"))
-						config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV1;
+						config->fb_type = CAPN_FILTER_CHEBYSHEV1;
 					else if (is_opt_arg(opt_arg, "chebyshev2:"))
-						config->fb_type = FILTER_BANK_TYPE_CHEBYSHEV2;
+						config->fb_type = CAPN_FILTER_CHEBYSHEV2;
 					else if (is_opt_arg(opt_arg, "elliptic:"))
-						config->fb_type = FILTER_BANK_TYPE_ELLIPTIC;
+						config->fb_type = CAPN_FILTER_ELLIPTIC;
 					else {
-						LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", argv[0], opt_arg);
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized filter bank type: %s", ei->name, opt_arg);
 						goto opt_fail;
 					}
 					set_fb_stop_default(config);
 					char *opt_subarg = isolate(opt_arg, ':'), *opt_subarg1;
 					if (*opt_subarg != '\0') {
 						switch (config->fb_type) {
-						case FILTER_BANK_TYPE_CHEBYSHEV1:
-						case FILTER_BANK_TYPE_CHEBYSHEV2:
+						case CAPN_FILTER_CHEBYSHEV1:
+						case CAPN_FILTER_CHEBYSHEV2:
 							config->fb_stop[0] = strtod(opt_subarg, &endptr);
 							CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto opt_fail);
 							if (config->fb_stop[0] < 10.0) {
-								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", argv[0], opt_arg);
+								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 10dB", ei->name, opt_arg);
 								goto opt_fail;
 							}
 							break;
-						case FILTER_BANK_TYPE_ELLIPTIC:
+						case CAPN_FILTER_ELLIPTIC:
 							opt_subarg1 = isolate(opt_subarg, ':');
 							config->fb_stop[0] = strtod(opt_subarg, &endptr);
 							CHECK_ENDPTR(opt_subarg, endptr, "stop_dB", goto opt_fail);
@@ -278,11 +285,11 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 							}
 							else config->fb_stop[1] = config->fb_stop[0];
 							if (config->fb_stop[0] < 20.0 || config->fb_stop[1] < 20.0) {
-								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 20dB", argv[0], opt_arg);
+								LOG_FMT(LL_ERROR, "%s: error: %s: stopband attenuation must be at least 20dB", ei->name, opt_arg);
 								goto opt_fail;
 							}
 							break;
-						case FILTER_BANK_TYPE_BUTTERWORTH:
+						case CAPN_FILTER_BUTTERWORTH:
 							break; /* no params */
 						}
 					}
@@ -317,7 +324,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					char *path = construct_full_path(dir, opt_arg, istream->fs, config->n_channels);
 					config->pwr_err_file = fopen(path, "w");
 					if (!config->pwr_err_file) {
-						LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", argv[0], path);
+						LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", ei->name, path);
 						free(path);
 						goto opt_fail;
 					}
@@ -325,13 +332,13 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 				}
 			#endif
 				else {
-					LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", argv[0], opt);
+					LOG_FMT(LL_ERROR, "%s: error: unrecognized option: %s", ei->name, opt);
 					goto opt_fail;
 					needs_arg:
-					LOG_FMT(LL_ERROR, "%s: error: option requires argument: %s", argv[0], opt);
+					LOG_FMT(LL_ERROR, "%s: error: option requires argument: %s", ei->name, opt);
 					goto opt_fail;
 					mb_only:
-					LOG_FMT(LL_ERROR, "%s: warning: ignoring option: %s", argv[0], opt);
+					LOG_FMT(LL_ERROR, "%s: warning: ignoring option: %s", ei->name, opt);
 				}
 				opt = next_opt;
 			}
@@ -342,9 +349,9 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
 	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);
 	if (config->surr_mult[0] > 1.0 || config->surr_mult[1] > 1.0)
-		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: surround levels probably shouldn't be greater than 0dB", ei->name);
 	if (config->surr_mult[0] > config->surr_mult[1])
-		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", argv[0]);
+		LOG_FMT(LL_ERROR, "%s: warning: surround_level_rear probably shouldn't be lower than surround_level", ei->name);
 
 	config->c0 = config->c1 = -1;
 	for (int i = 0; i < istream->channels; ++i) {

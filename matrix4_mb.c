@@ -21,13 +21,9 @@
 #include <complex.h>
 #include <math.h>
 #include "matrix4_mb.h"
-#include "biquad.h"
-#include "cap5.h"
-#include "allpass.h"
 #include "util.h"
 #include "fir.h"
 #include "fir_p.h"
-#include "smf.h"
 
 #define DOWNSAMPLE_FACTOR 32
 #define NORM_ACCOM_FACTOR 0.6
@@ -37,52 +33,19 @@
 #define BASE_ORD_NOTCH_SCALE_F0 700.0  /* -3dB point; Gaussian lowpass */
 #define EVENT_THRESH_MAX 3.6
 #define EVENT_THRESH_MIN 1.4
-#define N_BANDS 13
 
-#if N_BANDS == 11
-static const double fb_fdiv[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200 };
-static const double fb_fc[]     = { 114.68, 245.92, 427.29, 677.97, 1024.4, 1503.2, 2165, 3079.5, 4343.5, 6090.3, 8504.6 };
-static const int    fb_ap_idx[] = { 5, 6, 7, 8, 9, 3, 2, 1, 0, 2, 3, 0, 3, 8, 9, 6, 5, 6, 9 };
-#define BAND_WEIGHT_IDX_MULT 1.0
-#elif N_BANDS == 12
-static const double fb_fdiv[]   = { 175, 329.29, 542.52, 837.21, 1244.5, 1807.4, 2585.3, 3660.5, 5146.4, 7200, 10038 };
-static const double fb_fc[]     = { 114.68, 245.92, 427.29, 677.97, 1024.4, 1503.2, 2165, 3079.5, 4343.5, 6090.3, 8504.6, 11841 };
-static const int    fb_ap_idx[] = { 6, 7, 8, 9, 10, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 7, 6, 7, 10 };
-#define BAND_WEIGHT_IDX_MULT 1.0
-#elif N_BANDS == 13
-static const double fb_fdiv[]   = { 170, 316.39, 516.52, 790.1, 1164.1, 1675.4, 2374.3, 3329.8, 4636.1, 6421.7, 8862.9, 12200 };
-static const double fb_fc[]     = { 112.28, 237.49, 408.65, 642.64, 962.52, 1399.8, 1997.6, 2814.8, 3932, 5459.3, 7547.1, 10401, 14303 };
-static const int    fb_ap_idx[] = { 6, 7, 8, 9, 10, 11, 4, 3, 2, 1, 0, 3, 4, 1, 0, 1, 4, 9, 10, 11, 7, 6, 7, 11, 9 };
-#define BAND_WEIGHT_IDX_MULT 0.95
-#else
-#error "unsupported number of bands"
-#endif
-
-static const double fshape_lf[] = { 10, M_SQRT1_2, 180, 0.4 };
-static const double fshape_hf[] = { 0.46, 0.5, 14000, 0.5 };  /* note: [0] is multiplied by fs */
-
-#define PHASE_LIN_MAX_LEN      50.0  /* maximum filter length in milliseconds */
-#define PHASE_LIN_TRUNC_THRESH 1e-6  /* truncation threshold */
-
+#define PHASE_LIN_TRUNC_THRESH 1e-6
 #define DO_FILTER_BANK_TEST 0
 
-#ifndef BAND_WEIGHT_IDX_MULT
-	#define BAND_WEIGHT_IDX_MULT (11.0/N_BANDS)
+#if DEBUG_POWER_ERROR
+	#include "smf.h"
 #endif
+#include "matrix4_filter_bank.c"
 
-struct fshape_state {
-	struct biquad_state lf, hf;
-};
-
-struct filter_bank_frame {
-	sample_t s[N_BANDS];
-};
-
-struct filter_bank {
-	struct cap5_state f[LENGTH(fb_fdiv)];
-	struct ap2_state ap[LENGTH(fb_ap_idx)];
-	sample_t s[N_BANDS];
-};
+#define REPORT_EVENT_LEVELS 0
+#define EVENT_TARGET_BASE   (EVENT_THRESH_MAX*0.15)
+#define EVENT_TARGET_EXP1   0.17
+#define EVENT_TARGET_EXP2   0.28
 
 struct matrix4_band {
 	struct smooth_state sm;
@@ -101,6 +64,11 @@ struct matrix4_band {
 	struct ewma_state pwr_err[2];
 	struct smf_state pwr_err_sm;
 #endif
+#if REPORT_EVENT_LEVELS
+	double evl_sum_sq, evl_pk;
+	ssize_t evl_samples;
+	const struct filter_bank_params *fbp;
+#endif
 #ifdef DSP_STATUSLINES
 	struct steering_bar lr_bar, cs_bar;
 	struct statusline_state statusline;
@@ -108,13 +76,13 @@ struct matrix4_band {
 };
 
 struct matrix4_mb_state {
-	int s, c0, c1;
+	int s, c0, c1, n_bands;
 	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple;
 	enum status_type status_type;
 	struct fshape_state fshape[2], inv_fshape[6];
 	struct filter_bank fb[2];
-	struct matrix4_band band[N_BANDS];
-	struct filter_bank_frame *fb_buf[2];
+	struct matrix4_band band[FB_MAX_BANDS];
+	sample_t *fb_buf[2];
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
@@ -129,185 +97,6 @@ struct matrix4_mb_state {
 #endif
 };
 
-static void fshape_filter_init(struct biquad_state *b, double fs, const double p[4], int is_hf, int is_inv)
-{
-	const int type = (is_hf) ? BIQUAD_LOWPASS_TRANSFORM : BIQUAD_HIGHPASS_TRANSFORM;
-	const double f0 = (is_hf) ? fs*p[0] : p[0];
-	if (is_inv) biquad_init_using_type(b, type, fs, p[2], p[3], f0, p[1], BIQUAD_WIDTH_Q);
-	else biquad_init_using_type(b, type, fs, f0, p[1], p[2], p[3], BIQUAD_WIDTH_Q);
-}
-
-static void fshape_init(struct fshape_state *state, double fs, const double lfp[4], const double hfp[4], int is_inv)
-{
-	fshape_filter_init(&state->lf, fs, lfp, 0, is_inv);
-	fshape_filter_init(&state->hf, fs, hfp, 1, is_inv);
-}
-
-static inline sample_t fshape_run(struct fshape_state *state, sample_t s)
-{
-	return biquad(&state->hf, biquad(&state->lf, s));
-}
-
-static void filter_bank_init(struct filter_bank *fb, double fs, enum filter_bank_type fb_type, double fb_stop[2])
-{
-	double complex ap[3];
-	switch (fb_type) {
-	case FILTER_BANK_TYPE_BUTTERWORTH:
-		cap5_butterworth_ap(ap);
-		break;
-	case FILTER_BANK_TYPE_CHEBYSHEV1:
-		cap5_chebyshev_ap(0, fb_stop[0], ap);
-		break;
-	case FILTER_BANK_TYPE_CHEBYSHEV2:
-		cap5_chebyshev_ap(1, fb_stop[0], ap);
-		break;
-	case FILTER_BANK_TYPE_ELLIPTIC:
-		cap5_elliptic_ap(fb_stop[0], fb_stop[1], ap);
-		break;
-	}
-	for (int i = 0; i < LENGTH(fb_fdiv); ++i)
-		cap5_init(&fb->f[i], fs, fb_fdiv[i], ap);
-	for (int i = 0; i < LENGTH(fb_ap_idx); ++i)
-		fb->ap[i] = fb->f[fb_ap_idx[i]].a1;
-}
-
-static void filter_bank_run(struct filter_bank *fb, sample_t s)
-{
-#if N_BANDS == 11
-	cap5_run(&fb->f[4], s, &fb->s[4], &fb->s[5]);  /* split at xover 4 (1244.5Hz) */
-	fb->s[4] = ap2_run(&fb->ap[0], fb->s[4]);  /* xover 5 ap */
-	fb->s[4] = ap2_run(&fb->ap[1], fb->s[4]);  /* xover 6 ap */
-	fb->s[4] = ap2_run(&fb->ap[2], fb->s[4]);  /* xover 7 ap */
-	fb->s[4] = ap2_run(&fb->ap[3], fb->s[4]);  /* xover 8 ap */
-	fb->s[4] = ap2_run(&fb->ap[4], fb->s[4]);  /* xover 9 ap */
-	fb->s[5] = ap2_run(&fb->ap[5], fb->s[5]);  /* xover 3 ap */
-	fb->s[5] = ap2_run(&fb->ap[6], fb->s[5]);  /* xover 2 ap */
-	fb->s[5] = ap2_run(&fb->ap[7], fb->s[5]);  /* xover 1 ap */
-	fb->s[5] = ap2_run(&fb->ap[8], fb->s[5]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[1], fb->s[4], &fb->s[1], &fb->s[2]);  /* split at xover 1 (329.29Hz) */
-	fb->s[1] = ap2_run(&fb->ap[9], fb->s[1]);  /* xover 2 ap */
-	fb->s[1] = ap2_run(&fb->ap[10], fb->s[1]);  /* xover 3 ap */
-	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[0], fb->s[1], &fb->s[0], &fb->s[1]);  /* split at xover 0 (175Hz) */
-
-	cap5_run(&fb->f[2], fb->s[2], &fb->s[2], &fb->s[3]);  /* split at xover 2 (542.52Hz) */
-	fb->s[2] = ap2_run(&fb->ap[12], fb->s[2]);  /* xover 3 ap */
-
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (837.21Hz) */
-
-	cap5_run(&fb->f[7], fb->s[5], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3660.5Hz) */
-	fb->s[7] = ap2_run(&fb->ap[13], fb->s[7]);  /* xover 8 ap */
-	fb->s[7] = ap2_run(&fb->ap[14], fb->s[7]);  /* xover 9 ap */
-	fb->s[8] = ap2_run(&fb->ap[15], fb->s[8]);  /* xover 6 ap */
-	fb->s[8] = ap2_run(&fb->ap[16], fb->s[8]);  /* xover 5 ap */
-
-	cap5_run(&fb->f[5], fb->s[7], &fb->s[5], &fb->s[6]);  /* split at xover 5 (1807.4Hz) */
-	fb->s[5] = ap2_run(&fb->ap[17], fb->s[5]);  /* xover 6 ap */
-
-	cap5_run(&fb->f[6], fb->s[6], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2585.3Hz) */
-
-	cap5_run(&fb->f[8], fb->s[8], &fb->s[8], &fb->s[9]);  /* split at xover 8 (5146.4Hz) */
-	fb->s[8] = ap2_run(&fb->ap[18], fb->s[8]);  /* xover 9 ap */
-
-	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (7200Hz) */
-#elif N_BANDS == 12
-	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1807.4Hz) */
-	fb->s[5] = ap2_run(&fb->ap[0], fb->s[5]);  /* xover 6 ap */
-	fb->s[5] = ap2_run(&fb->ap[1], fb->s[5]);  /* xover 7 ap */
-	fb->s[5] = ap2_run(&fb->ap[2], fb->s[5]);  /* xover 8 ap */
-	fb->s[5] = ap2_run(&fb->ap[3], fb->s[5]);  /* xover 9 ap */
-	fb->s[5] = ap2_run(&fb->ap[4], fb->s[5]);  /* xover 10 ap */
-	fb->s[6] = ap2_run(&fb->ap[5], fb->s[6]);  /* xover 4 ap */
-	fb->s[6] = ap2_run(&fb->ap[6], fb->s[6]);  /* xover 3 ap */
-	fb->s[6] = ap2_run(&fb->ap[7], fb->s[6]);  /* xover 2 ap */
-	fb->s[6] = ap2_run(&fb->ap[8], fb->s[6]);  /* xover 1 ap */
-	fb->s[6] = ap2_run(&fb->ap[9], fb->s[6]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (542.52Hz) */
-	fb->s[2] = ap2_run(&fb->ap[10], fb->s[2]);  /* xover 3 ap */
-	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 4 ap */
-	fb->s[3] = ap2_run(&fb->ap[12], fb->s[3]);  /* xover 1 ap */
-	fb->s[3] = ap2_run(&fb->ap[13], fb->s[3]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (175Hz) */
-	fb->s[0] = ap2_run(&fb->ap[14], fb->s[0]);  /* xover 1 ap */
-
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (329.29Hz) */
-
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (837.21Hz) */
-	fb->s[3] = ap2_run(&fb->ap[15], fb->s[3]);  /* xover 4 ap */
-
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1244.5Hz) */
-
-	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (5146.4Hz) */
-	fb->s[8] = ap2_run(&fb->ap[16], fb->s[8]);  /* xover 9 ap */
-	fb->s[8] = ap2_run(&fb->ap[17], fb->s[8]);  /* xover 10 ap */
-	fb->s[9] = ap2_run(&fb->ap[18], fb->s[9]);  /* xover 7 ap */
-	fb->s[9] = ap2_run(&fb->ap[19], fb->s[9]);  /* xover 6 ap */
-
-	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2585.3Hz) */
-	fb->s[6] = ap2_run(&fb->ap[20], fb->s[6]);  /* xover 7 ap */
-
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3660.5Hz) */
-
-	cap5_run(&fb->f[9], fb->s[9], &fb->s[9], &fb->s[10]);  /* split at xover 9 (7200Hz) */
-	fb->s[9] = ap2_run(&fb->ap[21], fb->s[9]);  /* xover 10 ap */
-
-	cap5_run(&fb->f[10], fb->s[10], &fb->s[10], &fb->s[11]);  /* split at xover 10 (10038Hz) */
-#elif N_BANDS == 13
-	cap5_run(&fb->f[5], s, &fb->s[5], &fb->s[6]);  /* split at xover 5 (1675.4Hz) */
-	fb->s[5] = ap2_run(&fb->ap[0], fb->s[5]);  /* xover 6 ap */
-	fb->s[5] = ap2_run(&fb->ap[1], fb->s[5]);  /* xover 7 ap */
-	fb->s[5] = ap2_run(&fb->ap[2], fb->s[5]);  /* xover 8 ap */
-	fb->s[5] = ap2_run(&fb->ap[3], fb->s[5]);  /* xover 9 ap */
-	fb->s[5] = ap2_run(&fb->ap[4], fb->s[5]);  /* xover 10 ap */
-	fb->s[5] = ap2_run(&fb->ap[5], fb->s[5]);  /* xover 11 ap */
-	fb->s[6] = ap2_run(&fb->ap[6], fb->s[6]);  /* xover 4 ap */
-	fb->s[6] = ap2_run(&fb->ap[7], fb->s[6]);  /* xover 3 ap */
-	fb->s[6] = ap2_run(&fb->ap[8], fb->s[6]);  /* xover 2 ap */
-	fb->s[6] = ap2_run(&fb->ap[9], fb->s[6]);  /* xover 1 ap */
-	fb->s[6] = ap2_run(&fb->ap[10], fb->s[6]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[2], fb->s[5], &fb->s[2], &fb->s[3]);  /* split at xover 2 (516.52Hz) */
-	fb->s[2] = ap2_run(&fb->ap[11], fb->s[2]);  /* xover 3 ap */
-	fb->s[2] = ap2_run(&fb->ap[12], fb->s[2]);  /* xover 4 ap */
-	fb->s[3] = ap2_run(&fb->ap[13], fb->s[3]);  /* xover 1 ap */
-	fb->s[3] = ap2_run(&fb->ap[14], fb->s[3]);  /* xover 0 ap */
-
-	cap5_run(&fb->f[0], fb->s[2], &fb->s[0], &fb->s[1]);  /* split at xover 0 (170Hz) */
-	fb->s[0] = ap2_run(&fb->ap[15], fb->s[0]);  /* xover 1 ap */
-
-	cap5_run(&fb->f[1], fb->s[1], &fb->s[1], &fb->s[2]);  /* split at xover 1 (316.39Hz) */
-
-	cap5_run(&fb->f[3], fb->s[3], &fb->s[3], &fb->s[4]);  /* split at xover 3 (790.1Hz) */
-	fb->s[3] = ap2_run(&fb->ap[16], fb->s[3]);  /* xover 4 ap */
-
-	cap5_run(&fb->f[4], fb->s[4], &fb->s[4], &fb->s[5]);  /* split at xover 4 (1164.1Hz) */
-
-	cap5_run(&fb->f[8], fb->s[6], &fb->s[8], &fb->s[9]);  /* split at xover 8 (4636.1Hz) */
-	fb->s[8] = ap2_run(&fb->ap[17], fb->s[8]);  /* xover 9 ap */
-	fb->s[8] = ap2_run(&fb->ap[18], fb->s[8]);  /* xover 10 ap */
-	fb->s[8] = ap2_run(&fb->ap[19], fb->s[8]);  /* xover 11 ap */
-	fb->s[9] = ap2_run(&fb->ap[20], fb->s[9]);  /* xover 7 ap */
-	fb->s[9] = ap2_run(&fb->ap[21], fb->s[9]);  /* xover 6 ap */
-
-	cap5_run(&fb->f[6], fb->s[8], &fb->s[6], &fb->s[7]);  /* split at xover 6 (2374.3Hz) */
-	fb->s[6] = ap2_run(&fb->ap[22], fb->s[6]);  /* xover 7 ap */
-
-	cap5_run(&fb->f[7], fb->s[7], &fb->s[7], &fb->s[8]);  /* split at xover 7 (3329.8Hz) */
-
-	cap5_run(&fb->f[10], fb->s[9], &fb->s[10], &fb->s[11]);  /* split at xover 10 (8862.9Hz) */
-	fb->s[10] = ap2_run(&fb->ap[23], fb->s[10]);  /* xover 11 ap */
-	fb->s[11] = ap2_run(&fb->ap[24], fb->s[11]);  /* xover 9 ap */
-
-	cap5_run(&fb->f[9], fb->s[10], &fb->s[9], &fb->s[10]);  /* split at xover 9 (6421.7Hz) */
-
-	cap5_run(&fb->f[11], fb->s[11], &fb->s[11], &fb->s[12]);  /* split at xover 11 (12200Hz) */
-#endif
-}
-
 #if DO_FILTER_BANK_TEST
 static sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -315,10 +104,10 @@ static sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frame
 	for (ssize_t i = 0; i < *frames; ++i) {
 		const double s0 = fshape_run(&state->fshape[0], ibuf[i*e->istream.channels + state->c0]);
 		const double s1 = fshape_run(&state->fshape[1], ibuf[i*e->istream.channels + state->c1]);
-		filter_bank_run(&state->fb[0], s0);
-		filter_bank_run(&state->fb[1], s1);
+		state->fb[0].run(&state->fb[0], s0);
+		state->fb[1].run(&state->fb[1], s1);
 		double out_l = 0.0, out_r = 0.0, out_s = 0.0;
-		for (int k = 0; k < N_BANDS; ++k) {
+		for (int k = 0; k < state->n_bands; ++k) {
 			struct matrix4_band *band = &state->band[k];
 			const double ct1 = (band->contour-1.0)*state->contour_pwrcmp + 1.0;
 			const double norm_mult = CALC_NORM_MULT(state->surr_mult[0]*ct1);
@@ -338,9 +127,9 @@ static sample_t * matrix4_mb_test_fb_effect_run(struct effect *e, ssize_t *frame
 				obuf[i*e->ostream.channels + k] = ibuf[i*e->istream.channels + k];
 		}
 		double s0_fb_fm = 0.0;
-		for (int k = 0; k < N_BANDS; ++k)
+		for (int k = 0; k < state->n_bands; ++k)
 			obuf[i*e->ostream.channels + e->istream.channels + k] = s0_fb_fm = state->fb[0].s[k] + state->freq_mask*s0_fb_fm;
-		obuf[i*e->ostream.channels + e->istream.channels + N_BANDS] = out_s;
+		obuf[i*e->ostream.channels + e->istream.channels + state->n_bands] = out_s;
 	}
 	return obuf;
 }
@@ -364,12 +153,12 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		else if (state->disable) cur_fade_mult = 0.0;
 
 		int n_angles = 0;
-		struct axes angles[N_BANDS];
+		struct axes angles[FB_MAX_BANDS];
 		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0, out_ls_dir = 0.0, out_rs_dir = 0.0;
 		const sample_t s0 = fshape_run(&state->fshape[0], ibuf[i*e->istream.channels + state->c0]);
 		const sample_t s1 = fshape_run(&state->fshape[1], ibuf[i*e->istream.channels + state->c1]);
-		filter_bank_run(&state->fb[0], s0);
-		filter_bank_run(&state->fb[1], s1);
+		state->fb[0].run(&state->fb[0], s0);
+		state->fb[1].run(&state->fb[1], s1);
 		#if DOWNSAMPLE_FACTOR > 1
 		state->s = (state->s + 1 >= DOWNSAMPLE_FACTOR) ? 0 : state->s + 1;
 		if (state->s == 0) {
@@ -377,7 +166,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		if (1) {
 		#endif
 			/* find bands with possible events */
-			for (int k = 0; k < N_BANDS; ++k) {
+			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
 				struct event_state *ev = &band->ev;
 				if ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
@@ -385,14 +174,15 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					angles[n_angles++] = ev->diff_last;
 			}
 		}
+		const ssize_t fb_buf_fp = state->fb_buf_p*state->n_bands;
 		sample_t s0_fb_fm = 0.0, s1_fb_fm = 0.0;
-		for (int k = 0; k < N_BANDS; ++k) {
+		for (int k = 0; k < state->n_bands; ++k) {
 			struct matrix4_band *band = &state->band[k];
 
 			s0_fb_fm = state->fb[0].s[k] + state->freq_mask*s0_fb_fm;
 			s1_fb_fm = state->fb[1].s[k] + state->freq_mask*s1_fb_fm;
-			const sample_t s0_d_fb = state->fb_buf[0][state->fb_buf_p].s[k];
-			const sample_t s1_d_fb = state->fb_buf[1][state->fb_buf_p].s[k];
+			const sample_t s0_d_fb = state->fb_buf[0][fb_buf_fp+k];
+			const sample_t s1_d_fb = state->fb_buf[1][fb_buf_fp+k];
 
 			struct envs env, pwr_env;
 			calc_input_envs(&band->sm, s0_fb_fm, s1_fb_fm, &env, &pwr_env);
@@ -416,9 +206,18 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					ev_thresh_fact -= 1.0;
 				}
 				const double ev_thresh = ewma_run_set_max(&band->ev_thresh,
-					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact*(1.0/(N_BANDS-1)));
+					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev, &band->ax_dpwr);
+				#if REPORT_EVENT_LEVELS
+					if (band->evl_samples >= 0) {
+						band->evl_sum_sq += ev->last[0]*ev->last[0];
+						band->evl_sum_sq += ev->last[1]*ev->last[1];
+						band->evl_pk = MAXIMUM(band->evl_pk, ev->last[0]);
+						band->evl_pk = MAXIMUM(band->evl_pk, ev->last[1]);
+					}
+					band->evl_samples += 2;
+				#endif
 
 				const double w = smoothstep(band->ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
@@ -470,7 +269,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				const double pwr_ratio = MAXIMUM(pwr_out, DBL_MIN)/MAXIMUM(pwr_in, DBL_MIN);
 				const double pwr_ratio_sm = smf_run(&band->pwr_err_sm, pwr_ratio);
 				if (state->s == 0 && state->pwr_err_file)
-					fprintf(state->pwr_err_file, "%.15e%c", pwr_ratio_sm, (k==N_BANDS-1)?'\n':' ');
+					fprintf(state->pwr_err_file, "%.15e%c", pwr_ratio_sm, (k==state->n_bands-1)?'\n':' ');
 			}
 		#endif
 
@@ -494,8 +293,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				out_rs += b_rs_pf;
 			}
 
-			state->fb_buf[0][state->fb_buf_p].s[k] = state->fb[0].s[k];
-			state->fb_buf[1][state->fb_buf_p].s[k] = state->fb[1].s[k];
+			state->fb_buf[0][fb_buf_fp+k] = state->fb[0].s[k];
+			state->fb_buf[1][fb_buf_fp+k] = state->fb[1].s[k];
 		}
 
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
@@ -523,12 +322,12 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 	if (state->status_type) {
 		dsp_statuslines_acquire();
 		if (!state->statuslines_registered) {
-			for (int i = 0; i < N_BANDS; ++i)
+			for (int i = 0; i < state->n_bands; ++i)
 				dsp_statusline_register(&state->band[i].statusline);
 			state->statuslines_registered = 1;
 		}
 		if (state->status_type == STATUS_TYPE_TEXT) {
-			for (int i = 0; i < N_BANDS; ++i) {
+			for (int i = 0; i < state->n_bands; ++i) {
 				struct matrix4_band *band = &state->band[i];
 				snprintf(band->statusline.s, LENGTH(band->statusline.s),
 					"%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
@@ -547,7 +346,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			}
 		}
 		else {
-			for (int i = 0; i < N_BANDS; ++i) {
+			for (int i = 0; i < state->n_bands; ++i) {
 				struct matrix4_band *band = &state->band[i];
 				draw_steering_bar(band->ax.lr, band->ev.hold, &band->lr_bar);
 				draw_steering_bar(band->ax.cs, band->ev.hold, &band->cs_bar);
@@ -575,8 +374,10 @@ static void matrix4_mb_effect_reset(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	state->fb_buf_p = 0;
-	memset(state->fb_buf[0], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
-	memset(state->fb_buf[1], 0, state->fb_buf_len * sizeof(struct filter_bank_frame));
+	memset(state->fb_buf[0], 0, state->fb_buf_len * sizeof(sample_t) * state->n_bands);
+	memset(state->fb_buf[1], 0, state->fb_buf_len * sizeof(sample_t) * state->n_bands);
+	filter_bank_reset(&state->fb[0]);
+	filter_bank_reset(&state->fb[1]);
 }
 
 static void matrix4_mb_effect_signal(struct effect *e)
@@ -602,7 +403,7 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	free(state->fb_buf[0]);
 	free(state->fb_buf[1]);
-	for (int i = 0; i < N_BANDS; ++i)
+	for (int i = 0; i < state->n_bands; ++i)
 		event_state_cleanup(&state->band[i].ev);
 #if DEBUG_POWER_ERROR
 	if (state->pwr_err_file)
@@ -611,9 +412,30 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 #ifdef DSP_STATUSLINES
 	if (state->statuslines_registered) {
 		dsp_statuslines_acquire();
-		for (int i = 0; i < N_BANDS; ++i)
+		for (int i = 0; i < state->n_bands; ++i)
 			dsp_statusline_unregister(&state->band[i].statusline);
 		dsp_statuslines_release();
+	}
+#endif
+#if REPORT_EVENT_LEVELS
+	if (state->band[0].evl_samples > 0) {
+		dsp_log_acquire();
+		dsp_log_printf("%s: %s: event trigger levels (dBr):\n", dsp_globals.prog_name, e->name);
+		for (int i = 0; i < state->n_bands; ++i) {
+			struct matrix4_band *band = &state->band[i];
+			const double pk_dBr = 20.0*log10(band->evl_pk/band->ev_thresh_max);
+			const double rms_dBr = 20.0*log10(sqrt(band->evl_sum_sq/band->evl_samples)/band->ev_thresh_max);
+			dsp_log_printf("  band %d: peak: %g; RMS: %g; crest: %g\n", i, pk_dBr, rms_dBr, pk_dBr-rms_dBr);
+		}
+		dsp_log_printf("%s: %s: suggested thresh_scale:\n  {", dsp_globals.prog_name, e->name);
+		for (int i = 0; i < state->n_bands; ++i) {
+			struct matrix4_band *band = &state->band[i];
+			const double norm_fc = band->fbp->fc[i]/700.0, ws = band->fbp->width_scale;
+			const double rms_target = EVENT_TARGET_BASE*pow(1.0/(1.0+norm_fc*norm_fc), EVENT_TARGET_EXP1)/pow(ws, EVENT_TARGET_EXP2);
+			dsp_log_printf(" %.3g%c", sqrt(band->evl_sum_sq/band->evl_samples)/rms_target, (i < state->n_bands-1) ? ',' : ' ');
+		}
+		dsp_log_puts("}\n");
+		dsp_log_release();
 	}
 #endif
 	free(state);
@@ -647,9 +469,27 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	struct effect *e = NULL;
 	struct matrix4_mb_state *state = NULL;
 	struct matrix4_config config = {0};
+	const struct filter_bank_params *fbp = &fb_params[0];
 
 	if (matrix4_config_init(ei, istream, channel_selector, dir, argc, argv, 1, &config))
 		goto fail;  /* may need to close config.pwr_err_file */
+	if (config.fb_id[0]) {
+		fbp = NULL;
+		for (int i = 0; i < LENGTH(fb_params); ++i) {
+			if (strcmp(config.fb_id, fb_params[i].id) == 0) {
+				fbp = &fb_params[i];
+				break;
+			}
+		}
+		if (!fbp) {
+			LOG_FMT(LL_ERROR, "%s: error: unknown filter bank id: %s", ei->name, config.fb_id);
+			goto fail;
+		}
+	}
+	if (istream->fs < fbp->min_fs) {
+		dsp_perror(DSP_ERANGE, ei->name, "input sample rate");
+		goto fail;
+	}
 
 	e = calloc(1, sizeof(struct effect));
 	if (check_alloc(ei->name, e)) goto fail;
@@ -657,7 +497,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->istream.fs = e->ostream.fs = istream->fs;
 #if DO_FILTER_BANK_TEST
 	e->istream.channels = istream->channels;
-	e->ostream.channels = istream->channels + N_BANDS + 1;
+	e->ostream.channels = istream->channels + fbp->n_bands + 1;
 	e->run = matrix4_mb_test_fb_effect_run;
 	e->destroy = matrix4_mb_test_fb_effect_destroy;
 #else
@@ -676,6 +516,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
+	state->n_bands = fbp->n_bands;
 	state->surr_delay_frames = config.surr_delay_frames;
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
@@ -690,14 +531,13 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #endif
 
 	phase_flip_init_params(&state->pf_params, istream->fs);
-	for (int k = 0; k < N_BANDS; ++k) {
+	for (int k = 0; k < state->n_bands; ++k) {
 		struct matrix4_band *band = &state->band[k];
 		smooth_state_init(&band->sm, istream);
-		const double x = MAXIMUM(k-1, 0)*0.15*BAND_WEIGHT_IDX_MULT;
-		const double ev_thresh_mult = 1.0-(x/(x+1.0))*1.46*0.6;
-		band->ev_thresh_max = EVENT_THRESH_MAX * ev_thresh_mult;
-		band->ev_thresh_min = EVENT_THRESH_MIN * ev_thresh_mult;
-		const double ns_fc = fb_fc[k]/BASE_ORD_NOTCH_SCALE_F0;
+		const double thresh_scale = (fbp->thresh_scale[k] > 0.0) ? fbp->thresh_scale[k] : 1.0;
+		band->ev_thresh_max = EVENT_THRESH_MAX * thresh_scale;
+		band->ev_thresh_min = EVENT_THRESH_MIN * thresh_scale;
+		const double ns_fc = fbp->fc[k]/BASE_ORD_NOTCH_SCALE_F0;
 		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH),
 			exp(-3.465735902799727e-01*ns_fc*ns_fc))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
@@ -714,15 +554,19 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 		smf_init(&band->pwr_err_sm, istream->fs, SMF_RISE_TIME(300.0), 0.1);
 	#endif
+	#if REPORT_EVENT_LEVELS
+		band->evl_samples = -DOWNSAMPLED_FS(istream->fs)*2;  /* skip first 1s */
+		band->fbp = fbp;
+	#endif
 	}
 
 	state->fb_buf_len = config.lookahead_frames;
 #if DOWNSAMPLE_FACTOR > 1
 	state->fb_buf_len += CS_INTERP_DELAY_FRAMES;
 #endif
-	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
+	state->fb_buf[0] = calloc(state->fb_buf_len, sizeof(sample_t) * state->n_bands);
 	if (check_alloc(ei->name, state->fb_buf[0])) goto fail;
-	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(struct filter_bank_frame));
+	state->fb_buf[1] = calloc(state->fb_buf_len, sizeof(sample_t) * state->n_bands);
 	if (check_alloc(ei->name, state->fb_buf[1])) goto fail;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
 	event_config_init(&state->evc, istream, config.rear_ev_mask);
@@ -733,36 +577,37 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	for (int i = 1; i < LENGTH(state->inv_fshape); ++i)
 		state->inv_fshape[i] = state->inv_fshape[0];
 
-	filter_bank_init(&state->fb[0], istream->fs, config.fb_type, config.fb_stop);
-	state->fb[1] = state->fb[0];
+	if (filter_bank_init(&state->fb[0], fbp, istream->fs, config.fb_type, config.fb_stop)) {
+		LOG_FMT(LL_ERROR, "%s: BUG: failed to initialize filter bank", ei->name);
+		goto fail;
+	}
+	filter_bank_dup(&state->fb[1], &state->fb[0]);
 
 	const double shelf_mult2 = config.shelf_mult*config.shelf_mult;
 	const double shelf_f02 = config.shelf_f0*config.shelf_f0;
 	const double lowpass_f02 = config.lowpass_f0*config.lowpass_f0;
-	for (int k = 0; k < N_BANDS; ++k) {
+	for (int k = 0; k < state->n_bands; ++k) {
 		struct matrix4_band *band = &state->band[k];
-		const double fc2 = fb_fc[k]*fb_fc[k];
+		const double fc2 = fbp->fc[k]*fbp->fc[k];
 		const double shelf_norm_f2 = fc2/shelf_f02;
 		band->contour = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
 			band->contour *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
-		/* LOG_FMT(LL_VERBOSE, "%s: band %d: contour=%.4g", argv[0], k, band->contour); */
+		/* LOG_FMT(LL_VERBOSE, "%s: band %d: contour=%.4g", ei->name, k, band->contour); */
 	}
 	state->surr_mult[0] = config.surr_mult[0];
 	state->surr_mult[1] = config.surr_mult[1];
 	state->contour_pwrcmp = config.contour_pwrcmp;
 	state->freq_mask = config.freq_mask;
 
-	ssize_t phase_lin_frames = TIME_TO_FRAMES(PHASE_LIN_MAX_LEN, istream->fs);
+	ssize_t phase_lin_frames = TIME_TO_FRAMES(fbp->fir_len, istream->fs);
 	sample_t *filter = calloc(phase_lin_frames, sizeof(sample_t));
 	if (check_alloc(ei->name, filter)) goto fail;
-	for (int i = phase_lin_frames-1; i >= 0; --i) {
-		filter_bank_run(&state->fb[1], (i == phase_lin_frames-1) ? 1.0 : 0.0);
-		for (int k = 0; k < N_BANDS; ++k)
-			filter[i] += state->fb[1].s[k];
-	}
+	filter[phase_lin_frames-1] = 1.0;
+	for (int i = phase_lin_frames-1; i >= 0; --i)
+		filter[i] = filter_bank_sum(&state->fb[1], filter[i]);
 	int zx = 0;                      /* last zero crossing index */
 	double integ = fabs(filter[0]);  /* unsigned integral since last zero crossing */
 	const double trunc_thresh = PHASE_LIN_TRUNC_THRESH*PHASE_LIN_TRUNC_THRESH*istream->fs;
@@ -778,12 +623,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		? fir_p_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0)
 		: fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0);
 	free(filter);
-	state->fb[1] = state->fb[0];  /* reset */
+	filter_bank_reset(&state->fb[1]);
 	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */
-	if (e_fir == NULL) {
-		destroy_effect(e);
-		return NULL;
-	}
+	if (e_fir == NULL) goto fail;
 
 	effect_list_append(e_fir, e);
 	return e_fir;

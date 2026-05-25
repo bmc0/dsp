@@ -26,6 +26,7 @@
 #include "effect.h"
 #include "ewma.h"
 #include "biquad.h"
+#include "capn.h"
 #include "util.h"
 
 #define EVENT_THRESH          1.8
@@ -75,7 +76,7 @@
 #define DO_DPWR_DECOUPLE_DEFAULT   1
 #define USE_FIR_P_DEFAULT          0
 
-#define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
+#define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
 #define FREQ_MASK_DEFAULT        0.0
 
 /* fade parameters when toggling effect via signal() */
@@ -168,13 +169,6 @@ enum status_type {
 	STATUS_TYPE_TEXT,
 };
 
-enum filter_bank_type {
-	FILTER_BANK_TYPE_BUTTERWORTH = 0,
-	FILTER_BANK_TYPE_CHEBYSHEV1,
-	FILTER_BANK_TYPE_CHEBYSHEV2,
-	FILTER_BANK_TYPE_ELLIPTIC,
-};
-
 union cmc_shelf_mult {
 	double arg;
 	struct { double front, surr; } ret;
@@ -188,9 +182,10 @@ struct matrix4_config {
 	double fb_stop[2], freq_mask;
 	ssize_t lookahead_frames, surr_delay_frames;
 	enum status_type status_type;
-	enum filter_bank_type fb_type;
+	enum capn_filter_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double calc_matrix_coefs_param;
+	char fb_id[32];
 	#if DEBUG_POWER_ERROR
 		FILE *pwr_err_file;
 	#endif

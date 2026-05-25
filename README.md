@@ -315,6 +315,14 @@ Example:
 		Surround output delay. Generally, this should be set so that the
 		surrounds are delayed 10-25 milliseconds relative to the fronts
 		(measured acoustically). The default is value 15 milliseconds.
+	* `filter_bank=id` (`matrix4_mb` only)  
+
+		ID           | Notes
+		------------ | ----------------------------------------------
+		`21band`     | 20Hz-20kHz, 1.9ERB/band, 7th order. Default.
+		`13band`     | 63Hz-16.8kHz, 2.9ERB/band, 5th order.
+		`13band_lfx` | 20Hz-16.4kHz, 3ERB/band, 5th order.
+
 	* `filter_type=filter[:stop_dB[:stop_dB]]` (`matrix4_mb` only)  
 		Type of filter used for low pass sections of the filter bank. `filter`
 		may be `butterworth`, `chebyshev1`, `chebyshev2`, or `elliptic`
@@ -346,9 +354,9 @@ Example:
 	See `examples/matrix4_*` for more examples.
 
 * `matrix4_mb [options ...] [surround_level][/surround_level_rear]`  
-	Like the `matrix4` effect, but divides the input into 13 individually
-	steered bands in order to improve separation of concurrent sound sources.
-	See the `matrix4` effect description for more information.
+	Like the `matrix4` effect, but divides the input into many individually
+	steered bands (21 by default) in order to improve separation of concurrent
+	sound sources. See the `matrix4` effect description for more information.
 * `remix selector|. ...`  
 	Select and mix input channels into output channels. Each selector argument
 	specifies the input channels to be mixed to produce an output channel. `.`

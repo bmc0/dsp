@@ -323,6 +323,18 @@ Surround output delay. Generally, this should be set so that the
 surrounds are delayed 10\-25 milliseconds relative to the fronts
 (measured acoustically). The default is value 15 milliseconds.
 .TP
+filter_bank=\fIid\fR (\fBmatrix4_mb\fR only)
+.TS
+tab (|);
+lB lB
+lI l.
+ID|Notes
+_
+21band|20Hz-20kHz, 1.9ERB/band, 7th order. Default.
+13band|63Hz-16.8kHz, 2.9ERB/band, 5th order.
+13band_lfx|20Hz-16.4kHz, 3ERB/band, 5th order.
+.TE
+.TP
 filter_type=\fIfilter\fR[:\fIstop_dB\fR[:\fIstop_dB\fR]] (\fBmatrix4_mb\fR only)
 Type of filter used for low pass sections of the filter bank. \fIfilter\fR
 may be \fIbutterworth\fR, \fIchebyshev1\fR, \fIchebyshev2\fR, or \fIelliptic\fR
@@ -354,9 +366,9 @@ additional \fBallpass\fR filter equalizes the group delay at low frequencies.
 
 .TP
 \fBmatrix4_mb\fR [\fIoptions\fR ...] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]
-Like the \fBmatrix4\fR effect, but divides the input into 13 individually
-steered bands in order to improve separation of concurrent sound sources.
-See the \fBmatrix4\fR effect description for more information.
+Like the \fBmatrix4\fR effect, but divides the input into many individually
+steered bands (21 by default) in order to improve separation of concurrent
+sound sources. See the \fBmatrix4\fR effect description for more information.
 .TP
 \fBremix\fR \fIselector\fR|. ...
 Select and mix input channels into output channels. Each selector argument

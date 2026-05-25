@@ -11,7 +11,7 @@ DSP_OBJ := dsp.o \
 	sampleconv.o \
 	util.o \
 	allpass.o \
-	cap5.o \
+	capn.o \
 	reverse_iir.o \
 	biquad.o \
 	gain.o \
@@ -37,7 +37,7 @@ LADSPA_DSP_OBJ := ladspa_dsp.o \
 	align.o \
 	util.o \
 	allpass.o \
-	cap5.o \
+	capn.o \
 	reverse_iir.o \
 	biquad.o \
 	gain.o \
