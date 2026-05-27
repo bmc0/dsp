@@ -73,6 +73,7 @@
 #define DO_PHASE_FLIP_DEFAULT      1
 #define DO_DIRECT_PATH_DEFAULT     0
 #define DO_DPWR_DECOUPLE_DEFAULT   1
+#define USE_FIR_P_DEFAULT          0
 
 #define FILTER_BANK_TYPE_DEFAULT FILTER_BANK_TYPE_ELLIPTIC
 #define FREQ_MASK_DEFAULT        0.0
@@ -182,7 +183,7 @@ typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *,
 	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 struct matrix4_config {
-	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple;
+	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple, use_fir_p;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
 	ssize_t lookahead_frames, surr_delay_frames;

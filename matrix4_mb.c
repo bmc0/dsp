@@ -26,6 +26,7 @@
 #include "allpass.h"
 #include "util.h"
 #include "fir.h"
+#include "fir_p.h"
 #include "smf.h"
 
 #define DOWNSAMPLE_FACTOR 32
@@ -773,7 +774,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		integ += fabs(filter[k]);
 	}
 	phase_lin_frames -= zx;
-	struct effect *e_fir = fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0);
+	struct effect *e_fir = (config.use_fir_p)
+		? fir_p_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0)
+		: fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0);
 	free(filter);
 	state->fb[1] = state->fb[0];  /* reset */
 	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */

@@ -98,6 +98,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
 	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
 	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
+	config->use_fir_p = USE_FIR_P_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	config->freq_mask = FREQ_MASK_DEFAULT;
@@ -285,6 +286,10 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 							break; /* no params */
 						}
 					}
+				}
+				else if (is_opt(opt, "use_fir_p=")) {
+					HANDLE_BOOLEAN_ARG(config->use_fir_p);
+					if (!is_mb) goto mb_only;
 				}
 				else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
 					char *opt_arg = isolate(opt, '=');

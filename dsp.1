@@ -335,6 +335,10 @@ the first parameter applies to the lowpass and the second to the
 highpass. If only one parameter is given, it applies to both stopbands.
 Default values are 25 for \fIchebyshev1\fR and \fIchebyshev2\fR, and 35:50 for
 \fIelliptic\fR.
+.TP
+use_fir_p[=\fItrue\fR|\fIfalse\fR] (\fBmatrix4_mb\fR only)
+Use the \fBfir_p\fR convolution engine. Lower latency, but a bit slower.
+The default is \fIfalse\fR.
 .RE
 .TP
 \ 

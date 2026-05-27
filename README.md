@@ -327,6 +327,9 @@ Example:
 		highpass. If only one parameter is given, it applies to both stopbands.
 		Default values are 25 for `chebyshev1` and `chebyshev2`, and 35:50 for
 		`elliptic`.
+	* `use_fir_p[=true|false]` (`matrix4_mb` only)  
+		Use the `fir_p` convolution engine. Lower latency, but a bit slower.
+		The default is `false`.
 
 	Applying decorrelation filters to the surround outputs can further improve
 	spatial impression over simple delay. Example:
