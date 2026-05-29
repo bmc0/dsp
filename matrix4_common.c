@@ -787,7 +787,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double surr_mult2 = square(surr_mult);
 	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
 	const double surr_pwr = surr_mult2*adj_norm_mult2;
-	const double pdc_f = sqrt(1.0-surr_pwr*pd_s);
+	const double pdc_f = sqrt(1.0-surr_pwr*MINIMUM(pd_s, 1.0));
 	const double pdc_s = sqrt(surr_pwr);
 
 	if (r_shelf_mult) {
@@ -952,7 +952,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
 	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
 	const double pdc_all2 = 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2);
-	const double pdc_f = sqrt(pdc_fi2*pdc_all2);
+	const double pdc_f = sqrt(MAXIMUM(pdc_fi2, 0.0)*pdc_all2);
 	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
 
 	if (r_shelf_mult) {
@@ -962,7 +962,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
 			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
 			const double pdc_all_hf2 = 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2);
-			r_shelf_mult[i].ret.front = sqrt(pdc_fi_hf2*pdc_all_hf2)/pdc_f;
+			r_shelf_mult[i].ret.front = sqrt(MAXIMUM(pdc_fi_hf2, 0.0)*pdc_all_hf2)/pdc_f;
 			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
 		}
 	}
