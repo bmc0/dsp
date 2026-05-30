@@ -58,6 +58,7 @@ struct read_state {
 			char suspended, paused, rt_wait;
 			int front, back, len, slots;
 			int max_block_frames;
+			ssize_t last_delay;
 			sem_t items;
 		} block;
 	} queue;
@@ -84,7 +85,7 @@ struct write_state {
 			char stopped, suspended;
 			int front, back, len, items;
 			int max_block_frames, channels;
-			ssize_t fill_frames;
+			ssize_t fill_frames, last_delay;
 			sem_t slots;
 		} block;
 	} queue;
@@ -265,6 +266,7 @@ static void * read_worker(void *arg)
 			case CODEC_READ_BUF_CMD_SEEK:
 				input = read_queue_seek(state, input, &cmd.arg);
 				state->queue.cmd.retval = pos = cmd.arg;
+				state->queue.block.last_delay = (input) ? input->codec->delay(input->codec) : 0;
 				sem_post(&state->queue.sync);
 				break;
 			case CODEC_READ_BUF_CMD_PAUSE:
@@ -294,6 +296,7 @@ static void * read_worker(void *arg)
 			struct read_block *block = &state->queue.block.b[state->queue.block.back];
 			--state->queue.block.slots;
 			state->queue.block.back = (state->queue.block.back+1 < state->queue.block.len) ? state->queue.block.back+1 : 0;
+			state->queue.block.last_delay = (input) ? input->codec->delay(input->codec) : 0;
 			pthread_mutex_unlock(&state->queue.lock);
 
 			ssize_t r = 0;
@@ -355,9 +358,9 @@ ssize_t codec_read_buf_delay_nw(struct codec_read_buf *rb)
 		fill_frames += block->frames;
 		k = (k+1 < state->queue.block.len) ? k+1 : 0;
 	}
-	ssize_t d = fill_frames + ((input) ? input->codec->delay(input->codec) : 0);
+	const ssize_t codec_delay = state->queue.block.last_delay;
 	pthread_mutex_unlock(&state->queue.lock);
-	return d;
+	return fill_frames + codec_delay;
 }
 
 static void read_state_destroy(struct read_state *state)
@@ -552,6 +555,7 @@ static void * write_worker(void *arg)
 			switch (cmd) {
 			case CODEC_WRITE_BUF_CMD_DROP_ALL:
 				if (!state->queue.error) codec->drop(codec);
+				state->queue.block.last_delay = codec->delay(codec);
 			case CODEC_WRITE_BUF_CMD_DROP_BLOCK_QUEUE:
 				write_queue_drop(state);
 				break;
@@ -588,6 +592,7 @@ static void * write_worker(void *arg)
 			state->queue.block.fill_frames -= block->frames;
 			--state->queue.block.items;
 			const char stopped = state->queue.block.stopped = (state->queue.block.items == 0);
+			state->queue.block.last_delay = codec->delay(codec) + block->frames;
 			pthread_mutex_unlock(&state->queue.lock);
 
 			if (!state->queue.error && block->frames > 0) {
@@ -618,7 +623,9 @@ ssize_t codec_write_buf_delay_nw(struct codec_write_buf *wb)
 {
 	struct write_state *state = (struct write_state *) wb->data;
 	pthread_mutex_lock(&state->queue.lock);
-	ssize_t d = state->queue.block.fill_frames + wb->codec->delay(wb->codec);
+	if (state->queue.block.suspended)
+		state->queue.block.last_delay = wb->codec->delay(wb->codec);
+	ssize_t d = state->queue.block.fill_frames + state->queue.block.last_delay;
 	pthread_mutex_unlock(&state->queue.lock);
 	return d;
 }
