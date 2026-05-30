@@ -51,6 +51,26 @@ static int alsa_prepare_device(struct codec *c)
 	return err;
 }
 
+static int alsa_rw_err_recover(struct codec *c, int err, int dsp_err)
+{
+	struct alsa_state *state = (struct alsa_state *) c->data;
+	if (err == -EAGAIN) return 0;
+	else if (err == -EIO) {
+		dsp_perror(dsp_err, c->type, "input/output error; trying to recover...");
+		snd_pcm_drain(state->dev);
+		if ((err = alsa_prepare_device(c)) < 0) goto fail;
+		return 0;
+	}
+	else if (err == -EPIPE) LOG_FMT(LL_ERROR, "%s: warning: %srun occurred",
+		c->type, (dsp_err == DSP_EREAD) ? "over" : "under");
+	if ((err = snd_pcm_recover(state->dev, err, 1)) < 0) {
+		fail:
+		dsp_perror(dsp_err, c->type, snd_strerror(err));
+		return 1;
+	}
+	return 0;
+}
+
 static ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 {
 	ssize_t n, r = 0;
@@ -63,17 +83,8 @@ static ssize_t alsa_read(struct codec *c, sample_t *sbuf, ssize_t frames)
 	try_again:
 	n = snd_pcm_readi(state->dev, buf, frames - r);
 	if (n < 0) {
-		if (n == -EAGAIN)
-			goto try_again;
-		if (n == -EPIPE)
-			LOG_FMT(LL_ERROR, "%s: warning: overrun occurred", c->type);
-		n = snd_pcm_recover(state->dev, n, 1);
-		if (n < 0) {
-			dsp_perror(DSP_EREAD, c->type, snd_strerror(n));
-			return r;
-		}
-		else
-			goto try_again;
+		if (alsa_rw_err_recover(c, n, DSP_EREAD)) return r;
+		goto try_again;
 	}
 	r += n;
 	if (r < frames) {
@@ -97,17 +108,8 @@ static ssize_t alsa_write(struct codec *c, sample_t *sbuf, ssize_t frames)
 	try_again:
 	n = snd_pcm_writei(state->dev, buf, frames - w);
 	if (n < 0) {
-		if (n == -EAGAIN)
-			goto try_again;
-		if (n == -EPIPE)
-			LOG_FMT(LL_ERROR, "%s: warning: underrun occurred", c->type);
-		n = snd_pcm_recover(state->dev, n, 1);
-		if (n < 0) {
-			dsp_perror(DSP_EWRITE, c->type, snd_strerror(n));
-			return w;
-		}
-		else
-			goto try_again;
+		if (alsa_rw_err_recover(c, n, DSP_EWRITE)) return w;
+		goto try_again;
 	}
 	w += n;
 	if (w < frames) {
@@ -129,9 +131,10 @@ static ssize_t alsa_seek(struct codec *c, ssize_t pos)
 ssize_t alsa_delay(struct codec *c)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
-	if (state->pause || snd_pcm_state(state->dev) != SND_PCM_STATE_RUNNING)
+	if (state->pause > 0 || snd_pcm_state(state->dev) != SND_PCM_STATE_RUNNING)
 		return state->delay;
-	snd_pcm_delay(state->dev, &state->delay);
+	if (snd_pcm_delay(state->dev, &state->delay) < 0)
+		state->delay = 0;
 	return state->delay;
 }
 
@@ -147,14 +150,22 @@ static void alsa_drop(struct codec *c)
 static void alsa_pause(struct codec *c, int p)
 {
 	struct alsa_state *state = (struct alsa_state *) c->data;
-	if (snd_pcm_state(state->dev) == SND_PCM_STATE_RUNNING) {
-		snd_pcm_delay(state->dev, &state->delay);
-		if (p && !state->pause) {
-			if (c->write) snd_pcm_drain(state->dev);
-			else snd_pcm_drop(state->dev);
-		}
+	const snd_pcm_state_t pcm_state = snd_pcm_state(state->dev);
+	if (pcm_state != SND_PCM_STATE_RUNNING && pcm_state != SND_PCM_STATE_PAUSED)
+		return;
+	if (pcm_state == SND_PCM_STATE_RUNNING) {
+		if (snd_pcm_delay(state->dev, &state->delay) < 0)
+			state->delay = 0;
 	}
-	state->pause = p;
+	if (state->pause < 0) {
+		const int err = snd_pcm_pause(state->dev, (p)?1:0);
+		if (err < 0) LOG_FMT(LL_ERROR, "%s: warning: snd_pcm_pause() failed: %s", c->type, snd_strerror(err));
+	}
+	else if (pcm_state == SND_PCM_STATE_RUNNING && p && state->pause == 0) {
+		if (c->write) snd_pcm_drain(state->dev);
+		else snd_pcm_drop(state->dev);
+		state->pause = (p)?1:0;
+	}
 }
 
 static void alsa_destroy(struct codec *c)
@@ -270,6 +281,7 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 		LOG_FMT(LL_ERROR, "%s: error: failed to set hw params: %s", p->type, snd_strerror(err));
 		goto fail;
 	}
+	const int can_pause = snd_pcm_hw_params_can_pause(hw_p);
 
 	if (p->mode == CODEC_MODE_WRITE) {
 		if ((err = snd_pcm_sw_params_malloc(&sw_p)) < 0) {
@@ -304,6 +316,7 @@ struct codec * alsa_codec_init(const struct codec_params *p)
 	state->dev = dev;
 	state->enc_info = enc_info;
 	state->delay = 0;
+	if (can_pause) state->pause = -1;
 
 	c = calloc(1, sizeof(struct codec));
 	if (check_alloc(p->type, c)) goto fail;

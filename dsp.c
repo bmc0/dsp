@@ -712,7 +712,7 @@ static ssize_t do_seek(ssize_t pos, ssize_t offset, int whence, int pause_state)
 	if ((s = codec_read_buf_seek(in_codec_buf, s)) >= 0) {
 		if (xfade_state.pos > 0) finish_xfade();
 		reset_effects_chain(&chain);
-		codec_write_buf_drop(out_codec_buf, pause_state || (in->hints & CODEC_HINT_REALTIME), pause_state);
+		codec_write_buf_drop(out_codec_buf, pause_state, pause_state);
 		return s;
 	}
 	return pos;
@@ -1323,7 +1323,7 @@ int main(int argc, char *argv[])
 							pos = do_seek(pos, 0, SEEK_SET, is_paused);
 							break;
 						case 'n':
-							codec_write_buf_drop(out_codec_buf, 1, 0);
+							codec_write_buf_drop(out_codec_buf, is_paused, 0);
 							if (xfade_state.pos > 0) finish_xfade();
 							reset_effects_chain(&chain);
 							goto next_input;
