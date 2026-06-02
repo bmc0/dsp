@@ -201,9 +201,9 @@ static const char * trunc_line(const char *s, int w)
 	const size_t len = strlen(s);
 	if (w >= LENGTH(buf)) w = LENGTH(buf)-1;
 	if (len > w) {
-		const int trunc_len = MAXIMUM(w-3, 0);
+		const int trunc_len = MAXIMUM(w-2, 0);
 		memcpy(buf, s, trunc_len);
-		memcpy(buf+trunc_len, "...", 4);
+		memcpy(buf+trunc_len, " >", 3);
 		return buf;
 	}
 	return s;
@@ -213,15 +213,21 @@ static void statuslines_draw(int cr, int force)
 {
 	pthread_mutex_lock(&status_lock);
 	if ((show_progress || status_list.head) && (status_redraw || force)) {
-		const int w = term_size.cols - 1;
+		const int w = term_size.cols - 1, h = term_size.rows - 1;
 		if (!cr && show_progress)
 			dsp_log_printf("\r%s\033[K\033[2C", trunc_line(progress_line, w));
-		LIST_FOREACH(&status_list, line)
+		int l = 0;
+		LIST_FOREACH(&status_list, line) {
+			if (++l == h && cr && line->next) {
+				dsp_log_puts("\n[...]\033[K");
+				break;
+			}
 			dsp_log_printf("\n%s\033[K", trunc_line(line->s, w));
+		}
 		dsp_log_putc((cr) ? '\r' : '\n');
 		if (cr) {
-			if (status_list.head)
-				dsp_log_printf("\033[%dA", status_list.len);
+			if (status_list.head && h != 0)
+				dsp_log_printf("\033[%dA", (h > 0) ? MINIMUM(status_list.len, h) : status_list.len);
 			if (show_progress)
 				dsp_log_printf("%s\033[K\033[2C", trunc_line(progress_line, w));
 		}
@@ -757,6 +763,7 @@ static struct codec_write_buf * init_out_codec(struct codec_params *out_p, struc
 
 static void query_term_size(void)
 {
+#if defined(TIOCGWINSZ) || defined(TIOCGSIZE)
 	if (term_fd < 0) return;
 	dsp_log_acquire();
 #if defined(TIOCGWINSZ)
@@ -770,12 +777,16 @@ static void query_term_size(void)
 		term_size.rows = ts.ts_row;
 		term_size.cols = ws.ts_col;
 #endif
-		/* if (LOGLEVEL(LL_VERBOSE))
-			dsp_log_printf("%s: info: terminal size: %dx%d\n", dsp_globals.prog_name, term_size.cols, term_size.rows); */
 	}
-	/* else if (LOGLEVEL(LL_ERROR))
-		dsp_log_printf("%s: error: ioctl(): %s\n", dsp_globals.prog_name, strerror(errno)); */
+	else {
+		if (LOGLEVEL(LL_ERROR))
+			dsp_log_printf("%s: warning: failed to get terminal size: %s\n", dsp_globals.prog_name, strerror(errno));
+		term_size.rows = term_size.cols = 0;
+	}
 	dsp_log_release();
+#else
+	#warning "neither TIOCGWINSZ or TIOCGSIZE is defined; won't be able to get terminal size"
+#endif
 }
 
 static void handle_tstp(int is_paused)
