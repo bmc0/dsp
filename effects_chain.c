@@ -22,16 +22,30 @@
 #include <ctype.h>
 #include <math.h>
 #include <errno.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include "effects_chain.h"
 #include "util.h"
 #include "list_util.h"
 #include "align.h"
 #include "dither.h"
 
-void effects_chain_append(struct effects_chain *chain, struct effect *e)
-{
-	LIST_APPEND(chain, e);
-}
+struct effects_subchain {
+	struct effects_subchain *prev, *next;
+	struct effect *head, *tail;
+	sample_t *buf1, *buf2;
+	pthread_t thread;
+	pthread_mutex_t lock;
+	struct {
+		sem_t in, out;
+		sem_t *prev, *next;
+	} sync;
+	struct {
+		sample_t *buf;
+		ssize_t frames;
+	} out;
+	int has_thread, flush;
+};
 
 enum ec_token_id {
 	EC_TOKEN_LITERAL = 0,
@@ -41,6 +55,7 @@ enum ec_token_id {
 	EC_TOKEN_BLOCK_END,
 	EC_TOKEN_SOURCE,
 	EC_TOKEN_ALLOW_FAIL,
+	EC_TOKEN_NEW_THREAD,
 };
 
 struct ec_token {
@@ -66,6 +81,8 @@ static enum ec_token_id ec_get_token_id(const char *s)
 		return EC_TOKEN_SOURCE;
 	else if (s[0] == '!' && s[1] == '\0')
 		return EC_TOKEN_ALLOW_FAIL;
+	else if (strcmp(s, "new_thread") == 0)
+		return EC_TOKEN_NEW_THREAD;
 	return EC_TOKEN_LITERAL;
 }
 
@@ -237,6 +254,34 @@ static int ec_token_is_keyword(struct ec_token *tok)
 		else if (get_effect_info(tok->str))
 			return 1;
 	}
+	return 0;
+}
+
+void effects_subchain_insert(struct effects_subchain *sc, struct effect *e, struct effect *prev)
+{
+	LIST_INSERT(sc, e, prev);
+}
+
+static int ec_add_subchain(struct effects_chain *chain)
+{
+	struct effects_subchain *sc = calloc(1, sizeof(struct effects_subchain));
+	if (!sc) return DSP_ENOMEM;
+	pthread_mutex_init(&sc->lock, NULL);
+	sem_init(&sc->sync.in, 0, 0);
+	sem_init(&sc->sync.out, 0, 1);
+	LIST_APPEND(chain, sc);
+	return 0;
+}
+
+static int ec_append(struct effects_chain *chain, struct effect *e)
+{
+	if (!chain->tail || chain->new_sc) {
+		LOG_FMT(LL_VERBOSE, "info: new subchain: %s", e->name);
+		const int err = ec_add_subchain(chain);
+		if (err) return err;
+		chain->new_sc = 0;
+	}
+	LIST_APPEND(chain->tail, e);
 	return 0;
 }
 
@@ -456,6 +501,10 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 			state->allow_fail = 1;
 			tok = tok->next; continue;
 		}
+		if (tok->id == EC_TOKEN_NEW_THREAD) {
+			state->chain->new_sc = 1;
+			tok = tok->next; continue;
+		}
 		if (state->last_stream_ch != state->stream->channels) {  /* construct new channel mask */
 			const int delta = state->stream->channels - state->last_stream_ch;
 			char *tmp_mask = NEW_SELECTOR(state->stream->channels);
@@ -589,7 +638,11 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 					destroy_effect(e);
 				}
 				else {
-					effects_chain_append(state->chain, e);
+					const int err = ec_append(state->chain, e);
+					if (err) {
+						dsp_perror(err, __func__, NULL);
+						return tok;
+					}
 					*state->stream = e->ostream;
 				}
 				e = e_n;
@@ -604,38 +657,41 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 
 static void effects_chain_optimize(struct effects_chain *chain)
 {
-	ssize_t chain_len = 0, chain_len_opt = 0;
-	LIST_FOREACH(chain, e) ++chain_len;
-	struct effect *m_dest = chain->head;
-	while (m_dest) {
-		if (m_dest->merge) {
-			struct effect *m_src = m_dest->next;
-			while (m_src) {
-				if (m_src->istream.fs != m_dest->istream.fs
-					|| m_src->istream.channels != m_dest->istream.channels
-					|| m_src->ostream.fs != m_dest->ostream.fs
-					|| m_src->ostream.channels != m_dest->ostream.channels
-					) break;
-				if (m_src->merge == NULL) {
-					if (m_src->flags & EFFECT_FLAG_OPT_REORDERABLE) goto skip;
-					break;
-				}
-				if (m_dest->merge(m_dest, m_src)) {
-					/* LOG_FMT(LL_VERBOSE, "optimize: merged effect: %s <- %s", m_dest->name, m_src->name); */
-					struct effect *tmp = m_src;
-					m_src = m_src->next;
-					LIST_REMOVE(chain, tmp);
-					destroy_effect(tmp);
-				}
-				else {
-					skip:
-					m_src = m_src->next;
+	ssize_t chain_len = 0;
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) ++chain_len;
+	ssize_t chain_len_opt = chain_len;
+	LIST_FOREACH(chain, sc) {
+		struct effect *m_dest = sc->head;
+		while (m_dest) {
+			if (m_dest->merge) {
+				struct effect *m_src = m_dest->next;
+				while (m_src) {
+					if (m_src->istream.fs != m_dest->istream.fs
+						|| m_src->istream.channels != m_dest->istream.channels
+						|| m_src->ostream.fs != m_dest->ostream.fs
+						|| m_src->ostream.channels != m_dest->ostream.channels
+						) break;
+					if (m_src->merge == NULL) {
+						if (m_src->flags & EFFECT_FLAG_OPT_REORDERABLE) goto skip;
+						break;
+					}
+					if (m_dest->merge(m_dest, m_src)) {
+						/* LOG_FMT(LL_VERBOSE, "optimize: merged effect: %s <- %s", m_dest->name, m_src->name); */
+						struct effect *tmp = m_src;
+						m_src = m_src->next;
+						LIST_REMOVE(sc, tmp);
+						destroy_effect(tmp);
+						--chain_len_opt;
+					}
+					else {
+						skip:
+						m_src = m_src->next;
+					}
 				}
 			}
+			m_dest = m_dest->next;
 		}
-		m_dest = m_dest->next;
 	}
-	LIST_FOREACH(chain, e) ++chain_len_opt;
 	if (chain_len_opt < chain_len)
 		LOG_FMT(LL_VERBOSE, "optimize: info: reduced number of effects from %zd to %zd", chain_len, chain_len_opt);
 }
@@ -661,7 +717,7 @@ static void effects_chain_postproc_state_cleanup(struct effects_chain_postproc_s
 static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
 {
 	memset(state, 0, sizeof(struct effects_chain_postproc_state));
-	LIST_FOREACH(chain, e) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
 		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
 	}
@@ -739,15 +795,15 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 	memset(offsets, 0, state->max_ch * sizeof(ssize_t));
 	memset(delays, 0, state->max_ch * sizeof(ssize_t));
 
-	struct effect *e = chain->head, *prev = NULL;
-	while (e) {
+	struct effect *prev = NULL;
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		const int is_passthrough = (e->istream.channels == e->ostream.channels
 			&& e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE));
 		const int have_ch_deps = query_channel_deps(state, e);
 		if (prev) {
 			/* align channels */
 			if (e->flags & EFFECT_FLAG_ALIGN_BARRIER) {
-				if (align_effect_insert(chain, prev, offsets, NULL))
+				if (align_effect_insert(sc, prev, e, offsets, NULL))
 					goto fail;
 			}
 			else if (have_ch_deps) {
@@ -768,17 +824,17 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 					for (int i = 0; i < e->istream.channels; ++i)
 						if (GET_BIT(in_deps, i)) align_refs[i] = max_offset;
 				}
-				if (align_effect_insert(chain, prev, offsets, align_refs))
+				if (align_effect_insert(sc, prev, e, offsets, align_refs))
 					goto fail;
 			}
 			else if (e->istream.fs != e->ostream.fs) {
 				LOG_FMT(LL_VERBOSE, "info: %s: sample rate changed; doing full alignment", e->name);
-				if (align_effect_insert(chain, prev, offsets, NULL))
+				if (align_effect_insert(sc, prev, e, offsets, NULL))
 					goto fail;
 			}
 			else if (!is_passthrough) {
 				LOG_FMT(LL_VERBOSE, "warning: %s: channel deps unknown; doing full alignment", e->name);
-				if (align_effect_insert(chain, prev, offsets, NULL))
+				if (align_effect_insert(sc, prev, e, offsets, NULL))
 					goto fail;
 			}
 		}
@@ -856,13 +912,11 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 				__func__, i, offsets[i]-(delays[i]-nd_part), offsets[i], delays[i]); */
 			offsets[i] -= delays[i]-nd_part;
 		}
-
 		prev = e;
-		e = e->next;
 	}
-	chain->zero_ref = -nd_part;
-	if (prev && align_effect_insert(chain, prev, offsets, NULL))
+	if (prev && align_effect_insert(chain->tail, prev, NULL, offsets, NULL))
 		goto fail;
+	chain->zero_ref = -nd_part;
 
 	done:
 	free(in_deps_all);
@@ -878,7 +932,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 {
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
-	LIST_FOREACH(chain, e) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (query_channel_deps(state, e)) {
 			ssize_t *tmp_samples = state->samples[1];
 			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
@@ -912,19 +966,19 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 			samples[i] = 0;
 	}
 	chain->drain_frames = 0;
-	for (int i = 0; i < chain->tail->ostream.channels; ++i)
+	for (int i = 0; i < chain->ostream.channels; ++i)
 		chain->drain_frames = MAXIMUM(chain->drain_frames, samples[i]);
-	if (chain->head->istream.fs != chain->tail->ostream.fs) {
-		const int gcd = find_gcd(chain->head->istream.fs, chain->tail->ostream.fs);
+	if (chain->istream.fs != chain->ostream.fs) {
+		const int gcd = find_gcd(chain->istream.fs, chain->ostream.fs);
 		chain->drain_frames = (long long int) chain->drain_frames *
-			(chain->head->istream.fs / gcd) / (chain->tail->ostream.fs / gcd);
+			(chain->istream.fs / gcd) / (chain->ostream.fs / gcd);
 	}
 	LOG_FMT(LL_VERBOSE, "info: input drain frames: %zd", chain->drain_frames);
 }
 
 static int effects_chain_prepare(struct effects_chain *chain)
 {
-	LIST_FOREACH(chain, e) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (e->prepare && e->prepare(e))
 			return 1;
 	}
@@ -941,22 +995,33 @@ static int build_effects_chain_start(struct effects_chain *chain, struct stream_
 
 static int build_effects_chain_finish(struct effects_chain *chain)
 {
-	if (chain->head == NULL) return 0;
-	struct effects_chain_postproc_state state;
-
-	memcpy(&chain->ostream, &chain->tail->ostream, sizeof(struct stream_info));
-	const int gcd = find_gcd(chain->ostream.fs, chain->istream.fs);
-	chain->ratio.n = chain->ostream.fs / gcd;
-	chain->ratio.d = chain->istream.fs / gcd;
-	effects_chain_optimize(chain);
-	if (effects_chain_prepare(chain)) return 1;
-	if (effects_chain_postproc_state_init(&state, chain)) return 1;
-	if (effects_chain_align_channels(&state, chain)) {
-		effects_chain_postproc_state_cleanup(&state);
-		return 1;
+	if (!chain->head) {
+		const int err = ec_add_subchain(chain);
+		if (err) {
+			dsp_perror(err, __func__, NULL);
+			return 1;
+		}
 	}
-	effects_chain_set_drain_frames(&state, chain);
-	effects_chain_postproc_state_cleanup(&state);
+	else if (chain->head->head) {
+		struct effects_chain_postproc_state state;
+		memcpy(&chain->ostream, &chain->tail->tail->ostream, sizeof(struct stream_info));
+		const int gcd = find_gcd(chain->ostream.fs, chain->istream.fs);
+		chain->ratio.n = chain->ostream.fs / gcd;
+		chain->ratio.d = chain->istream.fs / gcd;
+		effects_chain_optimize(chain);
+		if (effects_chain_prepare(chain)) return 1;
+		if (effects_chain_postproc_state_init(&state, chain)) return 1;
+		if (effects_chain_align_channels(&state, chain)) {
+			effects_chain_postproc_state_cleanup(&state);
+			return 1;
+		}
+		effects_chain_set_drain_frames(&state, chain);
+		effects_chain_postproc_state_cleanup(&state);
+	}
+	LIST_FOREACH(chain, sc) {
+		sc->sync.prev = (sc->prev) ? &sc->prev->sync.out : &chain->tail->sync.out;
+		sc->sync.next = (sc->next) ? &sc->next->sync.in : &chain->head->sync.in;
+	}
 	return 0;
 }
 
@@ -992,8 +1057,7 @@ int build_effects_chain_from_file(const char *path, struct effects_chain *chain,
 
 static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
 {
-	if (e->buffer_frames != NULL)
-		return e->buffer_frames(e, in_frames);
+	if (e->buffer_frames) return e->buffer_frames(e, in_frames);
 	if (e->ostream.fs != e->istream.fs) {
 		const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 		return ratio_mult_ceil(in_frames, e->ostream.fs / gcd, e->istream.fs / gcd);
@@ -1001,27 +1065,188 @@ static ssize_t effect_max_out_frames(struct effect *e, ssize_t in_frames)
 	return in_frames;
 }
 
-ssize_t get_effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames, int in_channels)
+static ssize_t effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_frames)
 {
-	ssize_t frames = in_frames, len, max_len = in_frames * in_channels;
-	LIST_FOREACH(chain, e) {
-		frames = effect_max_out_frames(e, frames);
-		len = frames * e->ostream.channels;
-		if (len  > max_len) max_len = len;
+	ssize_t frames = in_frames, len, max_len = in_frames * chain->istream.channels;
+	LIST_FOREACH(chain, sc) {
+		pthread_mutex_lock(&sc->lock);
+		LIST_FOREACH(sc, e) {
+			frames = effect_max_out_frames(e, frames);
+			len = frames * e->ostream.channels;
+			if (len  > max_len) max_len = len;
+		}
+		pthread_mutex_unlock(&sc->lock);
 	}
 	return max_len;
+}
+
+static sample_t * ec_cycle_blocks(struct effects_chain *chain, ssize_t *frames)
+{
+	struct effects_subchain *sc = chain->head;
+	if (sc->next) {
+		/* write block */
+		while (sem_wait(&sc->sync.out) != 0);
+		sc->out.buf = sc->buf1;
+		sc->out.frames = *frames;
+		sem_post(sc->sync.next);
+
+		/* read block from tail */
+		while (sem_wait(&sc->sync.in) != 0);
+		sc->buf1 = chain->tail->out.buf;
+		*frames = chain->tail->out.frames;
+		sem_post(sc->sync.prev);
+	}
+	return sc->buf1;
+}
+
+static void ec_flush_begin(struct effects_chain *chain)
+{
+	LIST_FOREACH(chain, sc) {
+		pthread_mutex_lock(&sc->lock);
+		sc->flush = 1;
+		pthread_mutex_unlock(&sc->lock);
+	}
+}
+
+static void ec_flush_end(struct effects_chain *chain)
+{
+	LIST_FOREACH(chain, sc) sc->flush = 0;
+}
+
+static void ec_free_buffers(struct effects_chain *chain)
+{
+	struct effects_subchain *sc = chain->head;
+	if (chain->buf_len > 0 && sc) {
+		ec_flush_begin(chain);
+		/* flush chain; free all buf1 */
+		ssize_t frames;
+		do {
+			free(sc->buf1);
+			sc->buf1 = NULL;
+			frames = 0;
+		} while (ec_cycle_blocks(chain, &frames));
+		/* free all buf2 */
+		do { free(sc->buf2); } while ((sc = sc->next));
+		ec_flush_end(chain);
+	}
+}
+
+static void run_effect_list(struct effect *e, ssize_t *frames, sample_t **buf1, sample_t **buf2)
+{
+	while (e && *frames > 0) {
+		sample_t *tmp = e->run(e, frames, *buf1, *buf2);
+		if (tmp == *buf2) {
+			*buf2 = *buf1;
+			*buf1 = tmp;
+		}
+		e = e->next;
+	}
+}
+
+static void drain_effect_list(struct effect *e, ssize_t *frames, sample_t **buf1, sample_t **buf2)
+{
+	ssize_t dframes = -1;
+	while (e && dframes == -1) {
+		if (e->drain2) {
+			dframes = *frames;
+			sample_t *tmp = e->drain2(e, &dframes, *buf1, *buf2);
+			if (tmp == *buf2) {
+				*buf2 = *buf1;
+				*buf1 = tmp;
+			}
+		}
+		if (e->ostream.fs != e->istream.fs) {
+			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
+			*frames = ratio_mult_ceil(*frames, e->ostream.fs / gcd, e->istream.fs / gcd);
+		}
+		e = e->next;
+	}
+	if (dframes > 0) {
+		*frames = dframes;
+		run_effect_list(e, frames, buf1, buf2);
+	}
+	else *frames = -(*frames);
+}
+
+static void * subchain_worker(void *arg)
+{
+	struct effects_subchain *sc = (struct effects_subchain *) arg;
+	ssize_t frames = 0;
+	for (;;) {
+		/* write block */
+		while (sem_wait(&sc->sync.out) != 0);
+		sc->out.buf = sc->buf1;
+		sc->out.frames = frames;
+		sem_post(sc->sync.next);
+
+		/* read block */
+		while (sem_wait(&sc->sync.in) != 0);
+		sc->buf1 = sc->prev->out.buf;
+		frames = sc->prev->out.frames;
+		sem_post(sc->sync.prev);
+
+		pthread_mutex_lock(&sc->lock);
+		if (sc->flush) frames = 0;
+		else if (frames < 0) {
+			frames = -frames;
+			drain_effect_list(sc->head, &frames, &sc->buf1, &sc->buf2);
+		}
+		else run_effect_list(sc->head, &frames, &sc->buf1, &sc->buf2);
+		pthread_mutex_unlock(&sc->lock);
+	}
+	return NULL;
+}
+
+int effects_chain_realloc_buffers(struct effects_chain *chain, ssize_t in_frames)
+{
+	if (in_frames < 1) return 1;
+	const ssize_t new_buf_len = effects_chain_buffer_len(chain, in_frames);
+	if (new_buf_len > chain->buf_len) {
+		if (chain->buf_len == 0) {
+			/* spawn worker threads */
+			struct effects_subchain *sc = chain->head;
+			while ((sc = sc->next)) {
+				if ((errno = pthread_create(&sc->thread, NULL, subchain_worker, sc)) != 0) {
+					LOG_FMT(LL_ERROR, "%s(): error: pthread_create() failed: %s", __func__, strerror(errno));
+					return 1;
+				}
+				sc->has_thread = 1;
+			}
+		}
+		else ec_free_buffers(chain);
+		/* alloc and distribute all buf1 */
+		ssize_t frames;
+		do {
+			chain->head->buf1 = calloc(new_buf_len, sizeof(sample_t));
+			if (check_alloc(__func__, chain->head->buf1)) return 1;
+			frames = 0;
+		} while (ec_cycle_blocks(chain, &frames) == NULL);
+		/* alloc all buf2 */
+		LIST_FOREACH(chain, sc) {
+			sc->buf2 = calloc(new_buf_len, sizeof(sample_t));
+			if (check_alloc(__func__, sc->buf1)) return 1;
+		}
+		chain->buf_len = new_buf_len;
+	}
+	return 0;
+}
+
+sample_t * effects_chain_get_input_buffer(struct effects_chain *chain)
+{
+	return (chain->head) ? chain->head->buf1 : NULL;
 }
 
 ssize_t get_effects_chain_max_out_frames(struct effects_chain *chain, ssize_t in_frames)
 {
 	ssize_t frames = in_frames;
-	LIST_FOREACH(chain, e) frames = effect_max_out_frames(e, frames);
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e)
+		frames = effect_max_out_frames(e, frames);
 	return frames;
 }
 
 int effects_chain_needs_dither(struct effects_chain *chain)
 {
-	LIST_FOREACH(chain, e) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (!(e->flags & EFFECT_FLAG_NO_DITHER) && !effect_is_dither(e))
 			return 1;
 	}
@@ -1031,9 +1256,11 @@ int effects_chain_needs_dither(struct effects_chain *chain)
 int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int enabled)
 {
 	int r = 1;
-	LIST_FOREACH(chain, e) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (effect_is_dither(e)) {
+			pthread_mutex_lock(&sc->lock);
 			dither_effect_set_params(e, prec, enabled);
+			pthread_mutex_unlock(&sc->lock);
 			r = 0;
 		}
 		else if (!(e->flags & EFFECT_FLAG_NO_DITHER)) r = 1;
@@ -1041,25 +1268,14 @@ int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int e
 	return r && enabled;  /* note: non-zero return value means dither should be added */
 }
 
-static sample_t * run_effect_list(struct effect *e, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames)
 {
-	sample_t *ibuf = buf1, *obuf = buf2, *tmp;
-	while (e != NULL && *frames > 0) {
-		tmp = e->run(e, frames, ibuf, obuf);
-		if (tmp == obuf) {
-			obuf = ibuf;
-			ibuf = tmp;
-		}
-		e = e->next;
-	}
-	return ibuf;
-}
+	struct effects_subchain *sc = chain->head;
+	if (!sc->head) return sc->buf1;
 
-sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
-{
-	if (*frames < 1) return buf1;
 	const ssize_t iframes = *frames;
-	sample_t *obuf = run_effect_list(chain->head, frames, buf1, buf2);
+	run_effect_list(sc->head, frames, &sc->buf1, &sc->buf2);
+	sample_t *obuf = ec_cycle_blocks(chain, frames);
 	const ssize_t oframes = *frames;
 
 	chain->iframes += iframes;
@@ -1076,7 +1292,6 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames, sampl
 		}
 		chain->delay += oframes_nd - oframes;
 	}
-
 	return obuf;
 }
 
@@ -1090,16 +1305,25 @@ double get_effects_chain_delay(struct effects_chain *chain, int seek)
 
 void reset_effects_chain(struct effects_chain *chain)
 {
-	LIST_FOREACH(chain, e)
-		if (e->reset != NULL) e->reset(e);
+	ec_flush_begin(chain);
+	LIST_FOREACH(chain, sc) {
+		ssize_t frames = 0;
+		ec_cycle_blocks(chain, &frames);
+	}
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e)
+		if (e->reset) e->reset(e);
 	chain->oframes = chain->iframes = 0;
 	chain->frac = chain->delay = 0;
+	ec_flush_end(chain);
 }
 
 void signal_effects_chain(struct effects_chain *chain)
 {
-	LIST_FOREACH(chain, e)
-		if (e->signal != NULL) e->signal(e);
+	LIST_FOREACH(chain, sc) {
+		pthread_mutex_lock(&sc->lock);
+		LIST_FOREACH(sc, e) if (e->signal) e->signal(e);
+		pthread_mutex_unlock(&sc->lock);
+	}
 }
 
 static const char gnuplot_header[] =
@@ -1124,9 +1348,8 @@ static const char gnuplot_header_phase[] =
 void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 {
 	struct stream_info stream;
-	struct effect *e = chain->head;
 	memcpy(&stream, &chain->istream, sizeof(struct stream_info));
-	while (e != NULL) {
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (e->plot == NULL) {
 			LOG_FMT(LL_ERROR, "plot: error: effect '%s' does not support plotting", e->name);
 			return;
@@ -1136,11 +1359,16 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 			return;
 		}
 		stream.fs = e->ostream.fs;
-		e = e->next;
+	}
+	LIST_FOREACH(chain, sc) {  /* link subchains */
+		if (sc->next) {
+			sc->tail->next = sc->next->head;
+			sc->next->head->prev = sc->tail;
+		}
 	}
 	printf("%sset xrange [10:%d/2]\n%s\n",
 		gnuplot_header, stream.fs, (plot_phase)?gnuplot_header_phase:"");
-	struct effect *start_e = e = chain->head;
+	struct effect *e = chain->head->head, *start_e = e;
 	int start_idx = 0;
 	for (int i = 0; e != NULL; ++i) {
 		if (e->flags & EFFECT_FLAG_PLOT_MIX) {
@@ -1174,6 +1402,10 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 		printf("Ht%d_phase_deg(f)=Ht%d_phase(f)*180/pi\n", k, k);
 		printf("Hsum%d(f)=Ht%d_mag_dB(f)\n", k, k);
 	}
+	LIST_FOREACH(chain, sc) {  /* unlink subchains */
+		sc->head->prev = NULL;
+		sc->tail->next = NULL;
+	}
 	printf("\nplot ");
 	for (int k = 0; k < stream.channels; ++k) {
 		printf("%sHt%d_mag_dB(x) lt %d lw 2 title 'Channel %d'", (k==0)?"":", ", k, k+1, k);
@@ -1183,54 +1415,62 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 	puts("\npause mouse close");
 }
 
-sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames, sample_t *buf1, sample_t *buf2)
+sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames)
 {
-	struct effect *e = chain->head;
-	if (e == NULL || chain->iframes < 1 || *frames < 1) {
+	struct effects_subchain *sc = chain->head;
+	if (!sc->head || chain->iframes < 1) {
 		*frames = -1;
-		return buf1;
+		return sc->buf1;
 	}
 	if (chain->drain_frames > 0) {
 		*frames = MINIMUM(*frames, chain->drain_frames);
 		chain->drain_frames -= *frames;
-		memset(buf1, 0, *frames * e->istream.channels * sizeof(sample_t));
-		return run_effect_list(e, frames, buf1, buf2);
+		memset(sc->buf1, 0, *frames * chain->istream.channels * sizeof(sample_t));
+		return run_effects_chain(chain, frames);
 	}
-	ssize_t ftmp = *frames, dframes = -1;
-	while (e != NULL && dframes == -1) {
-		dframes = ftmp;
-		if (e->drain2 != NULL) {
-			sample_t *rbuf = e->drain2(e, &dframes, buf1, buf2);
-			if (rbuf == buf2) {
-				buf2 = buf1;
-				buf1 = rbuf;
-			}
-		}
-		else dframes = -1;
-		if (e->ostream.fs != e->istream.fs) {
-			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
-			ftmp = ratio_mult_ceil(ftmp, e->ostream.fs / gcd, e->istream.fs / gcd);
-		}
-		e = e->next;
-	}
-	*frames = dframes;
-	return run_effect_list(e, frames, buf1, buf2);
+	drain_effect_list(sc->head, frames, &sc->buf1, &sc->buf2);
+	return ec_cycle_blocks(chain, frames);
 }
 
 void destroy_effects_chain(struct effects_chain *chain)
 {
-	while (chain->head) {
-		struct effect *e = chain->head;
-		LIST_REMOVE(chain, e);
-		destroy_effect(e);
+	ec_free_buffers(chain);
+	LIST_FOREACH(chain, sc) {
+		if (sc->has_thread) {
+			pthread_cancel(sc->thread);
+			pthread_join(sc->thread, NULL);
+		}
 	}
+	while (chain->head) {
+		struct effects_subchain *sc = chain->head;
+		LIST_REMOVE(chain, sc);
+		while (sc->head) {
+			struct effect *e = sc->head;
+			LIST_REMOVE(sc, e);
+			destroy_effect(e);
+		}
+		sem_destroy(&sc->sync.out);
+		sem_destroy(&sc->sync.in);
+		pthread_mutex_destroy(&sc->lock);
+		free(sc);
+	}
+	*chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 }
 
 void effects_chain_xfade_reset(struct effects_chain_xfade_state *state)
 {
-	state->chain[0] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
-	state->chain[1] = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
+	state->chain[1].c = state->chain[0].c = NULL;
+	state->chain[1].buf = state->chain[0].buf = NULL;
 	state->pos = 0;
+}
+
+void effects_chain_xfade_begin(struct effects_chain_xfade_state *state, struct effects_chain *old, struct effects_chain *new, double xfade_ms)
+{
+	state->chain[0].c = old;
+	state->chain[0].buf = effects_chain_get_input_buffer(old);
+	state->chain[1].c = new;
+	state->chain[1].buf = effects_chain_get_input_buffer(new);
+	state->pos = state->frames = lround(xfade_ms/1000.0 * old->ostream.fs);
 }
 
 static inline double xfade_mult(ssize_t pos, ssize_t n)
@@ -1238,19 +1478,16 @@ static inline double xfade_mult(ssize_t pos, ssize_t n)
 	return (double) (n-pos) / n;
 }
 
-sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *state, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
+sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *state, ssize_t *frames)
 {
-	if (*frames < 1) return ibuf;
-	sample_t *rbuf[2];
 	ssize_t tmp_f = *frames, adj_xf_f = state->frames;
-	const int in_ch = state->chain[0].istream.channels, out_ch = state->chain[0].ostream.channels;
-	const int has_output = (state->chain[1].oframes > 0);
+	const int in_ch = state->chain[0].c->istream.channels, out_ch = state->chain[0].c->ostream.channels;
+	const int has_output = (state->chain[1].c->oframes > 0);
 
-	memcpy(state->buf, ibuf, *frames*in_ch*sizeof(sample_t));
-	rbuf[0] = run_effects_chain(&state->chain[0], frames, ibuf, obuf);
-	rbuf[1] = (rbuf[0] == obuf) ? ibuf : obuf;
-	rbuf[1] = run_effects_chain(&state->chain[1], &tmp_f, state->buf, rbuf[1]);
-	if (state->chain[1].oframes <= 0) return rbuf[0];
+	memcpy(state->chain[1].buf, state->chain[0].buf, *frames*in_ch*sizeof(sample_t));
+	state->chain[0].buf = run_effects_chain(state->chain[0].c, frames);
+	state->chain[1].buf = run_effects_chain(state->chain[1].c, &tmp_f);
+	if (state->chain[1].c->oframes <= 0) return state->chain[0].buf;
 
 	const ssize_t min_f = MINIMUM(*frames, tmp_f);
 	ssize_t offset_s = 0;
@@ -1268,7 +1505,7 @@ sample_t * effects_chain_xfade_run(struct effects_chain_xfade_state *state, ssiz
 	for (ssize_t i = 0; i < end_s; i += out_ch) {
 		const double m = (state->pos > 0) ? xfade_mult(state->pos--, adj_xf_f) : 1.0;
 		for (int k = 0; k < out_ch; ++k)
-			rbuf[0][i+offset_s+k] = rbuf[1][i+k]*m + rbuf[0][i+offset_s+k]*(1.0-m);
+			state->chain[0].buf[i+offset_s+k] = state->chain[1].buf[i+k]*m + state->chain[0].buf[i+offset_s+k]*(1.0-m);
 	}
-	return rbuf[0];
+	return state->chain[0].buf;
 }

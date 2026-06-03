@@ -36,10 +36,11 @@ struct watch_node {
 	struct timespec last_mtime;
 	pthread_mutex_t lock;
 	char *path, *channel_mask;
-	struct effects_chain chain, new_chain;
+	struct effects_chain chain, new_chain, xfade_chain;
+	sample_t *ec_buf;
 	struct effect *e;
 	struct effects_chain_xfade_state xfade;
-	ssize_t in_frames, buf_len;
+	ssize_t in_frames, out_frames;
 	int update_chain, enforce_eof_marker;
 };
 
@@ -73,10 +74,12 @@ static void watch_reload(struct watch_node *node)
 		}
 		else {
 			pthread_mutex_lock(&node->lock);
-			const ssize_t buf_len = get_effects_chain_buffer_len(&new_chain, node->in_frames, node->e->istream.channels);
-			if (buf_len > node->buf_len) {
-				pthread_mutex_unlock(&node->lock);
+			const ssize_t out_frames = get_effects_chain_max_out_frames(&new_chain, node->in_frames);
+			if (out_frames > node->out_frames) {
 				LOG_FMT(LL_ERROR, "%s: error: buffer length: %s", node->e->name, node->path);
+				destroy_effects_chain(&new_chain);
+			}
+			else if (effects_chain_realloc_buffers(&new_chain, node->in_frames)) {
 				destroy_effects_chain(&new_chain);
 			}
 			else {
@@ -84,8 +87,8 @@ static void watch_reload(struct watch_node *node)
 				effects_chain_set_dither_params(&new_chain, 0, 0);  /* disable auto dither */
 				node->new_chain = new_chain;
 				node->update_chain = 1;
-				pthread_mutex_unlock(&node->lock);
 			}
+			pthread_mutex_unlock(&node->lock);
 		}
 	}
 	else destroy_effects_chain(&new_chain);
@@ -125,8 +128,10 @@ static void * watch_worker(void *arg)
 static void watch_finish_xfade(struct watch_node *node)
 {
 	destroy_effects_chain(&node->chain);
-	node->chain = node->xfade.chain[1];
+	node->chain = node->xfade_chain;
+	node->ec_buf = effects_chain_get_input_buffer(&node->chain);
 	effects_chain_xfade_reset(&node->xfade);
+	node->xfade_chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 }
 
 static sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
@@ -134,24 +139,29 @@ static sample_t * watch_effect_run(struct effect *e, ssize_t *frames, sample_t *
 	struct watch_node *node = (struct watch_node *) e->data;
 	pthread_mutex_lock(&node->lock);
 	if (node->update_chain && node->xfade.pos == 0) {
-		node->xfade.chain[0] = node->chain;
-		node->xfade.chain[1] = node->new_chain;
-		node->xfade.pos = node->xfade.frames;
-		if (node->buf_len == 0 || node->xfade.pos == 0)
+		node->xfade_chain = node->new_chain;
+		effects_chain_xfade_begin(&node->xfade, &node->chain, &node->xfade_chain, EFFECTS_CHAIN_XFADE_TIME);
+		if (!node->ec_buf || node->xfade.pos == 0)
 			watch_finish_xfade(node);  /* no crossfade */
 		node->new_chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 		node->update_chain = 0;
 	}
 	pthread_mutex_unlock(&node->lock);
+	if (!node->ec_buf) {
+		memset(ibuf, 0, *frames * e->ostream.channels * sizeof(sample_t));
+		return ibuf;
+	}
+	memcpy(node->ec_buf, ibuf, *frames * e->istream.channels * sizeof(sample_t));
 	if (node->xfade.pos > 0) {
-		sample_t *rbuf = effects_chain_xfade_run(&node->xfade, frames, ibuf, obuf);
+		node->ec_buf = effects_chain_xfade_run(&node->xfade, frames);
 		if (node->xfade.pos == 0) {
 			watch_finish_xfade(node);
 			LOG_FMT(LL_VERBOSE, "%s: info: end of crossfade", e->name);
 		}
-		return rbuf;
 	}
-	return run_effects_chain(&node->chain, frames, ibuf, obuf);
+	else node->ec_buf = run_effects_chain(&node->chain, frames);
+	memcpy(ibuf, node->ec_buf, *frames * e->ostream.channels * sizeof(sample_t));
+	return ibuf;
 }
 
 static void watch_effect_reset(struct effect *e)
@@ -171,16 +181,17 @@ static sample_t * watch_effect_drain2(struct effect *e, ssize_t *frames, sample_
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	if (node->xfade.pos > 0) watch_finish_xfade(node);
-	return drain_effects_chain(&node->chain, frames, buf1, buf2);
+	node->ec_buf = drain_effects_chain(&node->chain, frames);
+	if (*frames > 0) memcpy(buf1, node->ec_buf, *frames * e->ostream.channels * sizeof(sample_t));
+	return buf1;
 }
 
 static void watch_node_destroy(struct watch_node *node)
 {
 	pthread_mutex_destroy(&node->lock);
 	destroy_effects_chain(&node->chain);
-	destroy_effects_chain(&node->xfade.chain[1]);
 	destroy_effects_chain(&node->new_chain);
-	free(node->xfade.buf);
+	destroy_effects_chain(&node->xfade_chain);
 	free(node->path);
 	free(node->channel_mask);
 	free(node);
@@ -208,17 +219,18 @@ static ssize_t watch_effect_buffer_frames(struct effect *e, ssize_t in_frames)
 {
 	struct watch_node *node = (struct watch_node *) e->data;
 	pthread_mutex_lock(&node->lock);
-	const ssize_t buf_len = get_effects_chain_buffer_len(&node->chain, in_frames, e->istream.channels);
-	const ssize_t buf_frames = ratio_mult_ceil(buf_len, 1, e->ostream.channels);
-	if (buf_len > node->buf_len) {
+	if (in_frames > node->in_frames) {
 		node->in_frames = in_frames;
-		node->buf_len = buf_len;
-		free(node->xfade.buf);
-		node->xfade.buf = calloc(node->buf_len, sizeof(sample_t));
-		if (!node->xfade.buf) node->xfade.frames = 0;
+		node->out_frames = get_effects_chain_max_out_frames(&node->chain, node->in_frames);
+		if (effects_chain_realloc_buffers(&node->chain, node->in_frames)) {
+			destroy_effects_chain(&node->chain);
+			node->ec_buf = NULL;
+		}
+		else node->ec_buf = effects_chain_get_input_buffer(&node->chain);
 	}
+	const ssize_t out_frames = node->out_frames;
 	pthread_mutex_unlock(&node->lock);
-	return buf_frames;
+	return out_frames;
 }
 
 static void watch_effect_channel_deps(struct effect *e, char **deps)
@@ -273,7 +285,6 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	node->chain = chain;
 	node->enforce_eof_marker = enforce_eof_marker;
 	node->xfade = (struct effects_chain_xfade_state) EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
-	node->xfade.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
 
 	e = calloc(1, sizeof(struct effect));
 	if (check_alloc(ei->name, e)) goto fail;

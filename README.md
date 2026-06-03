@@ -650,6 +650,12 @@ causes any character that follows to be intepreted as literal. Example:
 	# This is a comment
 	eq 3k 1.5 -3  # Another comment
 
+#### Threads
+
+An effects chain may be manually split amongst multiple threads using the
+`new_thread` directive. Each additional thread increases total input–output
+latency by one block.
+
 #### Other directives
 
 An exclamation mark (`!`) allows initialization failure of the effect that

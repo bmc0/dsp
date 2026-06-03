@@ -23,6 +23,6 @@
 #include "effect.h"
 #include "effects_chain.h"
 
-int align_effect_insert(struct effects_chain *, struct effect *, ssize_t *, ssize_t *);
+int align_effect_insert(struct effects_subchain *, struct effect *, struct effect *, ssize_t *, ssize_t *);
 
 #endif

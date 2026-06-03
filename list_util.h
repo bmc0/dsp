@@ -70,8 +70,8 @@
 } while(0)
 
 #define LIST_INSERT(list, node, after) do { \
-	if (!(after) || (after) == (list)->tail) \
-		LIST_APPEND(list, node); \
+	if (!(after)) LIST_PREPEND(list, node); \
+	else if ((after) == (list)->tail) LIST_APPEND(list, node); \
 	else { \
 		(node)->prev = (after); \
 		(node)->next = (after)->next; \

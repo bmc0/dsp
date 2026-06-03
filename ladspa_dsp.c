@@ -39,7 +39,7 @@
 #define DEFAULT_LOGLEVEL       LL_OPEN_ERROR
 
 struct ladspa_dsp {
-	sample_t *buf1, *buf2;
+	sample_t *ec_buf;
 	size_t frames;
 	int input_channels, output_channels;
 	struct effects_chain chain;
@@ -321,22 +321,11 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 	if (s == 0) return;
 	if (s > d->frames) {
 		LOG_FMT(LL_VERBOSE, "info: frames=%zd", s);
-		ssize_t buf_len = get_effects_chain_buffer_len(&d->chain, s, d->input_channels);
-		sample_t *buf1_tmp = realloc(d->buf1, buf_len * sizeof(sample_t));
-		sample_t *buf2_tmp = realloc(d->buf2, buf_len * sizeof(sample_t));
-		if (!buf1_tmp || !buf2_tmp) {
-			free((buf1_tmp) ? buf1_tmp : d->buf1);
-			free((buf2_tmp) ? buf2_tmp : d->buf2);
-			d->buf1 = d->buf2 = NULL;
-			dsp_perror(DSP_ENOMEM, __func__, NULL);
-		}
-		else {
-			d->buf1 = buf1_tmp;
-			d->buf2 = buf2_tmp;
-		}
+		if (effects_chain_realloc_buffers(&d->chain, s)) d->ec_buf = NULL;
+		else d->ec_buf = effects_chain_get_input_buffer(&d->chain);
 		d->frames = s;
 	}
-	if (!d->buf1 || !d->buf2) {
+	if (!d->ec_buf) {
 		/* failed to allocate buffer(s); output silence */
 		for (unsigned long k = d->input_channels; k < d->input_channels + d->output_channels; ++k)
 			memset(d->ports[k], 0, s * sizeof(LADSPA_Data));
@@ -345,13 +334,13 @@ static void run_dsp(LADSPA_Handle inst, unsigned long s)
 
 	for (unsigned long i = 0, j = 0; i < s; ++i)
 		for (unsigned long k = 0; k < d->input_channels; ++k)
-			d->buf1[j++] = (sample_t) d->ports[k][i];
+			d->ec_buf[j++] = (sample_t) d->ports[k][i];
 
-	sample_t *obuf = run_effects_chain(&d->chain, &w, d->buf1, d->buf2);
+	d->ec_buf = run_effects_chain(&d->chain, &w);
 
 	for (unsigned long i = 0, j = 0; i < s; ++i)
 		for (unsigned long k = d->input_channels; k < d->input_channels + d->output_channels; ++k)
-			d->ports[k][i] = (LADSPA_Data) obuf[j++];
+			d->ports[k][i] = (LADSPA_Data) d->ec_buf[j++];
 }
 
 static void run_null(LADSPA_Handle inst, unsigned long s)
@@ -368,8 +357,6 @@ static void cleanup_dsp(LADSPA_Handle inst)
 	#ifdef HAVE_FFTW3
 		dsp_fftw_save_wisdom();
 	#endif
-	free(d->buf1);
-	free(d->buf2);
 	free(d->ports);
 	free(d);
 }

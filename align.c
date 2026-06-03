@@ -92,10 +92,10 @@ static void align_effect_destroy(struct effect *e)
 	free(state);
 }
 
-int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_t *offsets, ssize_t *align_refs)
+int align_effect_insert(struct effects_subchain *sc, struct effect *prev, struct effect *next, ssize_t *offsets, ssize_t *align_refs)
 {
 	int do_align = 0;
-	const char *next_name = (prev->next) ? prev->next->name : "[end of chain]";
+	const char *next_name = (next) ? next->name : "end of chain";
 
 	if (align_refs) {
 		for (int k = 0; k < prev->ostream.channels; ++k)
@@ -127,7 +127,7 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	e->data = state;
 	state->cs = calloc(e->istream.channels, sizeof(struct align_channel_state));
 	if (check_alloc(e->name, state->cs)) goto fail;
-	ssize_t max_offset = (prev->next) ? offsets[0] : 0;  /* zero negative offsets at end of chain */
+	ssize_t max_offset = (next) ? offsets[0] : 0;  /* zero negative offsets at end of chain */
 	for (int k = 0; k < e->istream.channels; ++k)
 		max_offset = MAXIMUM(max_offset, offsets[k]);
 	ssize_t min_ref = max_offset;
@@ -152,7 +152,7 @@ int align_effect_insert(struct effects_chain *chain, struct effect *prev, ssize_
 	}
 	state->frames = -state->discard_frames;
 
-	LIST_INSERT(chain, e, prev);
+	effects_subchain_insert(sc, e, (next) ? next->prev : prev);  /* prev and next may be in different subchains */
 	return 0;
 
 	fail:

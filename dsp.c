@@ -83,12 +83,13 @@ enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
 static sample_t peak = 0.0, dither_mult = 0.0;
 static struct effects_chain chain = EFFECTS_CHAIN_INITIALIZER;
+static struct effects_chain xfade_chain = EFFECTS_CHAIN_INITIALIZER;
 static struct effects_chain_xfade_state xfade_state = EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
 static struct read_buf_input_list input_list = READ_BUF_INPUT_LIST_INITIALIZER;
 static struct codec_read_buf *in_codec_buf = NULL;
 static struct codec *out_codec = NULL;
 static struct codec_write_buf *out_codec_buf = NULL;
-static sample_t *buf1 = NULL, *buf2 = NULL;
+static sample_t *ec_buf = NULL;
 static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t sig_thread, key_thread;
 static int have_sig_thread = 0, have_key_thread = 0;
@@ -395,12 +396,10 @@ static void __attribute__((noreturn)) cleanup_and_exit(int s)
 	codec_write_buf_destroy(out_codec_buf);
 	destroy_codec(out_codec);
 	destroy_effects_chain(&chain);
-	destroy_effects_chain(&xfade_state.chain[1]);
+	destroy_effects_chain(&xfade_chain);
 #ifdef HAVE_FFTW3
 	dsp_fftw_save_wisdom();
 #endif
-	free(buf1);
-	free(buf2);
 	if (term_attrs_saved)
 		tcsetattr(term_fd, TCSANOW, &term_attrs);
 	if (clip_count > 0)
@@ -702,8 +701,10 @@ static void write_out(ssize_t frames, sample_t *buf, int add_dither)
 static void finish_xfade(void)
 {
 	destroy_effects_chain(&chain);
-	chain = xfade_state.chain[1];
+	chain = xfade_chain;
+	ec_buf = effects_chain_get_input_buffer(&chain);
 	effects_chain_xfade_reset(&xfade_state);
+	xfade_chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
 }
 
 static ssize_t do_seek(ssize_t pos, ssize_t offset, int whence, int pause_state)
@@ -882,16 +883,13 @@ static void run_abx_loop(void)
 {
 	const int in_channels = abx_inputs[0].head->codec->channels;
 	const int fade_frames = lrint((ABX_FADE_DURATION/1000.0) * abx_inputs[0].head->codec->fs);
-	const ssize_t buf_len = get_effects_chain_buffer_len(&chain, block_frames, in_channels);
 	int ret = 0, add_dither = 0, term_sig, fade_pos = 0;
 	int trial = 0, n_correct = 0, cur_input = 'X', next_input = 0, last_sel = 0;
-	sample_t *ibufs[3] = {0}, *obuf;
-	buf1 = calloc(buf_len, sizeof(sample_t));
-	buf2 = calloc(buf_len, sizeof(sample_t));
+	sample_t *ibufs[3] = {0};
 	ibufs[ABX_IBUF_A] = calloc(block_frames, sizeof(sample_t)*in_channels);
 	ibufs[ABX_IBUF_B] = calloc(block_frames, sizeof(sample_t)*in_channels);
 	char *seq = calloc(n_trials, sizeof(char));
-	if (!buf1 || !buf2 || !ibufs[ABX_IBUF_A] || !ibufs[ABX_IBUF_B] || !seq) {
+	if (!ibufs[ABX_IBUF_A] || !ibufs[ABX_IBUF_B] || !seq) {
 		dsp_perror(DSP_ENOMEM, __func__, NULL);
 		goto fail;
 	}
@@ -996,14 +994,14 @@ static void run_abx_loop(void)
 						if (!show_progress) LOG_FMT(LL_NORMAL, "info: playing %c", cur_input);
 					}
 					for (int k = 0; k < in_channels; ++k, ++buf_pos)
-						buf1[buf_pos] = ibuf[buf_pos] * fade;
+						ec_buf[buf_pos] = ibuf[buf_pos] * fade;
 				}
-				if (buf_pos < buf_end) memcpy(buf1+buf_pos, ibuf+buf_pos, sizeof(sample_t)*(buf_end-buf_pos));
+				if (buf_pos < buf_end) memcpy(ec_buf+buf_pos, ibuf+buf_pos, sizeof(sample_t)*(buf_end-buf_pos));
 			}
-			else memcpy(buf1, ibufs[abx_ibuf(cur_input)], sizeof(sample_t)*r_a*in_channels);
+			else memcpy(ec_buf, ibufs[abx_ibuf(cur_input)], sizeof(sample_t)*r_a*in_channels);
 			ssize_t w = r_a;
-			obuf = run_effects_chain(&chain, &w, buf1, buf2);
-			write_out(w, obuf, add_dither);
+			ec_buf = run_effects_chain(&chain, &w);
+			write_out(w, ec_buf, add_dither);
 			status_ctrl(STATUS_CTRL_DRAW);
 		}
 		end_trial:
@@ -1038,9 +1036,9 @@ static void run_abx_loop(void)
 #define DRAIN_EFFECTS_CHAIN \
 	do { \
 		ssize_t w = block_frames; \
-		obuf = drain_effects_chain(&chain, &w, buf1, buf2); \
+		ec_buf = drain_effects_chain(&chain, &w); \
 		if (w < 0) break; \
-		write_out(w, obuf, add_dither); \
+		write_out(w, ec_buf, add_dither); \
 	} while (1)
 
 #define REBUILD_EFFECTS_CHAIN \
@@ -1064,20 +1062,11 @@ static void run_abx_loop(void)
 		} \
 	} while (0)
 
-#define REALLOC_BUFS(chain) \
+#define REALLOC_BUFS(chain, set_buf) \
 	do { \
-		const ssize_t new_buf_len = get_effects_chain_buffer_len(chain, block_frames, input_list.head->codec->channels); \
-		if (new_buf_len > buf_len) { \
-			buf_len = new_buf_len; \
-			free(buf1); free(buf2); free(xfade_state.buf); \
-			buf1 = calloc(buf_len, sizeof(sample_t)); \
-			buf2 = calloc(buf_len, sizeof(sample_t)); \
-			xfade_state.buf = (!drain_effects) ? calloc(buf_len, sizeof(sample_t)) : NULL; \
-			if (!buf1 || !buf2 || (!drain_effects && !xfade_state.buf)) { \
-				dsp_perror(DSP_ENOMEM, __func__, NULL); \
-				cleanup_and_exit(1); \
-			} \
-		} \
+		if (effects_chain_realloc_buffers(chain, block_frames)) \
+			cleanup_and_exit(1); \
+		if (set_buf) ec_buf = effects_chain_get_input_buffer(chain); \
 	} while (0)
 
 int main(int argc, char *argv[])
@@ -1086,7 +1075,6 @@ int main(int argc, char *argv[])
 	double in_time = 0.0;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
 	struct codec_params p, out_p = CODEC_PARAMS_AUTO(NULL, CODEC_MODE_WRITE);
-	sample_t *obuf;
 
 	dsp_globals.prog_name = argv[0];
 
@@ -1280,10 +1268,8 @@ int main(int argc, char *argv[])
 			LOG_S(LL_ERROR, "error: ABX mode must be interactive");
 			cleanup_and_exit(1);
 		}
+		REALLOC_BUFS(&chain, 1);
 		if (input_mode == INPUT_MODE_ABX) run_abx_loop();  /* does not return */
-
-		ssize_t buf_len = 0;
-		REALLOC_BUFS(&chain);
 
 		while (input_list.head != NULL) {
 			ssize_t r, pos = input_list.head->start;
@@ -1357,17 +1343,19 @@ int main(int argc, char *argv[])
 							if (!is_paused && !drain_effects) {  /* attempt crossfade */
 								stream.fs = input_list.head->codec->fs;
 								stream.channels = input_list.head->codec->channels;
-								xfade_state.chain[0] = chain;
-								if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &xfade_state.chain[1], &stream, NULL, NULL))
+								if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &xfade_chain, &stream, NULL, NULL))
 									cleanup_and_exit(1);
-								xfade_state.frames = lround((EFFECTS_CHAIN_XFADE_TIME)/1000.0 * stream.fs);
-								xfade_state.pos = xfade_state.frames;
+								REALLOC_BUFS(&xfade_chain, 0);
+								SET_DITHER(&xfade_chain, input_list.head->codec);
+								effects_chain_xfade_begin(&xfade_state, &chain, &xfade_chain, EFFECTS_CHAIN_XFADE_TIME);
 								if (xfade_state.pos == 0 || stream.fs != out_codec->fs || stream.channels != out_codec->channels)
 									finish_xfade();  /* no crossfade */
 							}
 							else {
 								if (!is_paused) DRAIN_EFFECTS_CHAIN;
 								REBUILD_EFFECTS_CHAIN;
+								REALLOC_BUFS(&chain, 1);
+								SET_DITHER(&chain, input_list.head->codec);
 							}
 							if (input_mode != INPUT_MODE_SEQUENCE) {
 								if (out_codec->fs != stream.fs) {
@@ -1380,14 +1368,6 @@ int main(int argc, char *argv[])
 								}
 							}
 							else REOPEN_OUTPUT;
-							if (xfade_state.pos > 0) {
-								REALLOC_BUFS(&xfade_state.chain[1]);
-								SET_DITHER(&xfade_state.chain[1], input_list.head->codec);
-							}
-							else {
-								REALLOC_BUFS(&chain);
-								SET_DITHER(&chain, input_list.head->codec);
-							}
 							break;
 						case 'v':
 							verbose_progress = !verbose_progress;
@@ -1415,20 +1395,20 @@ int main(int argc, char *argv[])
 					update_progress(pos, repeats, is_paused, 1);
 					status_ctrl(STATUS_CTRL_DRAW);
 				}
-				ssize_t w = r = codec_read_buf_read(in_codec_buf, buf1, block_frames);
+				ssize_t w = r = codec_read_buf_read(in_codec_buf, ec_buf, block_frames);
 				pos = codec_read_buf_get_pos(in_codec_buf);
 				const int prev_repeats = repeats;
 				repeats = codec_read_buf_get_repeats(in_codec_buf);
 				const int did_repeat = (prev_repeats != repeats);
 				if (xfade_state.pos > 0) {
-					obuf = effects_chain_xfade_run(&xfade_state, &w, buf1, buf2);
+					ec_buf = effects_chain_xfade_run(&xfade_state, &w);
 					if (xfade_state.pos == 0) {
 						finish_xfade();
 						LOG_S(LL_VERBOSE, "info: end of crossfade");
 					}
 				}
-				else obuf = run_effects_chain(&chain, &w, buf1, buf2);
-				write_out(w, obuf, add_dither);
+				else ec_buf = run_effects_chain(&chain, &w);
+				write_out(w, ec_buf, add_dither);
 				k += w;
 				if (k >= out_codec->fs || did_repeat) {
 					update_progress(pos, repeats, is_paused, did_repeat);
@@ -1448,7 +1428,7 @@ int main(int argc, char *argv[])
 					DRAIN_EFFECTS_CHAIN;
 				REBUILD_EFFECTS_CHAIN;
 				REOPEN_OUTPUT;
-				REALLOC_BUFS(&chain);
+				REALLOC_BUFS(&chain, 1);
 			}
 		}
 		DRAIN_EFFECTS_CHAIN;
