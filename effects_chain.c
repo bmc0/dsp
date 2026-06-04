@@ -683,7 +683,7 @@ static int effects_chain_postproc_state_init(struct effects_chain_postproc_state
 	return 1;
 }
 
-static int query_channel_deps(struct effects_chain_postproc_state *state, struct effects_chain *chain, struct effect *e)
+static int query_channel_deps(struct effects_chain_postproc_state *state, struct effect *e)
 {
 	if (e->channel_deps) {
 		for (int i = 0; i < state->max_out_ch; ++i)
@@ -742,7 +742,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 	while (e) {
 		const int is_passthrough = (e->istream.channels == e->ostream.channels
 			&& e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE));
-		const int have_ch_deps = query_channel_deps(state, chain, e);
+		const int have_ch_deps = query_channel_deps(state, e);
 		if (prev) {
 			/* align channels */
 			if (e->flags & EFFECT_FLAG_ALIGN_BARRIER) {
@@ -878,7 +878,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
 	LIST_FOREACH(chain, e) {
-		if (query_channel_deps(state, chain, e)) {
+		if (query_channel_deps(state, e)) {
 			ssize_t *tmp_samples = state->samples[1];
 			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
 			for (int i = 0; i < e->ostream.channels; ++i) {
