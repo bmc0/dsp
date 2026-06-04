@@ -77,7 +77,7 @@ struct event {
 static struct termios term_attrs;
 static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1, plot = 0,
 	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0,
-	status_cleared = -1, status_redraw = 1, block_frames = DEFAULT_BLOCK_FRAMES,
+	status_cleared = -1, status_redraw = 1, out_drop = 0, block_frames = DEFAULT_BLOCK_FRAMES,
 	input_buf_ratio = DEFAULT_INPUT_BUF_RATIO, output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
 enum input_mode input_mode = INPUT_MODE_CONCAT;
 static ssize_t clip_count = 0;
@@ -692,6 +692,10 @@ static void write_out(ssize_t frames, sample_t *buf, int add_dither)
 		for (ssize_t i = 0; i < samples; ++i)
 			buf[i] = clip(buf[i]);
 	}
+	if (out_drop && frames > 0) {
+		codec_write_buf_drop(out_codec_buf, 1, 0);
+		out_drop = 0;
+	}
 	codec_write_buf_write(out_codec_buf, buf, frames);
 }
 
@@ -718,7 +722,11 @@ static ssize_t do_seek(ssize_t pos, ssize_t offset, int whence, int pause_state)
 	if ((s = codec_read_buf_seek(in_codec_buf, s)) >= 0) {
 		if (xfade_state.pos > 0) finish_xfade();
 		reset_effects_chain(&chain);
-		codec_write_buf_drop(out_codec_buf, pause_state, pause_state);
+		if (pause_state) {
+			codec_write_buf_drop(out_codec_buf, 1, 1);
+			out_drop = 0;
+		}
+		else out_drop = 1;
 		return s;
 	}
 	return pos;
