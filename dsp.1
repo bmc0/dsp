@@ -246,11 +246,12 @@ Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 crossfeed.
 .TP
 \fBmatrix4\fR [\fIoptions\fR ...] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]
-2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
-primarily for music. The intended speaker configuration is fronts at ±30°
-and surrounds between ±60° and ±120°. The front outputs replace the
-original input channels and the surround outputs are appended to the end of
-the channel list.
+Active matrix upmixer designed primarily for music. Currently supports 2/2
+(two front and two surround) and 2/4 (two front and four surround) layouts.
+The intended speaker configuration is in accordance with ITU-R BS.775.
+Surrounds should be ±100° to ±120° (2/2), or ±60° to ±150° (2/4). Fronts
+should be at ±30°. The front outputs replace the original input channels
+and the surround outputs are appended to the end of the channel list.
 .sp 0.5
 For best results, the surround speakers must be calibrated to match the
 front speakers in both level and spectral balance. \fBmatrix4\fR is designed to
@@ -262,6 +263,10 @@ steering. As steering moves from neutral to half rear, \fIsurround_level_rear\fR
 gradually takes effect. This allows fine-tuning of the overall front/rear
 balance while still allowing full level from the surrounds when needed. The
 default levels are \-3dB and 0dB, respectively.
+.sp 0.5
+The surround outputs should be delayed or otherwise decorrelated from the
+fronts using the \fBdelay\fR and/or \fBdecorrelate\fR effects. Delays in the range
+of 15\-25ms tend to work well.
 .sp 0.5
 Options are given as a comma-separated list. Recognized options are:
 .RS
@@ -281,6 +286,9 @@ adjustable via \fIparam\fR. The default value of 0.5 gives approximately
 backwards compatability and are the same as \fIv4\fR with \fIparam\fR set to 0
 (4.8dB separation) or 1 (full separation), respectively. The default
 matrix is \fIv4\fR.
+.TP
+layout=\fIid\fR
+Channel layout. Recognized values are `2/2' (default) and `2/4'.
 .TP
 shelf=\fIgain\fR[:\fIf0\fR[\fBk\fR]]|\fInone\fR
 Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
@@ -307,21 +315,14 @@ signal[=\fItrue\fR|\fIfalse\fR]
 Toggle the effect on effects chain signal.
 .TP
 direct_path[=\fItrue\fR|\fIfalse\fR]
-Redirect strongly rear-encoded sounds to two additional surround
-outputs which are not delayed. Enables sharper localization of such
-sounds while still allowing delay/decorrelation to be applied to
-ambient components. The default is \fIfalse\fR.
+Redirect strongly surround-encoded sounds to additional outputs. The
+default is \fIfalse\fR.
 .TP
 rear_event_mask=\fIfactor\fR
 Sensitivity to rear-encoded sound events. If set to zero, sensitivity
 is the same for all directions. If set to a high value (e.g. 5), most
 rear events will be ignored. The default values are 1 for \fBmatrix4\fR
 and 0.3 for \fBmatrix4_mb\fR.
-.TP
-surround_delay=\fIdelay\fR[\fBs\fR|\fBm\fR|\fBS\fR]
-Surround output delay. Generally, this should be set so that the
-surrounds are delayed 10\-25 milliseconds relative to the fronts
-(measured acoustically). The default is value 15 milliseconds.
 .TP
 filter_bank=\fIid\fR (\fBmatrix4_mb\fR only)
 .TS
@@ -358,11 +359,12 @@ Applying decorrelation filters to the surround outputs can further improve
 spatial impression over simple delay. Example:
 .EX
 	matrix4 -3/0
-	:2,3 delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	:2,3 delay 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
 .EE
-The surround outputs are advanced by 10ms using the \fBdelay\fR effect to
-compensate for the peak energy time of the decorrelation filters. An
-additional \fBallpass\fR filter equalizes the group delay at low frequencies.
+The decorrelation filter has a peak energy time of approximately 10ms, so
+average total delay applied to the surround outputs is about 15ms at high
+frequencies. An \fBallpass\fR filter is used to equalize group delay at low
+frequencies.
 
 .TP
 \fBmatrix4_mb\fR [\fIoptions\fR ...] [\fIsurround_level\fR][/\fIsurround_level_rear\fR]

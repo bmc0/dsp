@@ -249,11 +249,12 @@ Example:
 	Simple crossfeed for headphones. Very similar to Linkwitz/Meier/CMoy/bs2b
 	crossfeed.
 * `matrix4 [options ...] [surround_level][/surround_level_rear]`  
-	2-to-4 channel (2 front and 2 surround) active matrix upmixer designed
-	primarily for music. The intended speaker configuration is fronts at ±30°
-	and surrounds between ±60° and ±120°. The front outputs replace the
-	original input channels and the surround outputs are appended to the end of
-	the channel list.
+	Active matrix upmixer designed primarily for music. Currently supports 2/2
+	(two front and two surround) and 2/4 (two front and four surround) layouts.
+	The intended speaker configuration is in accordance with ITU-R BS.775.
+	Surrounds should be ±100° to ±120° (2/2), or ±60° to ±150° (2/4). Fronts
+	should be at ±30°. The front outputs replace the original input channels
+	and the surround outputs are appended to the end of the channel list.
 
 	For best results, the surround speakers must be calibrated to match the
 	front speakers in both level and spectral balance. `matrix4` is designed to
@@ -265,6 +266,10 @@ Example:
 	gradually takes effect. This allows fine-tuning of the overall front/rear
 	balance while still allowing full level from the surrounds when needed. The
 	default levels are -3dB and 0dB, respectively.
+
+	The surround outputs should be delayed or otherwise decorrelated from the
+	fronts using the `delay` and/or `decorrelate` effects. Delays in the range
+	of 15-25ms tend to work well.
 
 	Options are given as a comma-separated list. Recognized options are:
 
@@ -282,6 +287,8 @@ Example:
 		backwards compatability and are the same as `v4` with `param` set to 0
 		(4.8dB separation) or 1 (full separation), respectively. The default
 		matrix is `v4`.
+	* `layout=id`  
+		Channel layout. Recognized values are `2/2` (default) and `2/4`.
 	* `shelf=gain[:f0[k]]|none`  
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
@@ -302,19 +309,14 @@ Example:
 	* `signal[=true|false]`  
 		Toggle the effect on effects chain signal.
 	* `direct_path[=true|false]`  
-		Redirect strongly rear-encoded sounds to two additional surround
-		outputs which are not delayed. Enables sharper localization of such
-		sounds while still allowing delay/decorrelation to be applied to
-		ambient components. The default is `false`.
+		Redirect strongly surround-encoded sounds to additional outputs. The
+		default is `false`. See `examples/matrix4_*direct_path*` for usage
+		examples.
 	* `rear_event_mask=factor`  
 		Sensitivity to rear-encoded sound events. If set to zero, sensitivity
 		is the same for all directions. If set to a high value (e.g. 5), most
 		rear events will be ignored. The default values are 1 for `matrix4`
 		and 0.3 for `matrix4_mb`.
-	* `surround_delay=delay[s|m|S]`  
-		Surround output delay. Generally, this should be set so that the
-		surrounds are delayed 10-25 milliseconds relative to the fronts
-		(measured acoustically). The default is value 15 milliseconds.
 	* `filter_bank=id` (`matrix4_mb` only)  
 
 		ID           | Notes
@@ -344,12 +346,13 @@ Example:
 
 	```
 	matrix4 -3/0
-	:2,3 delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	:2,3 delay 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
 	```
 
-	The surround outputs are advanced by 10ms using the `delay` effect to
-	compensate for the peak energy time of the decorrelation filters. An
-	additional `allpass` filter equalizes the group delay at low frequencies.
+	The decorrelation filter has a peak energy time of approximately 10ms, so
+	average total delay applied to the surround outputs is about 15ms at high
+	frequencies. An `allpass` filter is used to equalize group delay at low
+	frequencies.
 
 	See `examples/matrix4_*` for more examples.
 

@@ -54,12 +54,13 @@ struct matrix4_band {
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
+		struct cs_interp_state sg, rg;
+		struct cs_interp_state amb, sdir, rdir;
 	} m_interp;
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
-	struct cs_interp_state m_surr_amb, m_surr_dir;
 	struct ewma_state ev_thresh;
-	double ev_thresh_max, ev_thresh_min, contour;
+	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
 #if DEBUG_POWER_ERROR
 	struct ewma_state pwr_err[2];
 	struct smf_state pwr_err_sm;
@@ -77,9 +78,9 @@ struct matrix4_band {
 
 struct matrix4_mb_state {
 	int s, c0, c1, n_bands;
-	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple;
+	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple, have_rears;
 	enum status_type status_type;
-	struct fshape_state fshape[2], inv_fshape[6];
+	struct fshape_state fshape[2], inv_fshape[10];
 	struct filter_bank fb[2];
 	struct matrix4_band band[FB_MAX_BANDS];
 	sample_t *fb_buf[2];
@@ -87,7 +88,7 @@ struct matrix4_mb_state {
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double cmc_param, surr_mult[2], contour_pwrcmp, freq_mask;
-	ssize_t len, fb_buf_len, fb_buf_p, surr_delay_frames;
+	ssize_t len, fb_buf_len, fb_buf_p;
 	ssize_t fade_frames, fade_p;
 #if DEBUG_POWER_ERROR
 	FILE *pwr_err_file;
@@ -154,7 +155,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 		int n_angles = 0;
 		struct axes angles[FB_MAX_BANDS];
-		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0, out_ls_dir = 0.0, out_rs_dir = 0.0;
+		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0, out_lr = 0.0, out_rr = 0.0;
+		sample_t out_ls_dir = 0.0, out_rs_dir = 0.0, out_lr_dir = 0.0, out_rr_dir = 0.0;
 		const sample_t s0 = fshape_run(&state->fshape[0], ibuf[i*e->istream.channels + state->c0]);
 		const sample_t s1 = fshape_run(&state->fshape[1], ibuf[i*e->istream.channels + state->c1]);
 		state->fb[0].run(&state->fb[0], s0);
@@ -240,16 +242,27 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				cs_interp_insert(&band->m_interp.rsl, m.rsl*ct2);
 				cs_interp_insert(&band->m_interp.rsr, m.rsr*ct2);
 
+				if (state->have_rears) {
+					const double rsw = smoothstep(band->ax.cs*(-2/M_PI_4)-1.0);
+					const double sg = rsw*band->rear_shelf + (1.0-rsw);
+					const double s_norm = CALC_NORM_MULT(sg);
+					cs_interp_insert(&band->m_interp.sg, sg*s_norm);
+					cs_interp_insert(&band->m_interp.rg, s_norm);
+				}
 				if (state->do_phase_flip) {
 					const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
 					cs_interp_insert(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 				}
 				if (state->do_direct_path) {
-					double r_pan[2];
+					double r_pan[3];
 					surr_direct_pan(&band->ax, r_pan);
-					cs_interp_insert(&band->m_surr_amb, r_pan[0]);
-					cs_interp_insert(&band->m_surr_dir, r_pan[1]);
+					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
+					if (state->have_rears) {
+						surr_direct_pan_2to4(&band->ax, r_pan);
+						cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
+					}
+					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
 				}
 			}
 
@@ -282,15 +295,27 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				b_ls_pf = ap1_run(&band->pf_ap[0], b_ls_pf+1e-15)-1e-15;
 				b_rs_pf = ap1_run(&band->pf_ap[1], b_rs_pf+1e-15)-1e-15;
 			}
+			sample_t b_lr = b_ls, b_rr = b_rs, b_lr_pf = 0.0, b_rr_pf = 0.0;
+			if (state->have_rears) {
+				const sample_t m_sg = cs_interp(&band->m_interp.sg, state->s);
+				const sample_t m_rg = cs_interp(&band->m_interp.rg, state->s);
+				b_lr_pf = b_ls_pf*m_rg; b_rr_pf = b_rs_pf*m_rg;
+				b_ls_pf *= m_sg; b_rs_pf *= m_sg;
+			}
 			if (state->do_direct_path) {
-				const sample_t m_surr_amb = cs_interp(&band->m_surr_amb, state->s);
-				const sample_t m_surr_dir = cs_interp(&band->m_surr_dir, state->s);
-				out_ls += b_ls_pf*m_surr_amb; out_rs += b_rs_pf*m_surr_amb;
-				out_ls_dir += b_ls*m_surr_dir; out_rs_dir -= b_rs*m_surr_dir;
+				const sample_t m_amb = cs_interp(&band->m_interp.amb, state->s);
+				const sample_t m_sdir = cs_interp(&band->m_interp.sdir, state->s);
+				out_ls += b_ls_pf*m_amb; out_rs += b_rs_pf*m_amb;
+				out_ls_dir += b_ls*m_sdir; out_rs_dir -= b_rs*m_sdir;
+				if (state->have_rears) {
+					const sample_t m_rdir = cs_interp(&band->m_interp.rdir, state->s);
+					out_lr += b_lr_pf*m_amb; out_rr += b_rr_pf*m_amb;
+					out_lr_dir += b_lr*m_rdir; out_rr_dir -= b_rr*m_rdir;
+				}
 			}
 			else {
-				out_ls += b_ls_pf;
-				out_rs += b_rs_pf;
+				out_ls += b_ls_pf; out_rs += b_rs_pf;
+				out_lr += b_lr_pf; out_rr += b_rr_pf;
 			}
 
 			state->fb_buf[0][fb_buf_fp+k] = state->fb[0].s[k];
@@ -299,9 +324,6 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 		out_l = fshape_run(&state->inv_fshape[0], out_l);
 		out_r = fshape_run(&state->inv_fshape[1], out_r);
-		out_ls = fshape_run(&state->inv_fshape[2], out_ls+(1e-15/324))-1e-15;
-		out_rs = fshape_run(&state->inv_fshape[3], out_rs+(1e-15/324))-1e-15;
-
 		sample_t *ibuf_p = &ibuf[i*e->istream.channels], *obuf_p = &obuf[i*e->ostream.channels];
 		for (int k = 0; k < e->istream.channels; ++k) {
 			if (k == state->c0) obuf_p[k] = out_l;
@@ -309,9 +331,19 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			else obuf_p[k] = ibuf_p[k];
 		}
 		obuf_p += e->istream.channels;
-		obuf_p[0] = out_ls;
-		obuf_p[1] = out_rs;
-		if (state->do_direct_path) {
+		obuf_p[0] = fshape_run(&state->inv_fshape[2], out_ls+(1e-15/324))-1e-15;
+		obuf_p[1] = fshape_run(&state->inv_fshape[3], out_rs+(1e-15/324))-1e-15;
+		if (state->have_rears) {
+			obuf_p[2] = fshape_run(&state->inv_fshape[4], out_lr+(1e-15/324))-1e-15;
+			obuf_p[3] = fshape_run(&state->inv_fshape[5], out_rr+(1e-15/324))-1e-15;
+			if (state->do_direct_path) {
+				obuf_p[4] = fshape_run(&state->inv_fshape[6], out_ls_dir+(1e-15/324))-1e-15;
+				obuf_p[5] = fshape_run(&state->inv_fshape[7], out_rs_dir+(1e-15/324))-1e-15;
+				obuf_p[6] = fshape_run(&state->inv_fshape[8], out_lr_dir+(1e-15/324))-1e-15;
+				obuf_p[7] = fshape_run(&state->inv_fshape[9], out_rr_dir+(1e-15/324))-1e-15;
+			}
+		}
+		else if (state->do_direct_path) {
 			obuf_p[2] = fshape_run(&state->inv_fshape[4], out_ls_dir+(1e-15/324))-1e-15;
 			obuf_p[3] = fshape_run(&state->inv_fshape[5], out_rs_dir+(1e-15/324))-1e-15;
 		}
@@ -457,10 +489,7 @@ static void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	latency[state->c0] += state->len;
 	latency[state->c1] += state->len;
-	const int ss = e->istream.channels, ns = e->ostream.channels - e->istream.channels;
-	const int nds = (state->do_direct_path) ? ns/2 : ns;
-	for (int i = ss; i < ss+ns; ++i) latency[i] += state->len;
-	for (int i = ss; i < ss+nds; ++i) req_delay[i] += state->surr_delay_frames;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += state->len;
 }
 #endif
 
@@ -502,7 +531,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->destroy = matrix4_mb_test_fb_effect_destroy;
 #else
 	e->istream.channels = istream->channels;
-	e->ostream.channels = istream->channels + ((config.do_direct_path)?4:2);
+	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
+		+ config.channel_layout->ns*((config.do_direct_path)?2:1);
 	e->run = matrix4_mb_effect_run;
 	e->reset = matrix4_mb_effect_reset;
 	e->drain_samples = matrix4_mb_effect_drain_samples;
@@ -517,12 +547,12 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->n_bands = fbp->n_bands;
-	state->surr_delay_frames = config.surr_delay_frames;
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
 	state->do_phase_flip = !!config.do_phase_flip;
 	state->do_direct_path = !!config.do_direct_path;
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
+	state->have_rears = (config.channel_layout->ns >= 4);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
 	state->cmc_param = config.calc_matrix_coefs_param;
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
@@ -547,8 +577,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		cs_interp_set(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 		ap1_reset(&band->pf_ap[0]);
 		ap1_reset(&band->pf_ap[1]);
-		cs_interp_set(&band->m_surr_amb, 1.0);
-		cs_interp_set(&band->m_surr_dir, 0.0);
+		cs_interp_set(&band->m_interp.amb, 1.0);
+		cs_interp_set(&band->m_interp.sdir, 0.0);
+		cs_interp_set(&band->m_interp.rdir, 0.0);
 	#if DEBUG_POWER_ERROR
 		ewma_init(&band->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
@@ -595,6 +626,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
 			band->contour *= sqrt(1.0/(1.0+lowpass_norm_f2));
 		}
+		band->rear_shelf = sqrt((1.0+0.1*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		/* LOG_FMT(LL_VERBOSE, "%s: band %d: contour=%.4g", ei->name, k, band->contour); */
 	}
 	state->surr_mult[0] = config.surr_mult[0];

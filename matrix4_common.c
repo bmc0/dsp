@@ -29,6 +29,25 @@ void calc_matrix_coefs_v1(const struct axes *, const struct axes *, double, doub
 void calc_matrix_coefs_v4(const struct axes *, const struct axes *, double, double,
 	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
+#define CHANNEL_LAYOUT_DEF(NF, NS) { \
+	.name = XSTR(NF) "/" XSTR(NS), \
+	.id = CHANNEL_LAYOUT_ ## NF ## _ ## NS, \
+	.nf = NF, .ns = NS \
+}
+static const struct channel_layout_info ch_layout_info[] = {
+	CHANNEL_LAYOUT_DEF(2, 2),
+	CHANNEL_LAYOUT_DEF(2, 4),
+};
+
+static const struct channel_layout_info * get_channel_layout(const char *name)
+{
+	for (int i = 0; i < LENGTH(ch_layout_info); ++i) {
+		if (strcmp(ch_layout_info[i].name, name) == 0)
+			return &ch_layout_info[i];
+	}
+	return NULL;
+}
+
 static int optcmp(const char *opt, const char *name, char sep)
 {
 	size_t len = strlen(name);
@@ -88,14 +107,13 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 
 	/* set config defaults */
 	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
-	config->surr_delay_frames = TIME_TO_FRAMES(SURR_DELAY_DEFAULT, istream->fs);
 	config->lookahead_frames = CALC_LOOKAHEAD_FRAMES((is_mb)?LOOKAHEAD_MB_DEFAULT:LOOKAHEAD_DEFAULT, istream->fs);
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
 	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
-	config->do_phase_flip = DO_PHASE_FLIP_DEFAULT;
+	config->do_phase_flip = -1;
 	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
 	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->use_fir_p = USE_FIR_P_DEFAULT;
@@ -105,6 +123,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
 	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
+	config->channel_layout = &ch_layout_info[0];
 
 	/* parse args */
 	for (int i = 1; i < argc; ++i) {
@@ -132,7 +151,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 				next_opt = isolate(opt, ',');
 				opt = trim_whitespace(opt);
 				if (*opt == '\0') /* do nothing */;
-				else if (is_opt(opt, "status=") || is_opt(opt, "show_status=")) {
+				else if (is_opt(opt, "status=")) {
 					char *opt_arg = isolate(opt, '=');
 					if (*opt_arg == '\0' || strcmp(opt_arg, "bars") == 0)
 						config->status_type = STATUS_TYPE_BARS;
@@ -142,6 +161,14 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 						config->status_type = STATUS_TYPE_NONE;
 					else {
 						LOG_FMT(LL_ERROR, "%s: error: unrecognized status type: %s", ei->name, opt_arg);
+						goto opt_fail;
+					}
+				}
+				else if (is_opt(opt, "layout=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (*opt_arg == '\0') goto needs_arg;
+					if (!(config->channel_layout = get_channel_layout(opt_arg))) {
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized channel layout: %s", ei->name, opt_arg);
 						goto opt_fail;
 					}
 				}
@@ -233,12 +260,6 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					config->rear_ev_mask = strtod(opt_arg, &endptr);
 					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
 					CHECK_RANGE(config->rear_ev_mask >= 0.0 && config->rear_ev_mask <= 100.0, opt, goto opt_fail);
-				}
-				else if (is_opt(opt, "surround_delay=")) {
-					char *opt_arg = isolate(opt, '=');
-					if (*opt_arg == '\0') goto needs_arg;
-					config->surr_delay_frames = parse_len(opt_arg, istream->fs, &endptr);
-					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
 				}
 				else if (is_opt(opt, "filter_bank=")) {
 					char *opt_arg = isolate(opt, '=');
@@ -345,6 +366,8 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 			free(opt_str);
 		}
 	}
+	if (config->do_phase_flip < 0)
+		config->do_phase_flip = (config->do_direct_path) ? 0 : DO_PHASE_FLIP_DEFAULT;
 
 	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
 	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);

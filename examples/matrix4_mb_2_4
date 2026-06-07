@@ -11,9 +11,8 @@
 #     4: Rear Left
 #     5: Rear Right
 
-matrix4_mb signal -3/0
-:2,3 {
-	delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
-	gain -3.01 remix 0 1 0 1
+matrix4_mb signal,layout=2/4 -3/0
+:2-5 {
+	delay 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
 	:2,3 delay 2m decorrelate -s7 -m -f0.7k -l35m 5 allpass 80 0.6 :
 } :

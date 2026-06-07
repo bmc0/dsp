@@ -61,7 +61,6 @@
 #define MATRIX_V4_PARAM_DEFAULT    0.5
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
-#define SURR_DELAY_DEFAULT        15.0
 #define LOOKAHEAD_DEFAULT          0.6
 #define LOOKAHEAD_MB_DEFAULT       0.9
 #define SHELF_MULT_DEFAULT         M_SQRT1_2
@@ -176,15 +175,27 @@ union cmc_shelf_mult {
 typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, double, double,
 	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
 
+enum channel_layout {
+	CHANNEL_LAYOUT_2_2 = 0,
+	CHANNEL_LAYOUT_2_4,
+};
+
+struct channel_layout_info {
+	const char *name;
+	enum channel_layout id;
+	int nf, ns;
+};
+
 struct matrix4_config {
 	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple, use_fir_p;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
-	ssize_t lookahead_frames, surr_delay_frames;
+	ssize_t lookahead_frames;
 	enum status_type status_type;
 	enum capn_filter_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double calc_matrix_coefs_param;
+	const struct channel_layout_info *channel_layout;
 	char fb_id[32];
 	#if DEBUG_POWER_ERROR
 		FILE *pwr_err_file;
@@ -305,18 +316,22 @@ static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, doubl
 
 static inline void surr_direct_pan(struct axes *ax, double r[2])
 {
-	if (ax->cs >= 0.0) {
-		r[0] = 1.0;
-		r[1] = 0.0;
-	}
-	else {
-		double x = fabs(ax->lr), y = ax->cs+(M_PI_4/2);
-		if (ax->cs > -M_PI_4/2) y *= 2.0;
-		double z = MAXIMUM(x-y, 0.0)*6.0;
-		z = MINIMUM(z, M_PI_2);
-		r[0] = cos(z);
-		r[1] = sin(z);
-	}
+	const double x = fabs(ax->lr);
+	const double y0 = (-0.45*x+0.8)*x*x-(M_PI/11);
+	const double y1 = (-0.52*x+0.93)*x*x-(M_PI/8);
+	const double m = M_PI_2/(y1-y0);
+	const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
+	r[0] = cos(z); r[1] = sin(z);
+}
+
+static inline void surr_direct_pan_2to4(struct axes *ax, double r[3])
+{
+	const double g = r[1], x = fabs(ax->lr);
+	const double y0 = x*(-1.0/2.0)-(M_PI/66);
+	const double y1 = x*(-1.0/3.0)-(M_PI/6);
+	const double m = M_PI_2/(y1-y0);
+	const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
+	r[1] = g*cos(z); r[2] = g*sin(z);
 }
 
 #if DOWNSAMPLE_FACTOR > 1
