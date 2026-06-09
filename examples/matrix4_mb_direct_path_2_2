@@ -10,9 +10,13 @@
 #     2: Surround Left
 #     3: Surround Right
 
-matrix4_mb signal,direct_path,rear_event_mask=0 -3/0
+matrix4_mb signal,matrix=v4:1,direct_path,rear_event_mask=0 -3/0
 :2-5 {
-	:0,1 delay -10m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :
+	:0,1 {
+		delay -10m decorrelate -s1 -m -f0.7k -l35m 5
+		lowshelf 11 2s -5 allpass 80 0.6 allpass 25 0.8
+		delay -m3.1m -b0.5 0
+	} :
 	:2,3 delay -6m :
 	remix 0,2 1,3
 } :
