@@ -285,6 +285,7 @@ static struct ec_token * ec_parse_child_block(struct ec_token *tok, struct ec_pa
 		.stream = parent_state->stream,
 		.path = parent_state->path,
 		.dir = parent_state->dir,
+		.line_strs = parent_state->line_strs,
 		.last_stream_ch = parent_state->last_stream_ch,
 	};
 	if (ec_parser_state_ch_sel_mask(&state, parent_state->ch_sel) == 0)
