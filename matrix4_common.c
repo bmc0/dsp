@@ -342,7 +342,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 				else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
 					char *opt_arg = isolate(opt, '=');
 					if (*opt_arg == '\0') goto needs_arg;
-					char *path = construct_full_path(dir, opt_arg, istream->fs, config->n_channels);
+					char *path = construct_full_path(dir, opt_arg, istream->fs, 2);
 					config->pwr_err_file = fopen(path, "w");
 					if (!config->pwr_err_file) {
 						LOG_FMT(LL_ERROR, "%s: error: could not open file for writing: %s", ei->name, path);
@@ -434,9 +434,8 @@ int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_
 	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->drift_dpwr[i], fs, EWMA_RISE_TIME(ACCOM_TIME*0.5));
 	for (int i = 2; i < 4; ++i) ewma_init(&ev->drift_dpwr[i], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
-	ewma_init(&ev->drift_scale[0], fs, EWMA_RISE_TIME(RISE_TIME_FAST));
-	ewma_set(&ev->drift_scale[0], 1.0);
-	ewma_init(&ev->drift_scale[1], fs, EWMA_RISE_TIME(RISE_TIME_FAST*0.3));
+	ewma_init(&ev->drift_scale, fs, EWMA_RISE_TIME(RISE_TIME_FAST));
+	ewma_set(&ev->drift_scale, 1.0);
 	ewma_init(&ev->pwrcmp_factor, fs, EWMA_RISE_TIME(PWRCMP_RISE_TIME));
 	ev->base_ord_ns = base_ord_notch_scale;
 	ewma_init(&ev->ord_notch_scale, fs, EWMA_RISE_TIME(ORD_NOTCH_SCALE_RT*1000.0));
@@ -445,30 +444,26 @@ int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_
 		BIQUAD_LOWPASS, fs, (0.34*1000*1.5)/RISE_TIME_FAST, 0.577, 0, 0, BIQUAD_WIDTH_Q);
 	for (int i = 0; i < 2; ++i) svf_pk_init(&ev->ord_notch[i], fs, ORD_NOTCH_FREQ_1, 0.5, ORD_NOTCH_GAIN_1);
 	for (int i = 2; i < 4; ++i) svf_pk_init(&ev->ord_notch[i], fs, ORD_NOTCH_FREQ_2, 0.5, ORD_NOTCH_GAIN_2);
-	ev->t_hold = -2;
+	ev->t = 1;
 	ev->buf_len = TIME_TO_FRAMES(EVENT_SAMPLE_TIME*0.5, fs);
 	ev->ord_buf = calloc(ev->buf_len, sizeof(struct axes));
 	ev->ord_lp_buf = calloc(ev->buf_len, sizeof(struct axes));
-	#if ENABLE_LOOKBACK
-		ev->diff_buf = calloc(ev->buf_len, sizeof(struct axes));
-		ev->slope_buf = calloc(ev->buf_len, sizeof(double [2]));
-	#endif
+#if ENABLE_LOOKBACK
+	ev->diff_buf = calloc(ev->buf_len, sizeof(struct axes));
+	ev->slope_buf = calloc(ev->buf_len, sizeof(double [2]));
+#endif
 	ev->ds_ord_buf = calloc(ev->buf_len, sizeof(double));
 	ev->max_buf = calloc(ev->buf_len, sizeof(double));
 	if (!ev->ord_buf || !ev->ord_lp_buf || !ev->ds_ord_buf || !ev->max_buf
-	#if ENABLE_LOOKBACK
+#if ENABLE_LOOKBACK
 			|| !ev->diff_buf || !ev->slope_buf
-	#endif
+#endif
 			) {
 		dsp_perror(DSP_ENOMEM, __func__, NULL);
 		return 1;
 	}
 	ev->clip_thresh = EVENT_THRESH * base_thresh_scale * 100.0;
 	ev->pcf_sens = PWRCMP_FACTOR_SENS / base_thresh_scale;
-	#if DEBUG_PRINT_MIN_RISE_TIME
-		ev->max_diff_scale = ev->max_ord_scale = 1.0;
-		ev->fs = fs;
-	#endif
 	return 0;
 }
 
@@ -476,19 +471,12 @@ void event_state_cleanup(struct event_state *ev)
 {
 	free(ev->ord_buf);
 	free(ev->ord_lp_buf);
-	#if ENABLE_LOOKBACK
-		free(ev->diff_buf);
-		free(ev->slope_buf);
-	#endif
+#if ENABLE_LOOKBACK
+	free(ev->diff_buf);
+	free(ev->slope_buf);
+#endif
 	free(ev->ds_ord_buf);
 	free(ev->max_buf);
-	#if DEBUG_PRINT_MIN_RISE_TIME
-		#define EWMA_CONST_TO_RT(x, fs) (-1.0/log(1.0-(x))/(fs)*1000.0*2.1972)
-		#define EWMA_RT_TO_CONST(x, fs) (1.0-exp(-1.0/((fs)*((x)/1000.0/2.1972))))
-		LOG_FMT(LL_VERBOSE, "%s(): minimum rise time: ord=%gms; diff=%gms", __func__,
-			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(ACCOM_TIME*2.0, ev->fs)*ev->max_ord_scale, ev->fs),
-			EWMA_CONST_TO_RT(EWMA_RT_TO_CONST(RISE_TIME_FAST*2.0, ev->fs)*ev->max_diff_scale, ev->fs));
-	#endif
 }
 
 void event_config_init_priv(struct event_config *evc, double fs, double rear_ev_mask, double diff_overshoot)
@@ -519,9 +507,9 @@ static inline void norm_axes(struct axes *ax)
 
 static inline double drift_err_scale(const struct axes *ax0, const struct axes *ax1, double sens_err)
 {
-	const double lr_err = fabs(ax1->lr - ax0->lr) * M_2_PI;
-	const double cs_err = fabs(ax1->cs - ax0->cs) * M_2_PI;
-	return 1.0 + (lr_err+cs_err)*sens_err;
+	const double lr_err = fabs(ax1->lr - ax0->lr);
+	const double cs_err = fabs(ax1->cs - ax0->cs);
+	return 1.0 + (lr_err+cs_err)*sens_err*M_2_PI;
 }
 
 static inline double ord_notch_scale(const struct axes *ax)
@@ -562,9 +550,9 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ev->diff_last = diff;
 	ev->ord_buf[ev->buf_p] = ord;
 	ev->ord_lp_buf[ev->buf_p] = ord_lp;
-	#if ENABLE_LOOKBACK
-		ev->diff_buf[ev->buf_p] = diff;
-	#endif
+#if ENABLE_LOOKBACK
+	ev->diff_buf[ev->buf_p] = diff;
+#endif
 
 	ev->adj = 1.0 - ev->ord_factor/20.0;
 	ev->adj = (ev->adj > 0.5) ? ev->adj : 0.5;
@@ -575,14 +563,12 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	const double r_pwr_xf = pwr_env->r*(1.0-NORM_CROSSFEED) + pwr_env->l*NORM_CROSSFEED;
 	const double l_norm_div = ewma_run(&ev->norm[0], fabs(l_pwr_xf - ewma_run(&ev->norm[2], l_pwr_xf)*norm_accom_factor*ev->adj));
 	const double r_norm_div = ewma_run(&ev->norm[1], fabs(r_pwr_xf - ewma_run(&ev->norm[3], r_pwr_xf)*norm_accom_factor*ev->adj));
-	ewma_run_scale_asym(&ev->accom[4], pwr_env->l, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
-	ewma_run_scale_asym(&ev->accom[5], pwr_env->r, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
-	const double l_mask = MAXIMUM(pwr_env->l - ewma_get_last(&ev->accom[4]), 0.0);
-	const double r_mask = MAXIMUM(pwr_env->r - ewma_get_last(&ev->accom[5]), 0.0);
-	const double l_mask_norm = (!NEAR_POS_ZERO(l_norm_div)) ? l_mask / l_norm_div : (NEAR_POS_ZERO(l_mask)) ? 0.0 : ev->clip_thresh;
-	const double r_mask_norm = (!NEAR_POS_ZERO(r_norm_div)) ? r_mask / r_norm_div : (NEAR_POS_ZERO(r_mask)) ? 0.0 : ev->clip_thresh;
-	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(l_mask_norm, ev->clip_thresh));
-	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(r_mask_norm, ev->clip_thresh));
+	const double l_mask = pwr_env->l - ewma_run_scale_asym(&ev->accom[4], pwr_env->l, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
+	const double r_mask = pwr_env->r - ewma_run_scale_asym(&ev->accom[5], pwr_env->r, 1.0, ACCOM_TIME/EVENT_MASK_TIME);
+	const double l_mask_norm = l_mask / (l_norm_div+DBL_MIN);
+	const double r_mask_norm = r_mask / (r_norm_div+DBL_MIN);
+	const double l_mask_norm_sm = ewma_run(&ev->smooth[0], MINIMUM(MAXIMUM(l_mask_norm, 0.0), ev->clip_thresh));
+	const double r_mask_norm_sm = ewma_run(&ev->smooth[1], MINIMUM(MAXIMUM(r_mask_norm, 0.0), ev->clip_thresh));
 	const double l_event = (l_mask_norm_sm - ewma_run(&ev->slow[0], l_mask_norm_sm)) * ev->adj;
 	const double r_event = (r_mask_norm_sm - ewma_run(&ev->slow[1], r_mask_norm_sm)) * ev->adj;
 	const double l_slope = l_event - ev->last[0];
@@ -591,67 +577,69 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ev->last[1] = r_event;
 	ev->slope_last[0] = l_slope;
 	ev->slope_last[1] = r_slope;
-	#if ENABLE_LOOKBACK
-		ev->slope_buf[ev->buf_p][0] = l_slope;
-		ev->slope_buf[ev->buf_p][1] = r_slope;
-	#endif
+#if ENABLE_LOOKBACK
+	ev->slope_buf[ev->buf_p][0] = l_slope;
+	ev->slope_buf[ev->buf_p][1] = r_slope;
+#endif
 	const double max_d = ev->max_buf[ev->buf_p];
 	ev->max_buf[ev->buf_p] = MAXIMUM(l_event, r_event);
+#if DEBUG_POWER_ERROR
+	ewma_set(&ev->pwrcmp_factor, 1.0);
+#else
 	ewma_run_scale_asym(&ev->pwrcmp_factor, 1.0-smoothstep(max_d*ev->pcf_sens), 1.0, PWRCMP_RISE_TIME/PWRCMP_FALL_TIME);
+#endif
 
-	if (!ev->sample && ((l_slope > 0.0 && l_event > thresh) || (r_slope > 0.0 && r_event > thresh))) {
-		ev->sample = 1;
+	if (!ev->t_sample && ((l_slope > 0.0 && l_event > thresh) || (r_slope > 0.0 && r_event > thresh))) {
 		ev->flags[1] = 0;
 		ev->flags[1] |= (l_event >= r_event) ? EVENT_FLAG_L : 0;
 		ev->flags[1] |= (r_event >= l_event) ? EVENT_FLAG_R : 0;
+		ev->t_end[1] = 0;
 		ev->t_sample = ev->t;
-		if (ev->t - ev->t_hold > 1) {
+		if (!ev->t_hold || ev->t_end[0]) {
 			ev->max[1] = 0.0;
 			ewma_set(&ev->avg[0], ord.lr);
 			ewma_set(&ev->avg[1], ord.cs);
 			ewma_set(&ev->avg[2], diff.lr);
 			ewma_set(&ev->avg[3], diff.cs);
-			#if ENABLE_LOOKBACK
-				ssize_t i = CBUF_PREV(ev->buf_p, ev->buf_len), k = ev->buf_p;
-				switch (ev->flags[1] & (EVENT_FLAG_L | EVENT_FLAG_R)) {
-				case EVENT_FLAG_L:
-					while (ev->slope_buf[i][0] > ev->slope_buf[k][0])
-					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
-					break;
-				case EVENT_FLAG_R:
-					while (ev->slope_buf[i][1] > ev->slope_buf[k][1])
-					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
-					break;
-				default:
-					while (ev->slope_buf[i][0] + ev->slope_buf[i][1] > ev->slope_buf[k][0] + ev->slope_buf[k][1])
-					{ --ev->t_sample; k = i; i = CBUF_PREV(i, ev->buf_len); }
-				}
-				i = k;
-				while (i != ev->buf_p) {
-					ewma_run(&ev->avg[0], ev->ord_buf[i].lr);
-					ewma_run(&ev->avg[1], ev->ord_buf[i].cs);
-					ewma_run(&ev->avg[2], ev->diff_buf[i].lr);
-					ewma_run(&ev->avg[3], ev->diff_buf[i].cs);
-					i = CBUF_NEXT(i, ev->buf_len);
-				}
-				/* LOG_FMT(LL_VERBOSE, "%s(): lookback: %zd samples", __func__, ev->t - ev->t_sample); */
-			#endif
+		#if ENABLE_LOOKBACK
+			int i = CBUF_PREV(ev->buf_p, ev->buf_len), k = ev->buf_p;
+			const int ch = (ev->flags[1] & EVENT_FLAG_L) ? 0 : 1;
+			while (ev->slope_buf[i][ch] > ev->slope_buf[k][ch]) {
+				--ev->t_sample;
+				k = i;
+				i = CBUF_PREV(i, ev->buf_len);
+			}
+			i = k;
+			while (i != ev->buf_p) {
+				ewma_run(&ev->avg[0], ev->ord_buf[i].lr);
+				ewma_run(&ev->avg[1], ev->ord_buf[i].cs);
+				ewma_run(&ev->avg[2], ev->diff_buf[i].lr);
+				ewma_run(&ev->avg[3], ev->diff_buf[i].cs);
+				i = CBUF_NEXT(i, ev->buf_len);
+			}
+			/* LOG_FMT(LL_VERBOSE, "%s(): lookback: %zd samples", __func__, ev->t - ev->t_sample); */
+		#endif
 		}
-		else {
-			ev->t_sample -= evc->sample_frames/2;
-			ev->flags[1] |= EVENT_FLAG_FUSE;
-		}
+		else ev->flags[1] |= EVENT_FLAG_FUSE;
 	}
 
-	if (ev->sample) {
-		const double ord_lr_avg = ewma_run(&ev->avg[0], ord.lr);
-		const double ord_cs_avg = ewma_run(&ev->avg[1], ord.cs);
-		const double diff_lr_avg = ewma_run(&ev->avg[2], diff.lr);
-		const double diff_cs_avg = ewma_run(&ev->avg[3], diff.cs);
-		if (l_event > ev->max[1]) ev->max[1] = l_event;
-		if (r_event > ev->max[1]) ev->max[1] = r_event;
-		if (ev->t - ev->t_sample >= evc->sample_frames) {
-			ev->sample = 0;
+	if (ev->t_sample) {
+		if (!ev->t_end[1] && ((ev->flags[1] & EVENT_FLAG_L && adapt.l < DBL_MIN)
+				|| (ev->flags[1] & EVENT_FLAG_R && adapt.r < DBL_MIN))) {
+			ev->t_end[1] = ev->t + evc->sample_frames;
+		}
+		if (!ev->t_end[1]) {
+			ewma_run(&ev->avg[0], ord.lr);
+			ewma_run(&ev->avg[1], ord.cs);
+			ewma_run(&ev->avg[2], diff.lr);
+			ewma_run(&ev->avg[3], diff.cs);
+			if (l_event > ev->max[1]) ev->max[1] = l_event;
+			if (r_event > ev->max[1]) ev->max[1] = r_event;
+		}
+		if (ev->t - ev->t_sample >= evc->sample_frames || (ev->flags[1] & EVENT_FLAG_FUSE && ev->t_end[1])) {
+			ev->t_sample = 0;
+			const double diff_lr_avg = ewma_get_last(&ev->avg[2]);
+			const double diff_cs_avg = ewma_get_last(&ev->avg[3]);
 			if (fabs(diff_lr_avg)+fabs(diff_cs_avg) > evc->diff_lim)
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
 			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
@@ -668,58 +656,55 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			}
 			else {
 				ev->hold = 1;
-				ev->t_hold = ev->t;
 				ev->dir.lr = diff_lr_avg;
 				ev->dir.cs = diff_cs_avg;
-				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
-					ev->dir.lr = ord_lr_avg;
-					ev->dir.cs = ord_cs_avg;
-					ev->ord_factor += 1.0;
-					if (!(ev->flags[1] & EVENT_FLAG_FUSE))
-						++ev->ord_count;
+				if (!(ev->flags[1] & EVENT_FLAG_FUSE)) {
+					ev->t_hold = ev->t;
+					if (ev->flags[1] & EVENT_FLAG_USE_ORD) ++ev->ord_count;
+					else ++ev->diff_count;
 				}
-				else if (!(ev->flags[1] & EVENT_FLAG_FUSE))
-					++ev->diff_count;
+				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
+					ev->dir.lr = ewma_get_last(&ev->avg[0]);
+					ev->dir.cs = ewma_get_last(&ev->avg[1]);
+					ev->ord_factor += 1.0;
+				}
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
+				ev->t_end[0] = ev->t_end[1];
 				ev->ds_diff = 1.0 + smoothstep((ev->max[1]-thresh)/(thresh*DIFF_WEIGHT_SCALE))*DIFF_SENS_WEIGHT;
-				ewma_set(&ev->drift_scale[1], ev->ds_diff*0.25);
 				/* LOG_FMT(LL_VERBOSE, "%s(): event: type: %4s; max: %6.3f; lr: %+06.2f°; cs: %+06.2f°",
 					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff", ev->max[1],
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
 			}
 		}
 	}
-	if (ev->hold) {
-		const double ds_diff = ewma_run_scale(&ev->drift_scale[1], ev->ds_diff, ev->ds_diff);
-		#if DEBUG_PRINT_MIN_RISE_TIME
-			ev->max_diff_scale = MAXIMUM(ev->max_diff_scale, ds_diff);
-		#endif
-		ax->lr = ax_ev->lr = ewma_run_scale(&ev->drift[2], ev->dir.lr, ds_diff);
-		ax->cs = ax_ev->cs = ewma_run_scale(&ev->drift[3], ev->dir.cs, ds_diff);
-		if ((ev->flags[0] & EVENT_FLAG_L && l_mask_norm_sm <= EVENT_END_THRESH)
-				|| (ev->flags[0] & EVENT_FLAG_R && r_mask_norm_sm <= EVENT_END_THRESH)) {
-			ev->flags[0] |= EVENT_FLAG_END;
+
+	const struct axes ax_ord_last = { .lr = ewma_get_last(&ev->drift[0]), .cs = ewma_get_last(&ev->drift[1]) };
+	const double ds_ord = ewma_run_set_max(&ev->drift_scale, ev->ds_ord_buf[ev->buf_p]
+		* drift_err_scale(&ax_ord_last, &ord_lp_d_notched, ORD_SENS_ERR));
+	if (ev->t_hold) {
+		ax->lr = ax_ev->lr = ewma_run_scale(&ev->drift[2], ev->dir.lr, ev->ds_diff);
+		ax->cs = ax_ev->cs = ewma_run_scale(&ev->drift[3], ev->dir.cs, ev->ds_diff);
+		ewma_set(&ev->drift[0], ax->lr);
+		ewma_set(&ev->drift[1], ax->cs);
+		if (!ev->t_end[0] && ((ev->flags[0] & EVENT_FLAG_L && adapt.l < DBL_MIN)
+				|| (ev->flags[0] & EVENT_FLAG_R && adapt.r < DBL_MIN))) {
+			ev->t_end[0] = ev->t + evc->sample_frames;
 		}
-		if ((ev->t - ev->t_hold >= evc->min_hold_frames && ev->flags[0] & EVENT_FLAG_END)
-				|| ev->t - ev->t_hold >= evc->max_hold_frames) {
-			if (ev->t - ev->t_hold < evc->max_hold_frames) ++ev->early_count;
+		if ((ev->t - ev->t_hold >= evc->max_hold_frames) || (ev->t_end[0] && ev->t >= ev->t_end[0])) {
+			if (!ev->t_end[0]) ewma_set(&ev->drift_scale, 1.0);
+			const ssize_t ev_d = ((ev->t_end[0]) ? ev->t_end[0] : ev->t) - ev->t_hold;
+			if (ev_d < evc->max_hold_frames) ++ev->early_count;
+			ev->t_hold = 0;
 			ev->hold = 0;
-			ewma_set(&ev->drift[0], ax->lr);
-			ewma_set(&ev->drift[1], ax->cs);
-			ewma_set(&ev->drift_scale[0], 1.0);
 		}
 
-		ax_dpwr->lr = ewma_set(&ev->drift_dpwr[0], ewma_run_scale(&ev->drift_dpwr[2], ev->dir.lr, ds_diff));
-		ax_dpwr->cs = ewma_set(&ev->drift_dpwr[1], ewma_run_scale(&ev->drift_dpwr[3], ev->dir.cs, ds_diff));
+		ax_dpwr->lr = ewma_run_scale(&ev->drift_dpwr[2], ev->dir.lr, ev->ds_diff);
+		ax_dpwr->cs = ewma_run_scale(&ev->drift_dpwr[3], ev->dir.cs, ev->ds_diff);
+		ewma_set(&ev->drift_dpwr[0], ax_dpwr->lr);
+		ewma_set(&ev->drift_dpwr[1], ax_dpwr->cs);
 	}
 	else {
-		const struct axes ax_last = { .lr = ewma_get_last(&ev->drift[0]), .cs = ewma_get_last(&ev->drift[1]) };
-		const double ds_ord = ewma_run_set_max(&ev->drift_scale[0],
-			drift_err_scale(&ax_last, &ord_lp_d_notched, ORD_SENS_ERR) * ev->ds_ord_buf[ev->buf_p]);
-		#if DEBUG_PRINT_MIN_RISE_TIME
-			ev->max_ord_scale = MAXIMUM(ev->max_ord_scale, ds_ord);
-		#endif
 		ax->lr = ewma_run_scale(&ev->drift[0], ord_lp_d_notched.lr, ds_ord);
 		ax->cs = ewma_run_scale(&ev->drift[1], ord_lp_d_notched.cs, ds_ord);
 		ewma_set(&ev->drift[2], ax->lr);
@@ -727,19 +712,21 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		ax_ev->lr = ax_ev->cs = 0.0;
 
 		const struct axes ax_dpwr_last = { .lr = ewma_get_last(&ev->drift_dpwr[0]), .cs = ewma_get_last(&ev->drift_dpwr[1]) };
-		const double ds_dpwr = drift_err_scale(&ax_dpwr_last, &ord_lp, ORD_DPWR_SENS_ERR);
-		ax_dpwr->lr = ewma_set(&ev->drift_dpwr[2], ewma_run_scale(&ev->drift_dpwr[0], ord_lp.lr, ds_dpwr));
-		ax_dpwr->cs = ewma_set(&ev->drift_dpwr[3], ewma_run_scale(&ev->drift_dpwr[1], ord_lp.cs, ds_dpwr));
+		const double ds_dpwr = drift_err_scale(&ax_dpwr_last, &ord_lp_d, ORD_DPWR_SENS_ERR);
+		ax_dpwr->lr = ewma_run_scale(&ev->drift_dpwr[0], ord_lp_d.lr, ds_dpwr);
+		ax_dpwr->cs = ewma_run_scale(&ev->drift_dpwr[1], ord_lp_d.cs, ds_dpwr);
+		ewma_set(&ev->drift_dpwr[2], ax_dpwr->lr);
+		ewma_set(&ev->drift_dpwr[3], ax_dpwr->cs);
 	}
 	norm_axes(ax);
 	norm_axes(ax_dpwr);
 	ewma_run_set_max(&ev->ord_notch_scale, ord_notch_scale(ax));
 	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
+	ev->ds_ord_buf[ev->buf_p] = 1.0;
 	if (l_mask_norm_sm > ds_ord_thresh || r_mask_norm_sm > ds_ord_thresh) {
 		const double x = (MAXIMUM(l_mask_norm_sm, r_mask_norm_sm) - ds_ord_thresh) / (thresh*1.5 - ds_ord_thresh);
 		ev->ds_ord_buf[ev->buf_p] = smoothstep(x)*ORD_SENS_WEIGHT + 1.0;
 	}
-	else ev->ds_ord_buf[ev->buf_p] = 1.0;
 	++ev->t;
 	ev->buf_p = CBUF_NEXT(ev->buf_p, ev->buf_len);
 }

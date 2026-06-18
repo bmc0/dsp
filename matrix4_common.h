@@ -41,7 +41,7 @@
 #define ORD_FACTOR_DECAY     10.0
 #define EVENT_SAMPLE_TIME    30.0
 #define EVENT_MAX_HOLD_TIME 200.0
-#define EVENT_MIN_HOLD_TIME  50.0
+#define EVENT_MIN_HOLD_TIME  30.0
 #define EVENT_MASK_TIME     100.0
 #define ORD_SENS_ERR          2.0
 #define ORD_SENS_WEIGHT       3.0
@@ -61,8 +61,8 @@
 #define MATRIX_V4_PARAM_DEFAULT    0.5
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
-#define LOOKAHEAD_DEFAULT          0.6
-#define LOOKAHEAD_MB_DEFAULT       0.9
+#define LOOKAHEAD_DEFAULT          0.5
+#define LOOKAHEAD_MB_DEFAULT       0.7
 #define SHELF_MULT_DEFAULT         M_SQRT1_2
 #define SHELF_F0_DEFAULT         500.0
 #define CONTOUR_PWRCMP_DEFAULT     1.0
@@ -103,7 +103,6 @@
 #endif
 
 #define ENABLE_LOOKBACK 1
-#define DEBUG_PRINT_MIN_RISE_TIME 0
 #define DEBUG_POWER_ERROR 0
 
 struct envs {
@@ -128,37 +127,31 @@ struct svf_pk_state {
 };
 
 struct event_state {
-	char sample, hold;
+	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
+	struct ewma_state drift[4], drift_dpwr[4], drift_scale;
+	struct ewma_state pwrcmp_factor, ord_notch_scale;
+	struct biquad_state ord_lp[2];
+	struct svf_pk_state ord_notch[4];
+	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
+#if ENABLE_LOOKBACK
+	struct axes *diff_buf;
+	double (*slope_buf)[2];
+#endif
+	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
+	double ord_factor, base_ord_ns, adj, ds_diff, *ds_ord_buf, *max_buf;
+	ssize_t t, t_sample, t_hold, t_end[2];
+	ssize_t ord_count, diff_count, early_count, ignore_count;
+	int hold, buf_len, buf_p;
 	enum {
 		EVENT_FLAG_L = 1<<0,
 		EVENT_FLAG_R = 1<<1,
 		EVENT_FLAG_USE_ORD = 1<<2,
 		EVENT_FLAG_FUSE = 1<<3,
-		EVENT_FLAG_END = 1<<4,
 	} flags[2];
-	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4], drift_dpwr[4], drift_scale[2];
-	struct ewma_state pwrcmp_factor, ord_notch_scale;
-	struct biquad_state ord_lp[2];
-	struct svf_pk_state ord_notch[4];
-	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
-	#if ENABLE_LOOKBACK
-		struct axes *diff_buf;
-		double (*slope_buf)[2];
-	#endif
-	struct envs *env_buf;
-	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
-	double ord_factor, base_ord_ns, adj, ds_diff, *ds_ord_buf, *max_buf;
-	ssize_t t, t_sample, t_hold;
-	ssize_t ord_count, diff_count, early_count, ignore_count;
-	ssize_t buf_len, buf_p;
-	#if DEBUG_PRINT_MIN_RISE_TIME
-		double max_ord_scale, max_diff_scale, fs;
-	#endif
 };
 
 struct event_config {
-	ssize_t sample_frames, max_hold_frames, min_hold_frames;
+	int sample_frames, max_hold_frames, min_hold_frames;
 	double ord_factor_c, diff_lim, rear_ev_mask;
 };
 
@@ -188,18 +181,18 @@ struct channel_layout_info {
 
 struct matrix4_config {
 	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple, use_fir_p;
+	int lookahead_frames;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
-	ssize_t lookahead_frames;
 	enum status_type status_type;
 	enum capn_filter_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double calc_matrix_coefs_param;
 	const struct channel_layout_info *channel_layout;
 	char fb_id[32];
-	#if DEBUG_POWER_ERROR
-		FILE *pwr_err_file;
-	#endif
+#if DEBUG_POWER_ERROR
+	FILE *pwr_err_file;
+#endif
 };
 
 struct phase_flip_params {
