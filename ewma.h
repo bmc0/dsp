@@ -1,7 +1,7 @@
 /*
  * This file is part of dsp.
  *
- * Copyright (c) 2022-2024 Michael Barbour <barbour.michael.0@gmail.com>
+ * Copyright (c) 2022-2026 Michael Barbour <barbour.michael.0@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -74,7 +74,7 @@ static inline double ewma_set(struct ewma_state *state, double s)
 	return s;
 }
 
-static inline double ewma_get_last(struct ewma_state *state)
+static inline double ewma_get_last(const struct ewma_state *state)
 {
 	return state->m0;
 }
