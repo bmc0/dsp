@@ -46,6 +46,7 @@
 #define ORD_SENS_ERR          2.0
 #define ORD_SENS_WEIGHT       3.0
 #define ORD_WEIGHT_THRESH     0.3
+#define ORD_OFFSET_THRESH     0.6
 #define ORD_NOTCH_FREQ_1      4.0
 #define ORD_NOTCH_GAIN_1    -10.3
 #define ORD_NOTCH_FREQ_2     12.0
@@ -53,10 +54,12 @@
 #define ORD_NOTCH_SCALE_RT    2.0  /* seconds */
 #define DIFF_SENS_WEIGHT      2.0
 #define DIFF_WEIGHT_SCALE     2.5
-#define ORD_DPWR_SENS_ERR     8.0
+#define ORD_DPWR_SENS_ERR     2.0
+/* #define ORD_DPWR_FALL_SCALE   2.0 */
 #define PWRCMP_RISE_TIME    100.0
 #define PWRCMP_FALL_TIME     15.0
 #define PWRCMP_FACTOR_SENS    0.2
+#define OFFSET_BASE_SCALE     1.0
 
 #define MATRIX_V4_PARAM_DEFAULT    0.5
 #define SURR_MULT_DEFAULT          M_SQRT1_2
@@ -103,6 +106,7 @@
 #endif
 
 #define ENABLE_LOOKBACK 1
+#define ORD_DPWR_USE_ABS_MAX 0
 #define DEBUG_POWER_ERROR 0
 
 struct envs {
@@ -128,7 +132,7 @@ struct svf_pk_state {
 
 struct event_state {
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
-	struct ewma_state drift[4], drift_dpwr[4], drift_scale;
+	struct ewma_state drift[4], drift_scale[2], drift_err[4], offset[4];
 	struct ewma_state pwrcmp_factor, ord_notch_scale;
 	struct biquad_state ord_lp[2];
 	struct svf_pk_state ord_notch[4];
@@ -138,8 +142,9 @@ struct event_state {
 	double (*slope_buf)[2];
 #endif
 	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
-	double ord_factor, base_ord_ns, adj, ds_diff, *ds_ord_buf, *max_buf;
-	ssize_t t, t_sample, t_hold, t_end[2];
+	double ord_factor, base_ord_ns, adj, ds_diff, off_thresh, rts_off;
+	double *ds_ord_buf, *max_buf;
+	ssize_t t, t_sample, t_hold, t_end[2], t_off_ord;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	int hold, buf_len, buf_p;
 	enum {
@@ -148,11 +153,12 @@ struct event_state {
 		EVENT_FLAG_USE_ORD = 1<<2,
 		EVENT_FLAG_FUSE = 1<<3,
 	} flags[2];
+	enum { OFF_FLAG_L = 1<<0, OFF_FLAG_R = 1<<1 } off_flags;
 };
 
 struct event_config {
 	int sample_frames, max_hold_frames, min_hold_frames;
-	double ord_factor_c, diff_lim, rear_ev_mask;
+	double ord_factor_c, diff_lim, rear_ev_mask, offset_scale_slope;
 };
 
 enum status_type {
