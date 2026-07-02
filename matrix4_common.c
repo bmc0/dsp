@@ -77,17 +77,17 @@ static void set_fb_stop_default(struct matrix4_config *config)
 
 #define is_opt(opt, name)     optcmp(opt, name, '=')
 #define is_opt_arg(opt, name) optcmp(opt, name, ':')
-#define HANDLE_BOOLEAN_ARG(s) \
+#define HANDLE_BOOLEAN_ARG2(s, opt_arg, true_val, false_val) \
 	do { \
-		char *opt_arg = isolate(opt, '='); \
 		size_t opt_arg_len = strlen(opt_arg); \
-		if (opt_arg_len == 0 || strncasecmp(opt_arg, "true", opt_arg_len) == 0) (s) = 1; \
-		else if (strncasecmp(opt_arg, "false", opt_arg_len) == 0) (s) = 0; \
+		if (opt_arg_len == 0 || strncasecmp(opt_arg, "true", opt_arg_len) == 0) (s) = (true_val); \
+		else if (strncasecmp(opt_arg, "false", opt_arg_len) == 0) (s) = (false_val); \
 		else { \
 			LOG_FMT(LL_ERROR, "%s: error: unrecognized argument to option '%s': %s", ei->name, opt, opt_arg); \
 			goto opt_fail; \
 		} \
 	} while (0)
+#define HANDLE_BOOLEAN_ARG(s, opt_arg) HANDLE_BOOLEAN_ARG2(s, opt_arg, 1, 0)
 #define CALC_LOOKAHEAD_FRAMES(x, fs) TIME_TO_FRAMES(EVENT_SAMPLE_TIME + RISE_TIME_FAST*(x), fs)
 
 int matrix4_config_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector,
@@ -114,9 +114,9 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
 	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
 	config->do_phase_flip = -1;
-	config->do_direct_path = DO_DIRECT_PATH_DEFAULT;
 	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->use_fir_p = USE_FIR_P_DEFAULT;
+	config->dp_mode = DIRECT_PATH_MODE_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	memset(config->fb_id, 0, sizeof(config->fb_id));
@@ -246,13 +246,18 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					CHECK_RANGE(config->contour_pwrcmp >= 0.0 && config->contour_pwrcmp <= 1.0, opt, goto opt_fail);
 				}
 				else if (is_opt(opt, "phase_flip=")) {
-					HANDLE_BOOLEAN_ARG(config->do_phase_flip);
+					char *opt_arg = isolate(opt, '=');
+					HANDLE_BOOLEAN_ARG(config->do_phase_flip, opt_arg);
 				}
 				else if (is_opt(opt, "signal=")) {
-					HANDLE_BOOLEAN_ARG(config->enable_signal);
+					char *opt_arg = isolate(opt, '=');
+					HANDLE_BOOLEAN_ARG(config->enable_signal, opt_arg);
 				}
 				else if (is_opt(opt, "direct_path=")) {
-					HANDLE_BOOLEAN_ARG(config->do_direct_path);
+					char *opt_arg = isolate(opt, '=');
+					if (strcmp(opt_arg, "event") == 0) config->dp_mode = DIRECT_PATH_EVENT;
+					else if (strcmp(opt_arg, "static") == 0) config->dp_mode = DIRECT_PATH_STATIC;
+					else HANDLE_BOOLEAN_ARG2(config->dp_mode, opt_arg, DIRECT_PATH_EVENT, DIRECT_PATH_NONE);
 				}
 				else if (is_opt(opt, "rear_event_mask=")) {
 					char *opt_arg = isolate(opt, '=');
@@ -316,7 +321,8 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					}
 				}
 				else if (is_opt(opt, "use_fir_p=")) {
-					HANDLE_BOOLEAN_ARG(config->use_fir_p);
+					char *opt_arg = isolate(opt, '=');
+					HANDLE_BOOLEAN_ARG(config->use_fir_p, opt_arg);
 					if (!is_mb) goto mb_only;
 				}
 				else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
@@ -336,7 +342,8 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					config->lookahead_frames = CALC_LOOKAHEAD_FRAMES(v, istream->fs);
 				}
 				else if (is_opt(opt, "dpwr_decouple=")) {  /* undocumented; for testing */
-					HANDLE_BOOLEAN_ARG(config->do_dpwr_decouple);
+					char *opt_arg = isolate(opt, '=');
+					HANDLE_BOOLEAN_ARG(config->do_dpwr_decouple, opt_arg);
 				}
 			#if DEBUG_POWER_ERROR
 				else if (is_opt(opt, "pwr_err_file=")) {  /* undocumented; for testing */
@@ -367,7 +374,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 		}
 	}
 	if (config->do_phase_flip < 0)
-		config->do_phase_flip = (config->do_direct_path) ? 0 : DO_PHASE_FLIP_DEFAULT;
+		config->do_phase_flip = (config->dp_mode == DIRECT_PATH_STATIC) ? 0 : DO_PHASE_FLIP_DEFAULT;
 
 	config->surr_mult[0] = (isnan(surr_level[0])) ? SURR_MULT_DEFAULT : pow(10.0, surr_level[0] / 20.0);
 	config->surr_mult[1] = (isnan(surr_level[1])) ? SURR_MULT_REAR_DEFAULT : pow(10.0, surr_level[1] / 20.0);
@@ -500,6 +507,13 @@ void phase_flip_init_params(struct phase_flip_params *pf, double fs)
 {
 	pf->c[0] = 0.667829372575655;  /* log(1.95) */
 	pf->c[1] = log(0.0005*(44100.0/fs));
+}
+
+void direct_path_state_init(struct direct_path_state *dp, double fs, enum direct_path_mode mode)
+{
+	ewma_init(&dp->zs, fs, EWMA_RISE_TIME(RISE_TIME_FAST));
+	dp->enable = (mode == DIRECT_PATH_STATIC);
+	dp->mode = mode;
 }
 
 static inline void norm_axes(struct axes *ax)
@@ -1064,6 +1078,62 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	m->lsr *= pdc_s;
 	m->rsl *= pdc_s;
 	m->rsr *= pdc_s;
+}
+
+void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
+	const struct axes *ax, int have_rears, double r[3])
+{
+	const double x = fabs(ax->lr);
+	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0;
+	if (dp->mode == DIRECT_PATH_EVENT) {
+		if (!dp->enable && ev->t_hold) {
+			const double eb = (-0.45*x+0.8)*x*x-(M_PI/8);
+			if (ev->dir.cs <= eb) {
+				if (ax->cs >= 0.0) ewma_set(&dp->zs, 1.0);
+				dp->enable = 1;
+			}
+		}
+		if (dp->enable) {
+			const double y0 = (-0.05*x+0.17)*x*x-(M_PI/32);
+			const double y1 = (-0.15*x+0.37)*x*x-(M_PI/12);
+			if (ev->t_hold) {
+				if (ev->dir.cs >= y1) {
+					if (ax->cs >= y0) goto direct_path_finish;
+					else dp->enable = 2;
+				}
+			}
+			else if (ax->cs >= y0) {
+				direct_path_finish:
+				dp->enable = 0;
+				ewma_set(&dp->zs, 0.0);
+				return;
+			}
+			const double zs = ewma_run_scale(&dp->zs, (dp->enable == 1) ? 1.0 : 0.0, ev->ds_diff);
+			if (dp->enable > 1 && zs < 1e-6) goto direct_path_finish;
+			const double m = M_PI_2/(y1-y0);
+			const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2) * zs;
+			r[0] = cos(z); r[1] = sin(z);
+			if (have_rears) {
+				const double y2 = x*(-1.22)+(M_PI/16), y3 = -x-(M_PI/8);
+				const double m2 = M_PI_2/(y3-y2), g = r[1];
+				const double z2 = MINIMUM(MAXIMUM((ax->cs-y2)*m2, 0.0), M_PI_2);
+				r[1] = g*cos(z2); r[2] = g*sin(z2);
+			}
+		}
+	}
+	else if (dp->mode == DIRECT_PATH_STATIC) {
+		const double y0 = (-0.45*x+0.8)*x*x-(M_PI/11);
+		const double y1 = (-0.52*x+0.93)*x*x-(M_PI/8);
+		const double m = M_PI_2/(y1-y0);
+		const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
+		r[0] = cos(z); r[1] = sin(z);
+		if (have_rears) {
+			const double y2 = x*(-1.0/2.0)-(M_PI/66), y3 = x*(-1.0/3.0)-(M_PI/6);
+			const double m2 = M_PI_2/(y3-y2), g = r[1];
+			const double z2 = MINIMUM(MAXIMUM((ax->cs-y2)*m2, 0.0), M_PI_2);
+			r[1] = g*cos(z2); r[2] = g*sin(z2);
+		}
+	}
 }
 
 #ifdef DSP_STATUSLINES

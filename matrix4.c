@@ -59,6 +59,7 @@ struct matrix4_state {
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
 	struct phase_flip_params pf_params;
+	struct direct_path_state dp;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double cmc_param, surr_mult[2], shelf_mult, lowpass_mult, contour_pwrcmp;
 	ssize_t len, p, fade_frames, fade_p;
@@ -171,13 +172,10 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 			}
 			if (state->do_direct_path) {
 				double r_pan[3];
-				surr_direct_pan(&state->ax, r_pan);
+				surr_direct_pan(&state->dp, &state->ev, &state->ax, state->have_rears, r_pan);
 				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
-				if (state->have_rears) {
-					surr_direct_pan_2to4(&state->ax, r_pan);
-					cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
-				}
 				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
+				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
 			}
 		}
 
@@ -413,7 +411,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
 	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
-		+ config.channel_layout->ns*((config.do_direct_path)?2:1);
+		+ config.channel_layout->ns*((config.dp_mode)?2:1);
 	e->run = matrix4_effect_run;
 	e->reset = matrix4_effect_reset;
 	e->drain_samples = matrix4_effect_drain_samples;
@@ -428,7 +426,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
 	state->do_phase_flip = !!config.do_phase_flip;
-	state->do_direct_path = !!config.do_direct_path;
+	state->do_direct_path = !!config.dp_mode;
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->have_rears = (config.channel_layout->ns >= 4);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
@@ -458,6 +456,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	cs_interp_set(&state->m_interp.amb, 1.0);
 	cs_interp_set(&state->m_interp.sdir, 0.0);
 	cs_interp_set(&state->m_interp.rdir, 0.0);
+	direct_path_state_init(&state->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
 	smooth_state_init(&state->sm, istream);
 	if (event_state_init(&state->ev, istream, 1.0, BASE_ORD_NOTCH_SCALE)) goto fail;
 #if DEBUG_POWER_ERROR

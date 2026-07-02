@@ -74,9 +74,9 @@
 #define REAR_EVENT_MASK_DEFAULT    1.0
 #define REAR_EVENT_MASK_MB_DEFAULT 0.3
 #define DO_PHASE_FLIP_DEFAULT      0
-#define DO_DIRECT_PATH_DEFAULT     0
 #define DO_DPWR_DECOUPLE_DEFAULT   1
 #define USE_FIR_P_DEFAULT          0
+#define DIRECT_PATH_MODE_DEFAULT   DIRECT_PATH_NONE
 
 #define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
 #define FREQ_MASK_DEFAULT        0.0
@@ -185,12 +185,19 @@ struct channel_layout_info {
 	int nf, ns;
 };
 
+enum direct_path_mode {
+	DIRECT_PATH_NONE = 0,
+	DIRECT_PATH_EVENT,
+	DIRECT_PATH_STATIC,
+};
+
 struct matrix4_config {
-	int c0, c1, enable_signal, do_phase_flip, do_direct_path, do_dpwr_decouple, use_fir_p;
+	int c0, c1, enable_signal, do_phase_flip, do_dpwr_decouple, use_fir_p;
 	int lookahead_frames;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
 	double fb_stop[2], freq_mask;
 	enum status_type status_type;
+	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double calc_matrix_coefs_param;
@@ -203,6 +210,12 @@ struct matrix4_config {
 
 struct phase_flip_params {
 	double c[2];
+};
+
+struct direct_path_state {
+	struct ewma_state zs;
+	int enable;
+	enum direct_path_mode mode;
 };
 
 #define CALC_NORM_MULT(x) (1.0 / sqrt(1.0 + (x)*(x)))
@@ -220,7 +233,9 @@ int matrix4_config_init(const struct effect_info *, const struct stream_info *, 
 	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void phase_flip_init_params(struct phase_flip_params *, double);
+void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
+void surr_direct_pan(struct direct_path_state *, const struct event_state *, const struct axes *, int, double [3]);
 
 #ifdef DSP_STATUSLINES
 struct steering_bar {
@@ -311,26 +326,6 @@ static inline double phase_flip_pos_rs(struct axes *ax)
 static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, double pos)
 {
 	return exp(pos*(pf->c[1]-pf->c[0])+pf->c[0])-1.0;
-}
-
-static inline void surr_direct_pan(struct axes *ax, double r[2])
-{
-	const double x = fabs(ax->lr);
-	const double y0 = (-0.45*x+0.8)*x*x-(M_PI/11);
-	const double y1 = (-0.52*x+0.93)*x*x-(M_PI/8);
-	const double m = M_PI_2/(y1-y0);
-	const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
-	r[0] = cos(z); r[1] = sin(z);
-}
-
-static inline void surr_direct_pan_2to4(struct axes *ax, double r[3])
-{
-	const double g = r[1], x = fabs(ax->lr);
-	const double y0 = x*(-1.0/2.0)-(M_PI/66);
-	const double y1 = x*(-1.0/3.0)-(M_PI/6);
-	const double m = M_PI_2/(y1-y0);
-	const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
-	r[1] = g*cos(z); r[2] = g*sin(z);
 }
 
 #if DOWNSAMPLE_FACTOR > 1

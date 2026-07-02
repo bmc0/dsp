@@ -314,9 +314,11 @@ default is \fIfalse\fR.
 signal[=\fItrue\fR|\fIfalse\fR]
 Toggle the effect on effects chain signal.
 .TP
-direct_path[=\fItrue\fR|\fIfalse\fR]
-Redirect strongly surround-encoded sounds to additional outputs. The
-default is \fIfalse\fR.
+direct_path[=\fIevent\fR|\fIstatic\fR|\fItrue\fR|\fIfalse\fR]
+Redirect strongly surround-encoded sounds to additional outputs. If set
+to \fIevent\fR or \fItrue\fR, surround-encoded events enable redirection until
+steering moves forward again. If set to \fIstatic\fR, redirection is based
+only on the current steering angles. The default is \fIfalse\fR.
 .TP
 rear_event_mask=\fIfactor\fR
 Sensitivity to rear-encoded sound events. If set to zero, sensitivity

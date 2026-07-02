@@ -59,6 +59,7 @@ struct matrix4_band {
 	} m_interp;
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
+	struct direct_path_state dp;
 	struct ewma_state ev_thresh;
 	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
 #if DEBUG_POWER_ERROR
@@ -256,13 +257,10 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				}
 				if (state->do_direct_path) {
 					double r_pan[3];
-					surr_direct_pan(&band->ax, r_pan);
+					surr_direct_pan(&band->dp, &band->ev, &band->ax, state->have_rears, r_pan);
 					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
-					if (state->have_rears) {
-						surr_direct_pan_2to4(&band->ax, r_pan);
-						cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
-					}
 					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
+					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
 				}
 			}
 
@@ -532,7 +530,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #else
 	e->istream.channels = istream->channels;
 	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
-		+ config.channel_layout->ns*((config.do_direct_path)?2:1);
+		+ config.channel_layout->ns*((config.dp_mode)?2:1);
 	e->run = matrix4_mb_effect_run;
 	e->reset = matrix4_mb_effect_reset;
 	e->drain_samples = matrix4_mb_effect_drain_samples;
@@ -550,7 +548,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 #if !(DO_FILTER_BANK_TEST)
 	state->status_type = config.status_type;
 	state->do_phase_flip = !!config.do_phase_flip;
-	state->do_direct_path = !!config.do_direct_path;
+	state->do_direct_path = !!config.dp_mode;
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->have_rears = (config.channel_layout->ns >= 4);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
@@ -580,6 +578,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		cs_interp_set(&band->m_interp.amb, 1.0);
 		cs_interp_set(&band->m_interp.sdir, 0.0);
 		cs_interp_set(&band->m_interp.rdir, 0.0);
+		direct_path_state_init(&band->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
 	#if DEBUG_POWER_ERROR
 		ewma_init(&band->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));

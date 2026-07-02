@@ -308,10 +308,12 @@ Example:
 		default is `false`.
 	* `signal[=true|false]`  
 		Toggle the effect on effects chain signal.
-	* `direct_path[=true|false]`  
-		Redirect strongly surround-encoded sounds to additional outputs. The
-		default is `false`. See `examples/matrix4_*direct_path*` for usage
-		examples.
+	* `direct_path[=event|static|true|false]`  
+		Redirect strongly surround-encoded sounds to additional outputs. If set
+		to `event` or `true`, surround-encoded events enable redirection until
+		steering moves forward again. If set to `static`, redirection is based
+		only on the current steering angles. The default is `false`. See
+		`examples/matrix4_*direct_path*` for usage examples.
 	* `rear_event_mask=factor`  
 		Sensitivity to rear-encoded sound events. If set to zero, sensitivity
 		is the same for all directions. If set to a high value (e.g. 5), most

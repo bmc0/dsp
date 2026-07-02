@@ -20,6 +20,6 @@ matrix4_mb signal,layout=2/4,matrix=v4:1,direct_path,rear_event_mask=0 -3/0
 } :
 :6-9 {
 	# direct path
-	:0,1 delay -3m :2,3 delay -9m :
+	delay -6m
 } :
 remix 0 1 2,6 3,7 4,8 5,9
