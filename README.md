@@ -305,7 +305,7 @@ Example:
 	* `phase_flip[=true|false]`  
 		Dynamically flip the relative phase of the right surround output under
 		rear steering so that stongly rear-encoded sounds are in phase. The
-		default is `true`.
+		default is `false`.
 	* `signal[=true|false]`  
 		Toggle the effect on effects chain signal.
 	* `direct_path[=true|false]`  
