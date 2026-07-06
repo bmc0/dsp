@@ -218,14 +218,15 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = decorrelate_effect_run;
 	e->reset = decorrelate_effect_reset;
 	e->plot = decorrelate_effect_plot;
-	e->destroy = decorrelate_effect_destroy;
 	e->data = state = calloc(1, sizeof(struct decorrelate_state));
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = decorrelate_effect_destroy;
 	state->n_stages = n_stages;
 	state->ap = calloc(istream->channels, sizeof(struct sch_ap_state *));
 	if (check_alloc(ei->name, state->ap)) goto fail;
@@ -253,7 +254,6 @@ struct effect * decorrelate_effect_init(const struct effect_info *ei, const stru
 	return e;
 
 	fail:
-	if (state) decorrelate_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

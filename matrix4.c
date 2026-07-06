@@ -414,16 +414,18 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->istream.channels = istream->channels;
 	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
 		+ config.channel_layout->ns*((config.dp_mode)?2:1);
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->run = matrix4_effect_run;
 	e->reset = matrix4_effect_reset;
 	e->drain_samples = matrix4_effect_drain_samples;
-	e->destroy = matrix4_effect_destroy;
 	e->channel_deps = matrix4_effect_channel_deps;
 	e->channel_offsets = matrix4_effect_channel_offsets;
 
 	state = calloc(1, sizeof(struct matrix4_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = matrix4_effect_destroy;
+
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
@@ -498,7 +500,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	if (!state && config.pwr_err_file)
 		fclose(state->pwr_err_file);
 #endif
-	if (state) e->destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

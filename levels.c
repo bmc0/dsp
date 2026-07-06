@@ -91,21 +91,23 @@ static sample_t * levels_effect_run(struct effect *e, ssize_t *frames, sample_t 
 static void levels_effect_destroy(struct effect *e)
 {
 	struct levels_state *state = (struct levels_state *) e->data;
-	if (state->statuslines_registered) {
-		dsp_statuslines_acquire();
+	if (state->cs) {
+		if (state->statuslines_registered) {
+			dsp_statuslines_acquire();
+			for (int k = 0; k < e->istream.channels; ++k) {
+				if (state->cs[k])
+					dsp_statusline_unregister(&state->cs[k]->statusline);
+			}
+			dsp_statuslines_release();
+		}
 		for (int k = 0; k < e->istream.channels; ++k) {
-			if (state->cs[k])
-				dsp_statusline_unregister(&state->cs[k]->statusline);
+			if (state->cs[k]) {
+				free(state->cs[k]);
+				break;
+			}
 		}
-		dsp_statuslines_release();
+		free(state->cs);
 	}
-	for (int k = 0; k < e->istream.channels; ++k) {
-		if (state->cs[k]) {
-			free(state->cs[k]);
-			break;
-		}
-	}
-	free(state->cs);
 	free(state);
 }
 
@@ -139,21 +141,21 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_NO_DITHER;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->flags |= EFFECT_FLAG_ALIGN_BARRIER;
 	e->run = levels_effect_run;
 	e->plot = effect_plot_noop;
-	e->destroy = levels_effect_destroy;
 
-	struct levels_ch_state *cs_all = NULL;
 	struct levels_state *state = calloc(1, sizeof(struct levels_state));
 	e->data = state;
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = levels_effect_destroy;
 	state->cs = calloc(istream->channels, sizeof(struct levels_ch_state *));
 	if (check_alloc(ei->name, state->cs)) goto fail;
 	const int n_ch = num_bits_set(channel_selector, istream->channels);
-	cs_all = calloc(n_ch, sizeof(struct levels_ch_state));
+	struct levels_ch_state *cs_all = calloc(n_ch, sizeof(struct levels_ch_state));
 	if (check_alloc(ei->name, cs_all)) goto fail;
 	for (int k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(channel_selector, k)) {
@@ -165,11 +167,6 @@ struct effect * levels_effect_init(const struct effect_info *ei, const struct st
 	return e;
 
 	fail:
-	if (state) {
-		free(state->cs);
-		free(cs_all);
-		free(state);
-	}
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

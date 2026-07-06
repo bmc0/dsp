@@ -114,6 +114,7 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	sample_t v_noop;
 	if (ei->effect_number == GAIN_EFFECT_NUMBER_ADD) {
@@ -129,13 +130,14 @@ struct effect * gain_effect_init(const struct effect_info *ei, const struct stre
 		e->plot = gain_effect_plot;
 		e->merge = gain_effect_merge;
 	}
-	e->destroy = gain_effect_destroy;
 	e->data = state = calloc(istream->channels, sizeof(sample_t));
-	if (check_alloc(ei->name, state)) {
-		free(e);
-		return NULL;
-	}
+	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = gain_effect_destroy;
 	for (int k = 0; k < istream->channels; ++k)
 		state[k] = (GET_BIT(channel_selector, k)) ? v : v_noop;
 	return e;
+
+	fail:
+	destroy_effect(e);
+	return NULL;
 }

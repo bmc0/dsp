@@ -152,13 +152,14 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
 	e->ostream.channels = out_channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	e->plot = remix_effect_plot;
-	e->destroy = remix_effect_destroy;
 	e->channel_deps = remix_effect_channel_deps;
-
 	e->data = state = calloc(1, sizeof(struct remix_state));
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = remix_effect_destroy;
+
 	state->channel_selectors = calloc(out_channels, sizeof(char *));
 	if (check_alloc(ei->name, state->channel_selectors)) goto fail;
 	int use_run_1a = 1, use_run_4 = 1, set_no_dither = 1;
@@ -216,7 +217,6 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	return e;
 
 	fail:
-	if (state) remix_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

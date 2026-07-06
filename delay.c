@@ -216,6 +216,7 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 		return e;  /* nothing to do */
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->prepare = delay_effect_prepare;
@@ -223,12 +224,12 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 	e->reset = delay_effect_reset;
 	e->plot = delay_effect_plot;
 	e->drain_samples = delay_effect_drain_samples;
-	e->destroy = delay_effect_destroy;
 	e->merge = delay_effect_merge;
 	e->channel_offsets = delay_effect_channel_offsets;
-
 	e->data = state = calloc(1, sizeof(struct delay_state));
 	if (check_alloc(name, state)) goto fail;
+	e->destroy = delay_effect_destroy;
+
 	state->cs = calloc(e->istream.channels, sizeof(struct delay_channel_state));
 	if (check_alloc(name, state->cs)) goto fail;
 	for (int k = 0; k < e->istream.channels; ++k) {
@@ -241,8 +242,7 @@ static struct effect * delay_effect_init_common(const char *name, const struct s
 	return e;
 
 	fail:
-	if (state) delay_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }
 
@@ -645,16 +645,17 @@ static struct effect * mod_effect_init(const char *name, const struct stream_inf
 	e->name = name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = mod_effect_run;
 	e->reset = mod_effect_reset;
 	e->plot = effect_plot_noop;
 	e->drain_samples = mod_effect_drain_samples;
-	e->destroy = mod_effect_destroy;
 	e->channel_offsets = mod_effect_channel_offsets;
-
 	e->data = state = calloc(1, sizeof(struct mod_state));
 	if (check_alloc(name, state)) goto fail;
+	e->destroy = mod_effect_destroy;
+
 	state->cs = calloc(e->istream.channels, sizeof(struct mod_channel_state));
 	if (check_alloc(name, state->cs)) goto fail;
 	pthread_mutex_lock(&rand_lock);
@@ -677,8 +678,7 @@ static struct effect * mod_effect_init(const char *name, const struct stream_inf
 	return e;
 
 	fail:
-	if (state) mod_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }
 

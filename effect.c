@@ -81,6 +81,7 @@ void destroy_effect(struct effect *e)
 		return;
 	if (e->destroy != NULL)
 		e->destroy(e);
+	free(e->channel_selector);
 	free(e);
 }
 
@@ -93,6 +94,15 @@ void effect_list_append(struct effect *list, struct effect *e)
 		}
 		list = list->next;
 	}
+}
+
+int effect_set_channel_selector(struct effect *e, const char *channel_selector)
+{
+	e->channel_selector = NEW_SELECTOR(e->istream.channels);
+	if (check_alloc(e->name, e->channel_selector)) return DSP_ENOMEM;
+	if (channel_selector)
+		COPY_SELECTOR(e->channel_selector, channel_selector, e->istream.channels);
+	return 0;
 }
 
 void effect_plot_noop(struct effect *e, int i)

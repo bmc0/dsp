@@ -193,7 +193,6 @@ static void watch_node_destroy(struct watch_node *node)
 	destroy_effects_chain(&node->new_chain);
 	destroy_effects_chain(&node->xfade_chain);
 	free(node->path);
-	free(node->channel_mask);
 	free(node);
 }
 
@@ -279,9 +278,6 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	node->last_mtime = sb.st_mtim;
 	pthread_mutex_init(&node->lock, NULL);
 	node->path = path;
-	node->channel_mask = NEW_SELECTOR(istream->channels);
-	if (check_alloc(ei->name, node->channel_mask)) goto fail;
-	COPY_SELECTOR(node->channel_mask, channel_selector, istream->channels);
 	node->chain = chain;
 	node->enforce_eof_marker = enforce_eof_marker;
 	node->xfade = (struct effects_chain_xfade_state) EFFECTS_CHAIN_XFADE_STATE_INITIALIZER;
@@ -291,12 +287,13 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream = *istream;
 	e->ostream = stream;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
+	node->channel_mask = e->channel_selector;
 
 	e->run = watch_effect_run;
 	e->reset = watch_effect_reset;
 	e->signal = watch_effect_signal;
 	e->drain2 = watch_effect_drain2;
-	e->destroy = watch_effect_destroy;
 	e->buffer_frames = watch_effect_buffer_frames;
 	e->channel_deps = watch_effect_channel_deps;
 
@@ -317,6 +314,7 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 	pthread_mutex_lock(&watch_state.lock);
 	LIST_APPEND(&watch_state.list, node);
 	pthread_mutex_unlock(&watch_state.lock);
+	e->destroy = watch_effect_destroy;
 	return e;
 
 	open_fail:
@@ -326,6 +324,6 @@ struct effect * watch_effect_init(const struct effect_info *ei, const struct str
 
 	fail:
 	if (node) watch_node_destroy(node);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

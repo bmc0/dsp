@@ -216,37 +216,39 @@ static void stats_print_channels(struct effect *e, int start, int end)
 static void stats_effect_destroy(struct effect *e)
 {
 	struct stats_state *state = (struct stats_state *) e->data;
-	if (e->run == stats_effect_run_interp) {
-		for (ssize_t i = 0; i < STATS_INTERP_DELAY; ++i) {
-			for (int k = 0; k < state->n_cs; ++k) {
-				struct stats_ch_state *cs = &state->cs[k];
-				struct stats_interp_state *cis = &cs->interp;
-				if (cis->n > 0) {
-					stats_interp_insert(cis, cis->z[cis->zp]);
-					stats_interp_peak(state, cs);
-					--cis->n;
+	if (state->cs) {
+		if (e->run == stats_effect_run_interp) {
+			for (ssize_t i = 0; i < STATS_INTERP_DELAY; ++i) {
+				for (int k = 0; k < state->n_cs; ++k) {
+					struct stats_ch_state *cs = &state->cs[k];
+					struct stats_interp_state *cis = &cs->interp;
+					if (cis->n > 0) {
+						stats_interp_insert(cis, cis->z[cis->zp]);
+						stats_interp_peak(state, cs);
+						--cis->n;
+					}
+					cis->z[cis->zp++] = 0.0;
+					if (cis->zp >= LENGTH(cis->z)) cis->zp = 0;
 				}
-				cis->z[cis->zp++] = 0.0;
-				if (cis->zp >= LENGTH(cis->z)) cis->zp = 0;
+				++state->samples;
 			}
-			++state->samples;
+			state->samples -= STATS_INTERP_DELAY;
 		}
-		state->samples -= STATS_INTERP_DELAY;
+		int cols = state->n_cs;
+		dsp_log_acquire();
+	#ifdef DSP_STATUSLINES
+		if (state->width < 0) {
+			dsp_get_term_size(NULL, &state->width);
+			if (state->width <= 0) state->width = STATS_DEFAULT_WIDTH;
+		}
+	#endif
+		if (state->width > 0)
+			cols = MAXIMUM((state->width-18)/13, 1);
+		for (int i = 0; i < state->n_cs; i+=cols)
+			stats_print_channels(e, i, MINIMUM(i+cols, state->n_cs));
+		dsp_log_release();
+		free(state->cs);
 	}
-	int cols = state->n_cs;
-	dsp_log_acquire();
-#ifdef DSP_STATUSLINES
-	if (state->width < 0) {
-		dsp_get_term_size(NULL, &state->width);
-		if (state->width <= 0) state->width = STATS_DEFAULT_WIDTH;
-	}
-#endif
-	if (state->width > 0)
-		cols = MAXIMUM((state->width-18)/13, 1);
-	for (int i = 0; i < state->n_cs; i+=cols)
-		stats_print_channels(e, i, MINIMUM(i+cols, state->n_cs));
-	dsp_log_release();
-	free(state->cs);
 	free(state);
 }
 
@@ -295,15 +297,16 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_NO_DITHER;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->flags |= EFFECT_FLAG_ALIGN_BARRIER;
 	e->run = (do_interp) ? stats_effect_run_interp : stats_effect_run;
 	e->plot = effect_plot_noop;
-	e->destroy = stats_effect_destroy;
 	struct stats_state *state = calloc(1, sizeof(struct stats_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = stats_effect_destroy;
 	state->ref = ref;
 	state->width = width;
 	state->n_cs = num_bits_set(channel_selector, istream->channels);
@@ -316,8 +319,6 @@ struct effect * stats_effect_init(const struct effect_info *ei, const struct str
 	return e;
 
 	fail:
-	if (state) free(state->cs);
-	free(state);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

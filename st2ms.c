@@ -97,6 +97,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	switch (ei->effect_number) {
 	case ST2MS_EFFECT_NUMBER_ST2MS:
@@ -107,19 +108,16 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 		break;
 	default:
 		dsp_perror(DSP_ENOEFFNUM, __FILE__, NULL);
-		free(e);
-		return NULL;
+		goto fail;
 	}
 	e->plot = st2ms_effect_plot;
-	e->destroy = st2ms_effect_destroy;
 	e->channel_deps = st2ms_effect_channel_deps;
 
 	struct st2ms_state *state = calloc(1, sizeof(struct st2ms_state));
-	if (check_alloc(ei->name, state)) {
-		free(e);
-		return NULL;
-	}
+	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = st2ms_effect_destroy;
+
 	state->c0 = state->c1 = -1;
 	for (int i = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i)) {
@@ -128,4 +126,8 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 		}
 	}
 	return e;
+
+	fail:
+	destroy_effect(e);
+	return NULL;
 }

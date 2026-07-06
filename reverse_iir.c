@@ -649,6 +649,7 @@ static struct effect * reverse_iir_effect_init_common(const struct effect_info *
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->prepare = reverse_iir_effect_prepare;
@@ -656,13 +657,13 @@ static struct effect * reverse_iir_effect_init_common(const struct effect_info *
 	e->reset = reverse_iir_effect_reset;
 	e->plot = reverse_iir_effect_plot;
 	e->drain_samples = reverse_iir_effect_drain_samples;
-	e->destroy = reverse_iir_effect_destroy_init;
 	e->merge = reverse_iir_effect_merge;
 	e->channel_offsets = reverse_iir_effect_channel_offsets;
 
 	struct riir_init_state *state = calloc(e->istream.channels, sizeof(struct riir_init_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = reverse_iir_effect_destroy_init;
 	for (int k = 0; k < e->istream.channels; ++k) {
 		if (GET_BIT(channel_selector, k))
 			if (riir_init_state_append(&state[k], sec, n)) goto fail;
@@ -670,8 +671,7 @@ static struct effect * reverse_iir_effect_init_common(const struct effect_info *
 	return e;
 
 	fail:
-	if (state) reverse_iir_effect_destroy_init(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }
 

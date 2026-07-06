@@ -111,7 +111,6 @@ static void ladspa_host_effect_destroy(struct effect *e)
 	free(state->control);
 	if (state->dl) dlclose(state->dl);
 	free(state);
-	free(e->channel_selector);
 }
 
 static void ladspa_host_effect_channel_deps(struct effect *e, char **deps)
@@ -397,9 +396,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = istream->channels;
 	e->ostream.channels = total_output_channels;
-	e->channel_selector = NEW_SELECTOR(istream->channels);
-	if (check_alloc(ei->name, e->channel_selector)) goto fail;
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->run = ladspa_host_effect_run;
 	e->destroy = ladspa_host_effect_destroy;
 	e->channel_deps = ladspa_host_effect_channel_deps;
@@ -407,7 +404,7 @@ struct effect * ladspa_host_effect_init(const struct effect_info *ei, const stru
 	return e;
 
 	fail:
-	if (state) ladspa_host_effect_destroy(e);
-	free(e);
+	if (state && !e->destroy) ladspa_host_effect_destroy(e);
+	destroy_effect(e);
 	return NULL;
 }

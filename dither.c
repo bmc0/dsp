@@ -225,7 +225,6 @@ static void dither_effect_reset(struct effect *e)
 static void dither_effect_destroy(struct effect *e)
 {
 	free(e->data);
-	free(e->channel_selector);
 }
 
 static int dither_effect_can_merge(struct effect *dest, struct effect *src)
@@ -369,17 +368,15 @@ struct effect * dither_effect_init(const struct effect_info *ei, const struct st
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_SELECTOR(istream->channels);
-	if (check_alloc(ei->name, e->channel_selector)) goto fail;
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = dither_effect_run;
 	e->reset = dither_effect_reset;
-	e->destroy = dither_effect_destroy;
 	e->merge = dither_effect_merge;
-
 	e->data = state = calloc(istream->channels, sizeof(struct dither_state));
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = dither_effect_destroy;
+
 	for (int k = 0; k < istream->channels; ++k) {
 		if (GET_BIT(e->channel_selector, k))
 			dither_init(&state[k], quantize_bits, noise_bits, d_type, d_flags);
@@ -387,7 +384,6 @@ struct effect * dither_effect_init(const struct effect_info *ei, const struct st
 	return e;
 
 	fail:
-	if (e) dither_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

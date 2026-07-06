@@ -87,7 +87,6 @@ static void zita_convolver_effect_destroy(struct effect *e)
 		free(state->buf[k]);
 	free(state->buf);
 	free(state);
-	free(e->channel_selector);
 }
 
 static void zita_convolver_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
@@ -160,20 +159,18 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = (char *) NEW_SELECTOR(istream->channels);
-	if (check_alloc(ei->name, e->channel_selector)) goto fail;
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = zita_convolver_effect_run;
 	e->reset = zita_convolver_effect_reset;
 	e->drain_samples = zita_convolver_effect_drain_samples;
-	e->destroy = zita_convolver_effect_destroy;
 	e->channel_offsets = zita_convolver_effect_channel_offsets;
-
 	state = (struct zita_convolver_state *) calloc(1, sizeof(struct zita_convolver_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = (void *) state;
+	e->destroy = zita_convolver_effect_destroy;
+
 	state->filter_frames = filter_frames;
 	state->ref = ref;
 	state->len = min_part_len;
@@ -212,9 +209,8 @@ struct effect * zita_convolver_effect_init_with_filter(const struct effect_info 
 	return e;
 
 	fail:
-	if (state) zita_convolver_effect_destroy(e);
-	else delete cproc;
-	free(e);
+	if (!state) delete cproc;
+	destroy_effect(e);
 	return NULL;
 }
 

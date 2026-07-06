@@ -389,18 +389,19 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = fir_p_effect_run;
 	e->reset = fir_p_effect_reset;
 	e->plot = fir_p_effect_plot;
 	e->drain_samples = fir_p_effect_drain_samples;
-	e->destroy = fir_p_effect_destroy;
 	e->channel_offsets = fir_p_effect_channel_offsets;
 
 	struct fir_p_state *state = calloc(1, sizeof(struct fir_p_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = fir_p_effect_destroy;
 
 	state->filter_frames = filter_frames;
 	state->ref = ref;
@@ -533,8 +534,7 @@ struct effect * fir_p_effect_init_with_filter(const struct effect_info *ei, cons
 	return e;
 
 	fail:
-	if (state) fir_p_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }
 

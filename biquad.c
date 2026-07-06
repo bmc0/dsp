@@ -338,7 +338,6 @@ static void biquad_effect_plot(struct effect *e, int i)
 static void biquad_effect_destroy(struct effect *e)
 {
 	free(e->data);
-	free(e->channel_selector);
 }
 
 static int biquad_effect_can_merge(struct effect *dest, struct effect *src)
@@ -537,18 +536,16 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
-	e->channel_selector = NEW_SELECTOR(istream->channels);
-	if (check_alloc(ei->name, e->channel_selector)) goto fail;
-	COPY_SELECTOR(e->channel_selector, channel_selector, istream->channels);
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	biquad_effect_set_run_func(e);
 	e->reset = biquad_effect_reset;
 	e->plot = biquad_effect_plot;
-	e->destroy = biquad_effect_destroy;
 	e->merge = biquad_effect_merge;
 	e->data = state = calloc(istream->channels, sizeof(struct biquad_state));
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = biquad_effect_destroy;
 	for (int i = 0; i < istream->channels; ++i) {
 		if (GET_BIT(channel_selector, i))
 			memcpy(&state[i], &b, sizeof(struct biquad_state));
@@ -556,7 +553,6 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	return e;
 
 	fail:
-	if (e) biquad_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

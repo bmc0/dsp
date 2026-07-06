@@ -524,15 +524,23 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	if (check_alloc(ei->name, e)) goto fail;
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
-#if DO_FILTER_BANK_TEST
 	e->istream.channels = istream->channels;
+#if DO_FILTER_BANK_TEST
 	e->ostream.channels = istream->channels + fbp->n_bands + 1;
+#else
+	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
+		+ config.channel_layout->ns*((config.dp_mode)?2:1);
+#endif
+
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
+	state = calloc(1, sizeof(struct matrix4_mb_state));
+	if (check_alloc(ei->name, state)) goto fail;
+	e->data = state;
+
+#if DO_FILTER_BANK_TEST
 	e->run = matrix4_mb_test_fb_effect_run;
 	e->destroy = matrix4_mb_test_fb_effect_destroy;
 #else
-	e->istream.channels = istream->channels;
-	e->ostream.channels = istream->channels - 2 + config.channel_layout->nf
-		+ config.channel_layout->ns*((config.dp_mode)?2:1);
 	e->run = matrix4_mb_effect_run;
 	e->reset = matrix4_mb_effect_reset;
 	e->drain_samples = matrix4_mb_effect_drain_samples;
@@ -541,9 +549,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->channel_offsets = matrix4_mb_effect_channel_offsets;
 #endif
 
-	state = calloc(1, sizeof(struct matrix4_mb_state));
-	if (check_alloc(ei->name, state)) goto fail;
-	e->data = state;
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->n_bands = fbp->n_bands;
@@ -668,7 +673,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	if (!state && config.pwr_err_file)
 		fclose(state->pwr_err_file);
 #endif
-	if (state) e->destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

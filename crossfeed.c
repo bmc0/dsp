@@ -121,14 +121,15 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	e->name = ei->name;
 	e->istream.fs = e->ostream.fs = istream->fs;
 	e->istream.channels = e->ostream.channels = istream->channels;
+	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
 	e->run = crossfeed_effect_run;
 	e->reset = crossfeed_effect_reset;
 	e->plot = crossfeed_effect_plot;
-	e->destroy = crossfeed_effect_destroy;
 	e->channel_deps = crossfeed_effect_channel_deps;
 	e->data = state = calloc(1, sizeof(struct crossfeed_state));
 	if (check_alloc(ei->name, state)) goto fail;
+	e->destroy = crossfeed_effect_destroy;
 	state->c0 = state->c1 = -1;
 	for (int i = 0; i < istream->channels; ++i) {  /* find input channel numbers */
 		if (GET_BIT(channel_selector, i)) {
@@ -147,7 +148,6 @@ struct effect * crossfeed_effect_init(const struct effect_info *ei, const struct
 	return e;
 
 	fail:
-	free(state);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

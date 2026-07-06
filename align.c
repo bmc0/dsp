@@ -115,16 +115,18 @@ int align_effect_insert(struct effects_subchain *sc, struct effect *prev, struct
 	e->name = "align";
 	e->istream.fs = e->ostream.fs = prev->ostream.fs;
 	e->istream.channels = e->ostream.channels = prev->ostream.channels;
+	if (effect_set_channel_selector(e, NULL)) goto fail;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	e->run = align_effect_run;
 	e->reset = align_effect_reset;
 	e->plot = effect_plot_noop;
 	e->drain_samples = align_effect_drain_samples;
-	e->destroy = align_effect_destroy;
 
 	struct align_state *state = calloc(1, sizeof(struct align_state));
 	if (check_alloc(e->name, state)) goto fail;
 	e->data = state;
+	e->destroy = align_effect_destroy;
+
 	state->cs = calloc(e->istream.channels, sizeof(struct align_channel_state));
 	if (check_alloc(e->name, state->cs)) goto fail;
 	ssize_t max_offset = (next) ? offsets[0] : 0;  /* zero negative offsets at end of chain */
@@ -139,6 +141,7 @@ int align_effect_insert(struct effects_subchain *sc, struct effect *prev, struct
 			cs->len = ref-offsets[k];
 			cs->buf = calloc(cs->len, sizeof(sample_t));
 			if (check_alloc(e->name, cs->buf)) goto fail;
+			SET_BIT(e->channel_selector, k);
 			LOG_FMT(LL_VERBOSE, "%s (%s): info: channel %d: %zd", e->name, next_name, k, cs->len);
 		}
 		else cs->len = 0;
@@ -156,7 +159,6 @@ int align_effect_insert(struct effects_subchain *sc, struct effect *prev, struct
 	return 0;
 
 	fail:
-	if (state) align_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return 1;
 }

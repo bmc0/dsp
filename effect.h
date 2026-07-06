@@ -40,7 +40,7 @@ struct effect {
 	struct effect *prev, *next;
 	const char *name;
 	struct stream_info istream, ostream;
-	char *channel_selector;  /* for use *only* by the effect */
+	char *channel_selector;  /* input channels which are processed; all channels assumed if unset; freed in destroy_effect() */
 	int flags;
 	/* All functions may be NULL */
 	int (*prepare)(struct effect *);
@@ -61,6 +61,7 @@ struct effect {
 const struct effect_info * get_effect_info(const char *);
 void destroy_effect(struct effect *);
 void effect_list_append(struct effect *, struct effect *);
+int effect_set_channel_selector(struct effect *, const char *);  /* expects .name and .istream to be set */
 void effect_plot_noop(struct effect *e, int);
 void print_all_effects(void);
 void print_effect_usage(const struct effect_info *);

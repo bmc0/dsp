@@ -265,11 +265,11 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	e->run = resample_effect_run;
 	e->reset = resample_effect_reset;
 	e->drain2 = resample_effect_drain2;
-	e->destroy = resample_effect_destroy;
 
 	struct resample_state *state = calloc(1, sizeof(struct resample_state));
 	if (check_alloc(ei->name, state)) goto fail;
 	e->data = state;
+	e->destroy = resample_effect_destroy;
 
 	const int max_rate = MAXIMUM(rate, istream->fs);
 	const int min_rate = MINIMUM(rate, istream->fs);
@@ -380,7 +380,6 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 
 	fail:
 	fftw_free(sinc);
-	if (state) resample_effect_destroy(e);
-	free(e);
+	destroy_effect(e);
 	return NULL;
 }

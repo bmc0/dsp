@@ -40,6 +40,7 @@
 #if 0
 #define GET_BIT(x, o) (((char *) x)[(int) (o) / 8] & (1 << ((int) (o) % 8)))
 #define SET_BIT(x, o) ((char *) x)[(int) (o) / 8] |= (1 << ((int) (o) % 8))
+#define CLEAR_BIT(x, o) ((char *) x)[(int) (o) / 8] &= ~(1 << ((int) (o) % 8))
 #define SET_SELECTOR(x, n) memset(x, 0xff, ((n) - 1) / 8 + 1)
 #define CLEAR_SELECTOR(x, n) memset(x, 0x00, ((n) - 1) / 8 + 1)
 #define NEW_SELECTOR(n) calloc(((n) - 1) / 8 + 1, sizeof(char))
@@ -47,6 +48,7 @@
 #else
 #define GET_BIT(x, o) ((x)[(o)])
 #define SET_BIT(x, o) (x)[(o)] = 1
+#define CLEAR_BIT(x, o) (x)[(o)] = 0
 #define SET_SELECTOR(x, n) memset(x, 0x01, n)
 #define CLEAR_SELECTOR(x, n) memset(x, 0x00, n)
 #define NEW_SELECTOR(n) calloc(n, sizeof(char))
