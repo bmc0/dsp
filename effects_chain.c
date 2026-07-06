@@ -740,19 +740,43 @@ static int effects_chain_postproc_state_init(struct effects_chain_postproc_state
 	return 1;
 }
 
-static int query_channel_deps(struct effects_chain_postproc_state *state, struct effect *e)
+static int sel_is_identity(char *s, int n, int i)
 {
+	if (!GET_BIT(s, i)) return 0;
+	for (int k = 0; k < n; ++k)
+		if (k != i && GET_BIT(s, k)) return 0;
+	return 1;
+}
+
+/* returns 1 if square identity, 0 otherwise */
+static int query_channel_deps(struct effects_chain_postproc_state *state, struct effect *e, int is_align)
+{
+	for (int i = 0; i < state->max_out_ch; ++i)
+		CLEAR_SELECTOR(state->ch_deps[i], state->max_in_ch);
+	/* set identity as initial state */
+	const int min_ch = MINIMUM(e->istream.channels, e->ostream.channels);
+	for (int i = 0; i < min_ch; ++i) SET_BIT(state->ch_deps[i], i);
+	const int is_square = (e->istream.channels == e->ostream.channels);
 	if (e->channel_deps) {
-		for (int i = 0; i < state->max_out_ch; ++i)
-			CLEAR_SELECTOR(state->ch_deps[i], state->max_in_ch);
-		/* set identity as initial state */
-		const int min_ch = MINIMUM(e->istream.channels, e->ostream.channels);
-		for (int i = 0; i < min_ch; ++i)
-			SET_BIT(state->ch_deps[i], i);
 		e->channel_deps(e, state->ch_deps);
-		return 1;
+		if (is_square) {
+			for (int i = 0; i < e->ostream.channels; ++i)
+				if (!sel_is_identity(state->ch_deps[i], e->istream.channels, i)) return 0;
+		}
 	}
-	return 0;
+	else if (!(e->flags & EFFECT_FLAG_CH_DEPS_IDENTITY)
+			|| (is_align && e->flags & EFFECT_FLAG_ALIGN_BARRIER)) {
+		if (!e->channel_selector) LOG_FMT(LL_VERBOSE, "warning: %s: channel deps unknown", e->name);
+		for (int i = 0; i < e->ostream.channels; ++i) {
+			if (e->channel_selector) {
+				if (i >= e->istream.channels || GET_BIT(e->channel_selector, i))
+					COPY_SELECTOR(state->ch_deps[i], e->channel_selector, e->istream.channels);
+			}
+			else SET_SELECTOR(state->ch_deps[i], e->istream.channels);
+		}
+		return 0;
+	}
+	return is_square;
 }
 
 /* FIXME: Seems to work, but could probably be done in a better way... */
@@ -780,6 +804,13 @@ static void find_input_deps(int ch, char **ch_deps, int n_in, int n_out, char *r
 	}
 }
 
+static int first_bit_set(const char *b, int n)
+{
+	for (int i = 0; i < n; ++i)
+		if (GET_BIT(b, i)) return i;
+	return -1;
+}
+
 static int effects_chain_align_channels(struct effects_chain_postproc_state *state, struct effects_chain *chain)
 {
 	int ret = 0;
@@ -797,19 +828,16 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 
 	struct effect *prev = NULL;
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
-		const int is_passthrough = (e->istream.channels == e->ostream.channels
-			&& e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE));
-		const int have_ch_deps = query_channel_deps(state, e);
-		if (prev) {
+		const int did_remap = (query_channel_deps(state, e, 1) == 0);
+		if (prev && (e->istream.fs != e->ostream.fs || did_remap)) {
 			/* align channels */
-			if (e->flags & EFFECT_FLAG_ALIGN_BARRIER) {
-				if (align_effect_insert(sc, prev, e, offsets, NULL))
-					goto fail;
-			}
-			else if (have_ch_deps) {
+			ssize_t *align_refs = NULL;
+			if (e->istream.fs != e->ostream.fs)
+				LOG_FMT(LL_VERBOSE, "info: %s: sample rate changed; doing full alignment", e->name);
+			else {
+				align_refs = state->samples[2];
+				memcpy(align_refs, offsets, e->istream.channels * sizeof(ssize_t));
 				CLEAR_SELECTOR(in_deps_all, e->istream.channels);
-				ssize_t *align_refs = state->samples[2];
-				memcpy(align_refs, offsets, e->istream.channels);
 				/* find channels which need to be aligned */
 				for (int k = 0; k < e->istream.channels; ++k) {
 					if (GET_BIT(in_deps_all, k)) continue;  /* already did channel k */
@@ -824,22 +852,11 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 					for (int i = 0; i < e->istream.channels; ++i)
 						if (GET_BIT(in_deps, i)) align_refs[i] = max_offset;
 				}
-				if (align_effect_insert(sc, prev, e, offsets, align_refs))
-					goto fail;
 			}
-			else if (e->istream.fs != e->ostream.fs) {
-				LOG_FMT(LL_VERBOSE, "info: %s: sample rate changed; doing full alignment", e->name);
-				if (align_effect_insert(sc, prev, e, offsets, NULL))
-					goto fail;
-			}
-			else if (!is_passthrough) {
-				LOG_FMT(LL_VERBOSE, "warning: %s: channel deps unknown; doing full alignment", e->name);
-				if (align_effect_insert(sc, prev, e, offsets, NULL))
-					goto fail;
-			}
+			if (align_effect_insert(sc, prev, e, offsets, align_refs)) goto fail;
 		}
 		/* find initial output offsets and delays */
-		if (have_ch_deps) {
+		if (did_remap) {
 			#if 0
 				dsp_log_acquire();
 				dsp_log_printf("%s(): channel deps map:\n", __func__);
@@ -857,37 +874,21 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 			for (int k = 0; k < e->istream.channels; ++k)
 				max_offset = MAXIMUM(max_offset, tmp_offsets[k]);
 			for (int i = 0; i < e->ostream.channels; ++i) {
-				int offset_idx = -1;
-				delays[i] = 0;
-				for (int k = 0; k < e->istream.channels; ++k) {
-					if (GET_BIT(state->ch_deps[i], k)) {
-						if (offset_idx < 0) {
-							offset_idx = k;
-							delays[i] = tmp_delays[k];
-						}
-						else if (tmp_offsets[k] != tmp_offsets[offset_idx]) {
+				const int ref_idx = first_bit_set(state->ch_deps[i], e->istream.channels);
+				delays[i] = (ref_idx >= 0) ? tmp_delays[ref_idx] : 0;
+				if (ref_idx >= 0) {
+					for (int k = ref_idx+1; k < e->istream.channels; ++k) {
+						if (!GET_BIT(state->ch_deps[i], k)) continue;
+						if (tmp_offsets[k] != tmp_offsets[ref_idx]) {
 							LOG_FMT(LL_ERROR, "%s(): BUG: channel %d offset incorrect: %zd!=%zd",
-								__func__, k, tmp_offsets[k], tmp_offsets[offset_idx]);
+								__func__, k, tmp_offsets[k], tmp_offsets[ref_idx]);
 							goto fail;
 						}
 						else delays[i] = MINIMUM(delays[i], tmp_delays[k]);
 					}
 				}
-				offsets[i] = (offset_idx >= 0) ? tmp_offsets[offset_idx] : max_offset;
+				offsets[i] = (ref_idx >= 0) ? tmp_offsets[ref_idx] : max_offset;
 			}
-		}
-		else if (!is_passthrough) {
-			ssize_t min_delay = delays[0];
-			for (int k = 1; k < e->istream.channels; ++k) {
-				min_delay = MINIMUM(min_delay, delays[k]);
-				if (offsets[k] != offsets[k-1]) {
-					LOG_FMT(LL_ERROR, "%s(): BUG: channel %d offset incorrect: %zd!=%zd",
-						__func__, k, offsets[k], offsets[k-1]);
-					goto fail;
-				}
-			}
-			for (int i = 0; i < e->ostream.channels; ++i)
-				delays[i] = min_delay;
 		}
 		for (int i = e->ostream.channels; i < e->istream.channels; ++i)
 			delays[i] = offsets[i] = 0;
@@ -933,7 +934,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
-		if (query_channel_deps(state, e)) {
+		if (query_channel_deps(state, e, 0) == 0) {
 			ssize_t *tmp_samples = state->samples[1];
 			memcpy(tmp_samples, samples, state->max_ch * sizeof(ssize_t));
 			for (int i = 0; i < e->ostream.channels; ++i) {
@@ -944,15 +945,6 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 				}
 				samples[i] = ch_drain;
 			}
-		}
-		else if (!(e->flags & (EFFECT_FLAG_CH_DEPS_IDENTITY|EFFECT_FLAG_OPT_REORDERABLE))
-				&& e->istream.channels != e->ostream.channels) {
-			/* effect does not drain, but channel deps unknown */
-			ssize_t drain_frames = 0;
-			for (int i = 0; i < e->istream.channels; ++i)
-				drain_frames = MAXIMUM(drain_frames, samples[i]);
-			for (int i = 0; i < e->ostream.channels; ++i)
-				samples[i] = drain_frames;
 		}
 		if (e->drain_samples)
 			e->drain_samples(e, samples);
