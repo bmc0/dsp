@@ -31,9 +31,18 @@ struct effect_info {
 enum {
 	EFFECT_FLAG_PLOT_MIX         = 1<<0,  /* needs Ht*(f) for plotting */
 	EFFECT_FLAG_OPT_REORDERABLE  = 1<<1,  /* may be reordered for optimization */
-	EFFECT_FLAG_NO_DITHER        = 1<<2,  /* does not modify the signal such that dither is useful */
-	EFFECT_FLAG_CH_DEPS_IDENTITY = 1<<3,  /* does not mix or reorder channels */
-	EFFECT_FLAG_ALIGN_BARRIER    = 1<<4,  /* all input channels must be aligned */
+	EFFECT_FLAG_OPT_REMIX        = 1<<2,  /* only does mixing and/or reordering of channels */
+	EFFECT_FLAG_OPT_ALLOW_REMAP  = 1<<3,  /* can handle remapped channels in merge() */
+	EFFECT_FLAG_NO_DITHER        = 1<<4,  /* does not modify the signal such that dither is useful */
+	EFFECT_FLAG_CH_DEPS_IDENTITY = 1<<5,  /* does not mix or reorder channels */
+	EFFECT_FLAG_ALIGN_BARRIER    = 1<<6,  /* all input channels must be aligned */
+};
+
+enum {
+	EFFECT_MERGE_ERROR = -1,
+	EFFECT_MERGE_NONE = 0,
+	EFFECT_MERGE_FULL,
+	EFFECT_MERGE_PARTIAL,
 };
 
 struct effect {
@@ -51,7 +60,7 @@ struct effect {
 	void (*drain_samples)(struct effect *, ssize_t *);  /* cumulative drain samples for each output channel */
 	sample_t * (*drain2)(struct effect *, ssize_t *, sample_t *, sample_t *);
 	void (*destroy)(struct effect *);
-	int (*merge)(struct effect *, struct effect *);  /* may not be called after prepare(); returns 1 if merged, 0 otherwise */
+	int (*merge)(struct effect *, struct effect *, const int *);  /* may not be called after prepare() */
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void (*channel_deps)(struct effect *, char **);  /* input channel dependencies for each output channel */
 	void (*channel_offsets)(struct effect *, ssize_t *, ssize_t *);  /* cumulative latency and requested delay samples for each output channel */

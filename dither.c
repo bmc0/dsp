@@ -229,27 +229,24 @@ static void dither_effect_destroy(struct effect *e)
 
 static int dither_effect_can_merge(struct effect *dest, struct effect *src)
 {
-	if (dest->merge != src->merge) return 0;
 	for (int k = 0; k < dest->ostream.channels; ++k)
 		if (GET_BIT(dest->channel_selector, k) && GET_BIT(src->channel_selector, k))
 			return 0;
 	return 1;
 }
 
-static int dither_effect_merge(struct effect *dest, struct effect *src)
+static int dither_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (dither_effect_can_merge(dest, src)) {
-		struct dither_state *dest_state = (struct dither_state *) dest->data;
-		struct dither_state *src_state = (struct dither_state *) src->data;
-		for (int k = 0; k < dest->ostream.channels; ++k) {
-			if (GET_BIT(src->channel_selector, k)) {
-				SET_BIT(dest->channel_selector, k);
-				memcpy(&dest_state[k], &src_state[k], sizeof(struct dither_state));
-			}
+	if (!dither_effect_can_merge(dest, src)) return EFFECT_MERGE_NONE;
+	struct dither_state *dest_state = (struct dither_state *) dest->data;
+	struct dither_state *src_state = (struct dither_state *) src->data;
+	for (int k = 0; k < dest->ostream.channels; ++k) {
+		if (GET_BIT(src->channel_selector, k)) {
+			SET_BIT(dest->channel_selector, k);
+			memcpy(&dest_state[k], &src_state[k], sizeof(struct dither_state));
 		}
-		return 1;
 	}
-	return 0;
+	return EFFECT_MERGE_FULL;
 }
 
 int effect_is_dither(const struct effect *e)

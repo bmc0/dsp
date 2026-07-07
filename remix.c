@@ -154,6 +154,7 @@ struct effect * remix_effect_init(const struct effect_info *ei, const struct str
 	e->ostream.channels = out_channels;
 	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
+	e->flags |= EFFECT_FLAG_OPT_REMIX;
 	e->plot = remix_effect_plot;
 	e->channel_deps = remix_effect_channel_deps;
 	e->data = state = calloc(1, sizeof(struct remix_state));

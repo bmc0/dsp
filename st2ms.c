@@ -99,6 +99,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	e->istream.channels = e->ostream.channels = istream->channels;
 	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_PLOT_MIX;
+	e->flags |= EFFECT_FLAG_OPT_REMIX;
 	switch (ei->effect_number) {
 	case ST2MS_EFFECT_NUMBER_ST2MS:
 		e->run = st2ms_effect_run;

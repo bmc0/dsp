@@ -123,20 +123,20 @@ static void delay_effect_destroy(struct effect *e)
 	free(state);
 }
 
-static int delay_effect_merge(struct effect *dest, struct effect *src)
+static int delay_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (dest->merge == src->merge) {
-		struct delay_state *dest_state = (struct delay_state *) dest->data;
-		struct delay_state *src_state = (struct delay_state *) src->data;
-		for (int k = 0; k < dest->istream.channels; ++k) {
+	struct delay_state *dest_state = (struct delay_state *) dest->data;
+	struct delay_state *src_state = (struct delay_state *) src->data;
+	for (int k = 0; k < dest->istream.channels; ++k) {
+		if (GET_BIT(src->channel_selector, k)) {
 			struct delay_channel_state *dest_cs = &dest_state->cs[k], *src_cs = &src_state->cs[k];
 			dest_cs->samples_int += src_cs->samples_int;
 			dest_cs->samples_frac += src_cs->samples_frac;
 			dest_cs->fd_ap_n = MAXIMUM(dest_cs->fd_ap_n, src_cs->fd_ap_n);
+			SET_BIT(dest->channel_selector, k);
 		}
-		return 1;
 	}
-	return 0;
+	return EFFECT_MERGE_FULL;
 }
 
 static void delay_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)

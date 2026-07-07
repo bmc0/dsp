@@ -655,68 +655,32 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 	return NULL;
 }
 
-static void effects_chain_optimize(struct effects_chain *chain)
-{
-	ssize_t chain_len = 0;
-	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) ++chain_len;
-	ssize_t chain_len_opt = chain_len;
-	LIST_FOREACH(chain, sc) {
-		struct effect *m_dest = sc->head;
-		while (m_dest) {
-			if (m_dest->merge) {
-				struct effect *m_src = m_dest->next;
-				while (m_src) {
-					if (m_src->istream.fs != m_dest->istream.fs
-						|| m_src->istream.channels != m_dest->istream.channels
-						|| m_src->ostream.fs != m_dest->ostream.fs
-						|| m_src->ostream.channels != m_dest->ostream.channels
-						) break;
-					if (m_src->merge == NULL) {
-						if (m_src->flags & EFFECT_FLAG_OPT_REORDERABLE) goto skip;
-						break;
-					}
-					if (m_dest->merge(m_dest, m_src)) {
-						/* LOG_FMT(LL_VERBOSE, "optimize: merged effect: %s <- %s", m_dest->name, m_src->name); */
-						struct effect *tmp = m_src;
-						m_src = m_src->next;
-						LIST_REMOVE(sc, tmp);
-						destroy_effect(tmp);
-						--chain_len_opt;
-					}
-					else {
-						skip:
-						m_src = m_src->next;
-					}
-				}
-			}
-			m_dest = m_dest->next;
-		}
-	}
-	if (chain_len_opt < chain_len)
-		LOG_FMT(LL_VERBOSE, "optimize: info: reduced number of effects from %zd to %zd", chain_len, chain_len_opt);
-}
-
-struct effects_chain_postproc_state {
-	char **ch_deps;
+struct ec_postproc_state {
+	char **ch_deps, *ch_sel[2];
 	ssize_t *samples[4];
+	int *ch_idx[2];
 	int max_in_ch, max_out_ch, max_ch;
 };
 
-static void effects_chain_postproc_state_cleanup(struct effects_chain_postproc_state *state)
+static void ec_postproc_state_cleanup(struct ec_postproc_state *state)
 {
 	if (state->ch_deps) {
 		for (int i = 0; i < state->max_out_ch; ++i)
 			free(state->ch_deps[i]);
 		free(state->ch_deps);
 	}
+	for (int i = 0; i < LENGTH(state->ch_sel); ++i)
+		free(state->ch_sel[i]);
 	for (int i = 0; i < LENGTH(state->samples); ++i)
 		free(state->samples[i]);
-	memset(state, 0, sizeof(struct effects_chain_postproc_state));
+	for (int i = 0; i < LENGTH(state->ch_idx); ++i)
+		free(state->ch_idx[i]);
+	memset(state, 0, sizeof(struct ec_postproc_state));
 }
 
-static int effects_chain_postproc_state_init(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+static int ec_postproc_state_init(struct ec_postproc_state *state, struct effects_chain *chain)
 {
-	memset(state, 0, sizeof(struct effects_chain_postproc_state));
+	memset(state, 0, sizeof(struct ec_postproc_state));
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
 		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
@@ -729,18 +693,26 @@ static int effects_chain_postproc_state_init(struct effects_chain_postproc_state
 		state->ch_deps[i] = NEW_SELECTOR(state->max_in_ch);
 		if (check_alloc(__func__, state->ch_deps[i])) goto fail;
 	}
+	for (int i = 0; i < LENGTH(state->ch_sel); ++i) {
+		state->ch_sel[i] = NEW_SELECTOR(state->max_ch);
+		if (check_alloc(__func__, state->ch_sel[i])) goto fail;
+	}
 	for (int i = 0; i < LENGTH(state->samples); ++i) {
 		state->samples[i] = calloc(state->max_ch, sizeof(ssize_t));
 		if (check_alloc(__func__, state->samples[i])) goto fail;
 	}
+	for (int i = 0; i < LENGTH(state->ch_idx); ++i) {
+		state->ch_idx[i] = calloc(state->max_ch, sizeof(int));
+		if (check_alloc(__func__, state->ch_idx[i])) goto fail;
+	}
 	return 0;
 
 	fail:
-	effects_chain_postproc_state_cleanup(state);
+	ec_postproc_state_cleanup(state);
 	return 1;
 }
 
-static int sel_is_identity(char *s, int n, int i)
+static int sel_is_ident(char *s, int n, int i)
 {
 	if (!GET_BIT(s, i)) return 0;
 	for (int k = 0; k < n; ++k)
@@ -749,10 +721,10 @@ static int sel_is_identity(char *s, int n, int i)
 }
 
 /* returns 1 if square identity, 0 otherwise */
-static int query_channel_deps(struct effects_chain_postproc_state *state, struct effect *e, int is_align)
+static int query_channel_deps(struct ec_postproc_state *state, struct effect *e, int is_align)
 {
-	for (int i = 0; i < state->max_out_ch; ++i)
-		CLEAR_SELECTOR(state->ch_deps[i], state->max_in_ch);
+	for (int i = 0; i < e->ostream.channels; ++i)
+		CLEAR_SELECTOR(state->ch_deps[i], e->istream.channels);
 	/* set identity as initial state */
 	const int min_ch = MINIMUM(e->istream.channels, e->ostream.channels);
 	for (int i = 0; i < min_ch; ++i) SET_BIT(state->ch_deps[i], i);
@@ -761,7 +733,7 @@ static int query_channel_deps(struct effects_chain_postproc_state *state, struct
 		e->channel_deps(e, state->ch_deps);
 		if (is_square) {
 			for (int i = 0; i < e->ostream.channels; ++i)
-				if (!sel_is_identity(state->ch_deps[i], e->istream.channels, i)) return 0;
+				if (!sel_is_ident(state->ch_deps[i], e->istream.channels, i)) return 0;
 		}
 	}
 	else if (!(e->flags & EFFECT_FLAG_CH_DEPS_IDENTITY)
@@ -807,16 +779,118 @@ static int first_bit_set(const char *b, int n)
 	return -1;
 }
 
-static int effects_chain_align_channels(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+#define EC_OPTIMIZE_EXTRA_VERBOSE 0
+static void ec_optimize_build_ch_map(struct ec_postproc_state *state, struct effect *m_src)
 {
-	int ret = 0;
-	char *in_deps = NEW_SELECTOR(state->max_ch);
-	char *in_deps_all = NEW_SELECTOR(state->max_ch);
-	if (!in_deps || !in_deps_all) {
-		dsp_perror(DSP_ENOMEM, __func__, NULL);
-		goto fail;
+	char *in_deps = state->ch_sel[0];
+	int *ch_map = state->ch_idx[0], *tmp_ch_map = state->ch_idx[1];
+	/* find input channels where reordering cannot be done */
+	for (int k = 0; k < m_src->istream.channels; ++k) {
+		if (ch_map[k] < 0) continue;
+		find_input_deps(k, state->ch_deps, m_src->istream.channels, m_src->ostream.channels, in_deps);
+		for (int i = 0; i < m_src->istream.channels; ++i) {
+			if (GET_BIT(in_deps, i) && ch_map[i] != ch_map[k]) {
+				for (int j = 0; j < m_src->istream.channels; ++j)
+					if (GET_BIT(in_deps, j)) ch_map[j] = -1;
+				break;
+			}
+		}
 	}
+	/* build new channel map */
+	memcpy(tmp_ch_map, ch_map, m_src->istream.channels * sizeof(int));
+	for (int i = 0; i < m_src->ostream.channels; ++i) {
+		const int k = first_bit_set(state->ch_deps[i], m_src->istream.channels);
+		ch_map[i] = (k >= 0) ? tmp_ch_map[k] : -1;
+	}
+}
 
+#define EFFECT_REORDERABLE(e) \
+	((e)->flags & (EFFECT_FLAG_OPT_REORDERABLE|EFFECT_FLAG_OPT_REMIX))
+#define OPT_CH_SET(e, i) (!(e)->channel_selector || GET_BIT((e)->channel_selector, i))
+static struct effect * ec_optimize_next_src(struct effect *m_dest, struct effect *m_src, int *ch_map, int r_merge)
+{
+	if (r_merge != EFFECT_MERGE_FULL && !EFFECT_REORDERABLE(m_dest)) return NULL;
+	if (!EFFECT_REORDERABLE(m_src)) {
+		for (int k = 0; k < m_src->istream.channels; ++k)
+			if (OPT_CH_SET(m_src, k)) ch_map[k] = -1;
+	}
+	return m_src->next;
+}
+
+static int ec_optimize_try_merge(struct ec_postproc_state *state, struct effects_subchain *sc,
+	struct effect *m_dest, int *len)
+{
+	if (!m_dest->merge) return 0;
+	int n_merge = 0, *ch_map = state->ch_idx[0];
+	/* FIXME: Some optimization opportunities are currently missed */
+	/* set initial identity map */
+	for (int i = 0; i < m_dest->ostream.channels; ++i) ch_map[i] = i;
+	struct effect *m_src = m_dest->next;
+	while (m_src) {
+		if (query_channel_deps(state, m_src, 0) == 0) {
+			if (!(m_dest->flags & EFFECT_FLAG_OPT_ALLOW_REMAP)) return n_merge;
+			ec_optimize_build_ch_map(state, m_src);
+		}
+		/* merge functions and input/output rates must be the same */
+		if (m_src->merge != m_dest->merge || m_src->istream.fs != m_dest->istream.fs
+			|| m_src->ostream.fs != m_dest->ostream.fs) goto skip;
+		if (!(m_dest->flags & EFFECT_FLAG_OPT_ALLOW_REMAP)) {
+			/* check for conflicts with non-reorderable channels */
+			for (int k = 0; k < m_src->istream.channels; ++k)
+				if (OPT_CH_SET(m_src, k) && ch_map[k] < 0) return n_merge;
+		}
+		const int r_merge = m_dest->merge(m_dest, m_src, ch_map);
+		if (r_merge == EFFECT_MERGE_ERROR) return -1;
+		else if (r_merge > EFFECT_MERGE_NONE) {
+			++n_merge;
+		#if EC_OPTIMIZE_EXTRA_VERBOSE
+			LOG_FMT(LL_VERBOSE, "optimize: %s merge: %s <- %s",
+				(r_merge == EFFECT_MERGE_FULL) ? "full" : "partial", m_dest->name, m_src->name);
+		#endif
+			struct effect *tmp = m_src;
+			m_src = ec_optimize_next_src(m_dest, m_src, ch_map, r_merge);
+			if (r_merge == EFFECT_MERGE_FULL) {
+				LIST_REMOVE(sc, tmp);
+				destroy_effect(tmp);
+				--(*len);
+			}
+		}
+		else {
+			skip:
+			m_src = ec_optimize_next_src(m_dest, m_src, ch_map, EFFECT_MERGE_NONE);
+		}
+	}
+	return n_merge;
+}
+
+static int ec_optimize(struct ec_postproc_state *state, struct effects_chain *chain)
+{
+	int chain_len_opt = 0;
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) ++chain_len_opt;
+	const int chain_len = chain_len_opt;
+	LIST_FOREACH(chain, sc) {
+		int mod, pass = 0;
+		do {
+			mod = 0; ++pass;
+		#if EC_OPTIMIZE_EXTRA_VERBOSE
+			LOG_FMT(LL_VERBOSE, "optimize: info: pass #%d", pass);
+		#endif
+			LIST_FOREACH(sc, m_dest) {
+				const int n_merge = ec_optimize_try_merge(state, sc, m_dest, &chain_len_opt);
+				if (n_merge < 0) return 1;
+				if (n_merge > 0) mod = 1;
+			}
+		} while (mod);
+		if (pass > 1) LOG_FMT(LL_VERBOSE, "optimize: info: %d passes", pass);
+	}
+	if (chain_len_opt < chain_len)
+		LOG_FMT(LL_VERBOSE, "optimize: info: reduced number of effects from %d to %d", chain_len, chain_len_opt);
+	return 0;
+}
+
+static int ec_align_channels(struct ec_postproc_state *state, struct effects_chain *chain)
+{
+	char *in_deps = state->ch_sel[0], *in_deps_all = state->ch_sel[1];
 	ssize_t nd_part = 0;  /* negative part of delays */
 	ssize_t *offsets = state->samples[0], *delays = state->samples[1];
 	memset(offsets, 0, state->max_ch * sizeof(ssize_t));
@@ -849,7 +923,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 						if (GET_BIT(in_deps, i)) align_refs[i] = max_offset;
 				}
 			}
-			if (align_effect_insert(sc, prev, e, offsets, align_refs)) goto fail;
+			if (align_effect_insert(sc, prev, e, offsets, align_refs)) return 1;
 		}
 		/* find initial output offsets and delays */
 		if (did_remap) {
@@ -878,7 +952,7 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 						if (tmp_offsets[k] != tmp_offsets[ref_idx]) {
 							LOG_FMT(LL_ERROR, "%s(): BUG: channel %d offset incorrect: %zd!=%zd",
 								__func__, k, tmp_offsets[k], tmp_offsets[ref_idx]);
-							goto fail;
+							return 1;
 						}
 						else delays[i] = MINIMUM(delays[i], tmp_delays[k]);
 					}
@@ -912,20 +986,12 @@ static int effects_chain_align_channels(struct effects_chain_postproc_state *sta
 		prev = e;
 	}
 	if (prev && align_effect_insert(chain->tail, prev, NULL, offsets, NULL))
-		goto fail;
+		return 1;
 	chain->zero_ref = -nd_part;
-
-	done:
-	free(in_deps_all);
-	free(in_deps);
-	return ret;
-
-	fail:
-	ret = 1;
-	goto done;
+	return 0;
 }
 
-static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *state, struct effects_chain *chain)
+static void ec_set_drain_frames(struct ec_postproc_state *state, struct effects_chain *chain)
 {
 	ssize_t *samples = state->samples[0];
 	memset(samples, 0, state->max_ch * sizeof(ssize_t));
@@ -964,7 +1030,7 @@ static void effects_chain_set_drain_frames(struct effects_chain_postproc_state *
 	LOG_FMT(LL_VERBOSE, "info: input drain frames: %zd", chain->drain_frames);
 }
 
-static int effects_chain_prepare(struct effects_chain *chain)
+static int ec_prepare(struct effects_chain *chain)
 {
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (e->prepare && e->prepare(e))
@@ -991,20 +1057,19 @@ static int build_effects_chain_finish(struct effects_chain *chain)
 		}
 	}
 	else if (chain->head->head) {
-		struct effects_chain_postproc_state state;
+		struct ec_postproc_state state;
 		memcpy(&chain->ostream, &chain->tail->tail->ostream, sizeof(struct stream_info));
 		const int gcd = find_gcd(chain->ostream.fs, chain->istream.fs);
 		chain->ratio.n = chain->ostream.fs / gcd;
 		chain->ratio.d = chain->istream.fs / gcd;
-		effects_chain_optimize(chain);
-		if (effects_chain_prepare(chain)) return 1;
-		if (effects_chain_postproc_state_init(&state, chain)) return 1;
-		if (effects_chain_align_channels(&state, chain)) {
-			effects_chain_postproc_state_cleanup(&state);
+		if (ec_postproc_state_init(&state, chain)) return 1;
+		if (ec_optimize(&state, chain) || ec_prepare(chain)
+				|| ec_align_channels(&state, chain)) {
+			ec_postproc_state_cleanup(&state);
 			return 1;
 		}
-		effects_chain_set_drain_frames(&state, chain);
-		effects_chain_postproc_state_cleanup(&state);
+		ec_set_drain_frames(&state, chain);
+		ec_postproc_state_cleanup(&state);
 	}
 	LIST_FOREACH(chain, sc) {
 		sc->sync.prev = (sc->prev) ? &sc->prev->sync.out : &chain->tail->sync.out;

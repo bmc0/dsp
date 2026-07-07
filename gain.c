@@ -54,28 +54,30 @@ static void gain_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
-static int gain_effect_merge(struct effect *dest, struct effect *src)
+static int gain_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (dest->merge == src->merge) {
-		sample_t *dest_state = (sample_t *) dest->data;
-		sample_t *src_state = (sample_t *) src->data;
-		for (int k = 0; k < dest->ostream.channels; ++k)
+	sample_t *dest_state = (sample_t *) dest->data;
+	sample_t *src_state = (sample_t *) src->data;
+	for (int k = 0; k < dest->ostream.channels; ++k) {
+		if (GET_BIT(src->channel_selector, k)) {
 			dest_state[k] *= src_state[k];
-		return 1;
+			SET_BIT(dest->channel_selector, k);
+		}
 	}
-	return 0;
+	return EFFECT_MERGE_FULL;
 }
 
-static int add_effect_merge(struct effect *dest, struct effect *src)
+static int add_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (dest->merge == src->merge) {
-		sample_t *dest_state = (sample_t *) dest->data;
-		sample_t *src_state = (sample_t *) src->data;
-		for (int k = 0; k < dest->ostream.channels; ++k)
+	sample_t *dest_state = (sample_t *) dest->data;
+	sample_t *src_state = (sample_t *) src->data;
+	for (int k = 0; k < dest->ostream.channels; ++k) {
+		if (GET_BIT(src->channel_selector, k)) {
 			dest_state[k] += src_state[k];
-		return 1;
+			SET_BIT(dest->channel_selector, k);
+		}
 	}
-	return 0;
+	return EFFECT_MERGE_FULL;
 }
 
 struct effect * gain_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)

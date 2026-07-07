@@ -283,19 +283,19 @@ static void riir_init_state_clear(struct riir_init_state *v)
 	v->n = v->len = 0;
 }
 
-static int reverse_iir_effect_merge(struct effect *dest, struct effect *src)
+static int reverse_iir_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (dest->merge == src->merge) {
-		struct riir_init_state *dest_state = (struct riir_init_state *) dest->data;
-		struct riir_init_state *src_state = (struct riir_init_state *) src->data;
-		for (int k = 0; k < dest->istream.channels; ++k) {
+	struct riir_init_state *dest_state = (struct riir_init_state *) dest->data;
+	struct riir_init_state *src_state = (struct riir_init_state *) src->data;
+	for (int k = 0; k < dest->istream.channels; ++k) {
+		if (GET_BIT(src->channel_selector, k)) {
 			if (riir_init_state_append(&dest_state[k], src_state[k].sec, src_state[k].n))
-				return 0;
+				return EFFECT_MERGE_ERROR;
 			riir_init_state_clear(&src_state[k]);
+			SET_BIT(dest->channel_selector, k);
 		}
-		return 1;
 	}
-	return 0;
+	return EFFECT_MERGE_FULL;
 }
 
 static void riir_expand_pq(const qroots *pq, enum riir_pq_type type, double r[2])

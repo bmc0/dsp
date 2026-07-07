@@ -340,12 +340,21 @@ static void biquad_effect_destroy(struct effect *e)
 	free(e->data);
 }
 
-static int biquad_effect_can_merge(struct effect *dest, struct effect *src)
+static inline int biquad_equal(struct biquad_state *a, struct biquad_state *b)
 {
-	if (dest->merge != src->merge) return 0;
-	for (int k = 0; k < dest->ostream.channels; ++k)
-		if (GET_BIT(dest->channel_selector, k) && GET_BIT(src->channel_selector, k))
-			return 0;
+	return (a->c0 == b->c0 && a->c1 == b->c1 && a->c2 == b->c2
+		&& a->c3 == b->c3 && a->c4 == b->c4);
+}
+
+static int biquad_channel_can_merge(struct effect *dest, struct effect *src, int k, const int *ch_map)
+{
+	struct biquad_state *src_state = (struct biquad_state *) src->data;
+	if (!GET_BIT(src->channel_selector, k)) return 0;
+	if (ch_map[k] < 0 || GET_BIT(dest->channel_selector, ch_map[k])) return 0;
+	for (int i = 0; i < src->ostream.channels; ++i) {
+		if (ch_map[i] == ch_map[k] && !(GET_BIT(src->channel_selector, i)
+			&& biquad_equal(&src_state[i], &src_state[k]))) return 0;
+	}
 	return 1;
 }
 
@@ -357,21 +366,29 @@ static void biquad_effect_set_run_func(struct effect *e)
 	else e->run = biquad_effect_run;
 }
 
-static int biquad_effect_merge(struct effect *dest, struct effect *src)
+static int biquad_effect_merge(struct effect *dest, struct effect *src, const int *ch_map)
 {
-	if (biquad_effect_can_merge(dest, src)) {
-		struct biquad_state *dest_state = (struct biquad_state *) dest->data;
-		struct biquad_state *src_state = (struct biquad_state *) src->data;
-		for (int k = 0; k < dest->ostream.channels; ++k) {
-			if (GET_BIT(src->channel_selector, k)) {
-				SET_BIT(dest->channel_selector, k);
-				memcpy(&dest_state[k], &src_state[k], sizeof(struct biquad_state));
+	struct biquad_state *dest_state = (struct biquad_state *) dest->data;
+	struct biquad_state *src_state = (struct biquad_state *) src->data;
+	const int n_src = num_bits_set(src->channel_selector, src->ostream.channels);
+	int rem = n_src;
+	for (int k = 0; k < src->ostream.channels; ++k) {
+		if (biquad_channel_can_merge(dest, src, k, ch_map)) {
+			SET_BIT(dest->channel_selector, ch_map[k]);
+			memcpy(&dest_state[ch_map[k]], &src_state[k], sizeof(struct biquad_state));
+			for (int i = k; i < src->ostream.channels; ++i) {
+				if (GET_BIT(src->channel_selector, i) && ch_map[i] == ch_map[k]) {
+					CLEAR_BIT(src->channel_selector, i);
+					memset(&src_state[i], 0, sizeof(struct biquad_state));
+					--rem;
+				}
 			}
 		}
-		biquad_effect_set_run_func(dest);
-		return 1;
 	}
-	return 0;
+	if (rem == n_src) return EFFECT_MERGE_NONE;
+	biquad_effect_set_run_func(dest);
+	if (rem) biquad_effect_set_run_func(src);
+	return (rem) ? EFFECT_MERGE_PARTIAL : EFFECT_MERGE_FULL;
 }
 
 struct biquad_effect_opts {
@@ -538,6 +555,7 @@ struct effect * biquad_effect_init(const struct effect_info *ei, const struct st
 	e->istream.channels = e->ostream.channels = istream->channels;
 	if (effect_set_channel_selector(e, channel_selector)) goto fail;
 	e->flags |= EFFECT_FLAG_OPT_REORDERABLE;
+	e->flags |= EFFECT_FLAG_OPT_ALLOW_REMAP;
 	e->flags |= EFFECT_FLAG_CH_DEPS_IDENTITY;
 	biquad_effect_set_run_func(e);
 	e->reset = biquad_effect_reset;
