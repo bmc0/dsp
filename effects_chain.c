@@ -784,23 +784,19 @@ static void find_input_deps(int ch, char **ch_deps, int n_in, int n_out, char *r
 {
 	CLEAR_SELECTOR(r_deps, n_in);
 	SET_BIT(r_deps, ch);
-	restart:
 	for (int i = 0; i < n_out; ++i) {
-		int mod = 0;
 		for (int k = 0; k < n_in; ++k) {
-			if (GET_BIT(r_deps, k) && GET_BIT(ch_deps[i], k))
-				goto has_dep;
-		}
-		continue;
-		has_dep:
-		for (int k = 0; k < n_in; ++k) {
-			if (GET_BIT(r_deps, k)) continue;
-			if (GET_BIT(ch_deps[i], k)) {
-				SET_BIT(r_deps, k);
-				mod = 1;
+			if (GET_BIT(r_deps, k) && GET_BIT(ch_deps[i], k)) {
+				int mod = -1;
+				for (int j = 0; j < n_in; ++j) {
+					if (!GET_BIT(r_deps, j) && GET_BIT(ch_deps[i], j)) {
+						SET_BIT(r_deps, j);
+						if (mod < 0) mod = j;
+					}
+				}
+				if (mod > 0 && mod < i) { i = mod-1; break; }
 			}
 		}
-		if (mod && i > 0) goto restart;
 	}
 }
 
