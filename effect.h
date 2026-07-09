@@ -64,6 +64,7 @@ struct effect {
 	ssize_t (*buffer_frames)(struct effect *, ssize_t);
 	void (*channel_deps)(struct effect *, char **);  /* input channel dependencies for each output channel */
 	void (*channel_offsets)(struct effect *, ssize_t *, ssize_t *);  /* cumulative latency and requested delay samples for each output channel */
+	const char * (*channel_label)(struct effect *, int, int);  /* for signal flow graph */
 	void *data;
 };
 

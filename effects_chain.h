@@ -51,6 +51,7 @@ double get_effects_chain_delay(struct effects_chain *, int);
 void reset_effects_chain(struct effects_chain *);
 void signal_effects_chain(struct effects_chain *);
 void plot_effects_chain(struct effects_chain *, int);
+void generate_effects_chain_digraph(struct effects_chain *);
 sample_t * drain_effects_chain(struct effects_chain *, ssize_t *);
 void destroy_effects_chain(struct effects_chain *);
 

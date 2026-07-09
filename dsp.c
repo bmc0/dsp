@@ -75,7 +75,7 @@ struct event {
 };
 
 static struct termios term_attrs;
-static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1, plot = 0,
+static int term_fd = STDIN_FILENO, interactive = -1, show_progress = 1, plot = 0, digraph = 0,
 	term_attrs_saved = 0, force_dither = 0, drain_effects = 1, verbose_progress = 0,
 	status_cleared = -1, status_redraw = 1, out_drop = 0, block_frames = DEFAULT_BLOCK_FRAMES,
 	input_buf_ratio = DEFAULT_INPUT_BUF_RATIO, output_buf_ratio = DEFAULT_OUTPUT_BUF_RATIO;
@@ -134,6 +134,7 @@ static const char help_text[] =
 	"  -E         don't drain effects chain before rebuilding\n"
 	"  -p         plot effects chain magnitude response instead of processing audio\n"
 	"  -P         same as '-p', but also plot phase response\n"
+	"  -g         generate a digraph representation of the effects chain\n"
 	"  -V         verbose progress display\n"
 	"  -S         use \"sequence\" input combining mode\n"
 	"  -X[n]      run in ABX comparator mode\n"
@@ -444,7 +445,7 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 	*r_timespan = NULL;
 	*r_repeats = 0;
 
-	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPVSX::ot:e:BLNr:c:R:T:l::n")) != -1) {
+	while ((opt = dsp_getopt(g, argc, argv, "hb:iIqsvdDEpPgVSX::ot:e:BLNr:c:R:T:l::n")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_help();
@@ -490,6 +491,9 @@ static int parse_codec_params(struct dsp_getopt_state *g, int argc, const char *
 			break;
 		case 'P':
 			plot = 2;
+			break;
+		case 'g':
+			digraph = 1;
 			break;
 		case 'V':
 			verbose_progress = 1;
@@ -1178,10 +1182,11 @@ int main(int argc, char *argv[])
 		.channels = input_list.head->codec->channels,
 	};
 
-	if (plot) {
+	if (plot || digraph) {
 		if (build_effects_chain_from_argv(chain_argc, (const char *const *) &argv[chain_start], &chain, &stream, NULL, NULL))
 			cleanup_and_exit(1);
-		plot_effects_chain(&chain, (plot > 1));
+		if (digraph) generate_effects_chain_digraph(&chain);
+		else plot_effects_chain(&chain, (plot > 1));
 	}
 	else {
 		sem_init(&ev_queue.slots, 0, LENGTH(ev_queue.ev));

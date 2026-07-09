@@ -54,6 +54,7 @@ Option      | Description
 `-E`        | Don't drain effects chain before rebuilding.
 `-p`        | Plot effects chain magnitude response instead of processing audio.
 `-P`        | Same as `-p`, but also plot phase response.
+`-g`        | Generate a digraph representation of the effects chain.
 `-V`        | Verbose progress display.
 `-S`        | Use "sequence" input combining mode.
 `-X[n]`     | Run in ABX comparator mode.
@@ -688,6 +689,10 @@ Read `file.flac`, apply a bass boost, and write to alsa device `hw:2`:
 Plot the magnitude vs frequency response of an effects chain:
 
 	dsp -pn [effect [args]] ... | gnuplot
+
+Show a digraph representation of signal flow through an effects chain:
+
+	dsp -gn [effect [args]] ... | dot -Tx11
 
 Implement an LR4 crossover at 2.2KHz, where output channels 0 and 1 are the
 left and right tweeters, and channels 2 and 3 are the left and right woofers,

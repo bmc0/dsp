@@ -681,6 +681,8 @@ static void ec_postproc_state_cleanup(struct ec_postproc_state *state)
 static int ec_postproc_state_init(struct ec_postproc_state *state, struct effects_chain *chain)
 {
 	memset(state, 0, sizeof(struct ec_postproc_state));
+	state->max_in_ch = chain->istream.channels;
+	state->max_out_ch = chain->ostream.channels;
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		state->max_in_ch = MAXIMUM(state->max_in_ch, e->istream.channels);
 		state->max_out_ch = MAXIMUM(state->max_out_ch, e->ostream.channels);
@@ -1464,6 +1466,145 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 			printf(", Ht%d_phase_deg(x) axes x1y2 lt %d lw 1 dt '-' notitle", k, k+1);
 	}
 	puts("\npause mouse close");
+}
+
+static void digraph_connect(ssize_t n0, int f0, ssize_t n1, int f1)
+{
+	if (n0 < 0 || n1 < 0) return;
+	printf("\tn%zd", n0);
+	if (f0 >= 0) printf(":o%d", f0);
+	printf(" -> n%zd", n1);
+	if (f1 >= 0) printf(":i%d", f1);
+	puts(";");
+}
+
+void generate_effects_chain_digraph(struct effects_chain *chain)
+{
+	struct ec_postproc_state state;
+	if (ec_postproc_state_init(&state, chain)) return;
+	ssize_t node = 0, *prev_node = state.samples[0];
+	int *prev_field = state.ch_idx[0];
+
+	puts("digraph {\n\tnode [shape=\"box\"];");
+	/* inputs */
+	puts("\t{\n\t\trank=source;\n\t\tnode [style=\"bold,filled\"];");
+	for (int k = 0; k < chain->istream.channels; ++k) {
+		printf("\t\tn%zd [label=\"input %d\"];\n", node, k);
+		prev_node[k] = node++;
+		prev_field[k] = -1;
+	}
+	puts("\t}");
+
+	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
+		if (strcmp(e->name, "align") == 0) continue;
+		const int did_remap = (query_channel_deps(&state, e, 0) == 0);
+		if (!did_remap && strcmp(e->name, "remix") == 0) continue;
+		if (did_remap) {
+			ssize_t *tmp_node = state.samples[1];
+			int *tmp_field = state.ch_idx[1];
+			memcpy(tmp_node, prev_node, e->istream.channels * sizeof(ssize_t));
+			memcpy(tmp_field, prev_field, e->istream.channels * sizeof(int));
+			if (strcmp(e->name, "remix") == 0) {
+				int has_sum = 0;
+				for (int i = 0; i < e->ostream.channels; ++i) {
+					if (num_bits_set(state.ch_deps[i], e->istream.channels) > 1) {
+						if (!has_sum) { puts("\t{"); has_sum = 1; }
+						printf("\t\tn%zd [shape=circle,width=0,margin=0,label=\"+\"];\n", node+i);
+					}
+				}
+				if (has_sum) puts("\t}");
+				for (int i = 0; i < e->ostream.channels; ++i) {
+					if (num_bits_set(state.ch_deps[i], e->istream.channels) > 1) {
+						for (int k = 0; k < e->istream.channels; ++k) {
+							if (GET_BIT(state.ch_deps[i], k))
+								digraph_connect(tmp_node[k], tmp_field[k], node+i, -1);
+						}
+						prev_node[i] = node+i;
+						prev_field[i] = -1;
+					}
+					else {
+						int k = first_bit_set(state.ch_deps[i], e->istream.channels);
+						prev_node[i] = (k >= 0) ? tmp_node[k] : -1;
+						prev_field[i] = (k >= 0) ? tmp_field[k] : -1;
+					}
+				}
+				node += e->ostream.channels;
+			}
+			else {
+				printf("\t{\n\t\tn%zd [shape=record,label=\"{ {", node);
+				for (int k = 0, f = 0; k < e->istream.channels; ++k) {
+					if (OPT_CH_SET(e, k)) {
+						printf("%s <i%d> ", (f>0)?" |":"", f);
+						if (e->channel_label) fputs(e->channel_label(e, k, 0), stdout);
+						else printf("%d", f);
+						++f;
+					}
+				}
+				printf(" } | %s | {", e->name);
+				for (int i = 0, f = 0; i < e->ostream.channels; ++i) {
+					if (i >= e->istream.channels || OPT_CH_SET(e, i)) {
+						printf("%s <o%d> ", (f>0)?" |":"", f);
+						if (e->channel_label) fputs(e->channel_label(e, i, 1), stdout);
+						else printf("%d", f);
+						++f;
+					}
+				}
+				puts(" } }\"];\n\t}");
+				for (int k = 0, f = 0; k < e->istream.channels; ++k)
+					if (OPT_CH_SET(e, k)) digraph_connect(tmp_node[k], tmp_field[k], node, f++);
+				for (int i = 0, f = 0; i < e->ostream.channels; ++i) {
+					if (i >= e->istream.channels || OPT_CH_SET(e, i)) {
+						prev_node[i] = node;
+						prev_field[i] = f++;
+					}
+				}
+				++node;
+			}
+		}
+		else {
+			puts("\t{\n\t\trank=same;");
+			char *is_casc = state.ch_sel[0];
+			CLEAR_SELECTOR(is_casc, e->istream.channels);
+			for (int k = 0; k < e->istream.channels; ++k) {
+				if (OPT_CH_SET(e, k)) {
+					const char *ch_l = (e->channel_label) ? e->channel_label(e, k, 0) : e->name;
+					if (e->channel_label && ch_l && strchr(ch_l, ';')) {
+						printf("\t\tn%zd [shape=record,label=\"{ <i0> ", node+k);
+						for (const char *ep = ch_l; *ep != '\0';) {
+							while (*ep != ';' && *ep != '\0') ++ep;
+							if (*ep == '\0') fputs("<o0> ", stdout);
+							fwrite(ch_l, 1, ep-ch_l, stdout);
+							if (*ep != '\0') { fputs(" | ", stdout); ch_l = ++ep; }
+						}
+						puts(" }\"];");
+						SET_BIT(is_casc, k);
+					}
+					else printf("\t\tn%zd [label=\"%s\"];\n", node+k, ch_l);
+				}
+			}
+			puts("\t}");
+			for (int k = 0; k < e->istream.channels; ++k) {
+				if (OPT_CH_SET(e, k)) {
+					const int field = (GET_BIT(is_casc, k)) ? 0 : -1;
+					digraph_connect(prev_node[k], prev_field[k], node+k, field);
+					prev_node[k] = node+k;
+					prev_field[k] = field;
+				}
+			}
+			node += e->istream.channels;
+		}
+	}
+
+	/* outputs */
+	puts("\t{\n\t\trank=sink;\n\t\tnode [style=\"bold,filled\"];");
+	for (int i = 0; i < chain->ostream.channels; ++i)
+		printf("\t\tn%zd [label=\"output %d\"];\n", node+i, i);
+	puts("\t}");
+	for (int i = 0; i < chain->ostream.channels; ++i)
+		if (prev_node[i] >= 0) digraph_connect(prev_node[i], prev_field[i], node+i, -1);
+
+	puts("}");
+	ec_postproc_state_cleanup(&state);
 }
 
 sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames)
