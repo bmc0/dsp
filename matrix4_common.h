@@ -235,7 +235,7 @@ void smooth_state_init(struct smooth_state *, const struct stream_info *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
-void surr_direct_pan(struct direct_path_state *, const struct event_state *, const struct axes *, int, double [3]);
+void surr_direct_pan(struct direct_path_state *, const struct event_state *, const struct axes *, int, double [4]);
 
 #ifdef DSP_STATUSLINES
 struct steering_bar {

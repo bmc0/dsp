@@ -125,6 +125,15 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 		if (1) {
 		#endif
 			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
+			double cmc_param = state->cmc_param;
+			if (state->do_direct_path) {
+				double r_pan[4];
+				surr_direct_pan(&state->dp, &state->ev, &state->ax, state->have_rears, r_pan);
+				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
+				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
+				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
+				cmc_param = cmc_param*(1.0-r_pan[3]) + r_pan[3];
+			}
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
@@ -141,7 +150,7 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 				{ .arg = surr_mult*shelf_ct1*lp_ct1 },
 			};
 			state->calc_matrix_coefs(&state->ax, (state->do_dpwr_decouple) ? &state->ax_dpwr : &state->ax,
-				surr_mult, state->surr_mult[1]*cur_fade_mult, state->cmc_param, &m, r_shelf_mult, LENGTH(r_shelf_mult));
+				surr_mult, state->surr_mult[1]*cur_fade_mult, cmc_param, &m, r_shelf_mult, LENGTH(r_shelf_mult));
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -169,13 +178,6 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 				const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
 				cs_interp_insert(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 				cs_interp_insert(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
-			}
-			if (state->do_direct_path) {
-				double r_pan[3];
-				surr_direct_pan(&state->dp, &state->ev, &state->ax, state->have_rears, r_pan);
-				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
-				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
-				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
 			}
 		}
 

@@ -212,6 +212,15 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev, &band->ax_dpwr);
+				double cmc_param = state->cmc_param;
+				if (state->do_direct_path) {
+					double r_pan[4];
+					surr_direct_pan(&band->dp, &band->ev, &band->ax, state->have_rears, r_pan);
+					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
+					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
+					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
+					cmc_param = cmc_param*(1.0-r_pan[3]) + r_pan[3];
+				}
 				#if REPORT_EVENT_LEVELS
 					if (band->evl_samples >= 0) {
 						band->evl_sum_sq += ev->last[0]*ev->last[0];
@@ -231,7 +240,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 				struct matrix_coefs m = {0};
 				state->calc_matrix_coefs(&band->ax, (state->do_dpwr_decouple) ? &band->ax_dpwr : &band->ax,
-					surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, state->cmc_param, &m, NULL, 0);
+					surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, cmc_param, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -254,13 +263,6 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					const double pf_pos_rs = phase_flip_pos_rs(&band->ax);
 					cs_interp_insert(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
-				}
-				if (state->do_direct_path) {
-					double r_pan[3];
-					surr_direct_pan(&band->dp, &band->ev, &band->ax, state->have_rears, r_pan);
-					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
-					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
-					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
 				}
 			}
 

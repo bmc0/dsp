@@ -1081,10 +1081,10 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 }
 
 void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
-	const struct axes *ax, int have_rears, double r[3])
+	const struct axes *ax, int have_rears, double r[4])
 {
 	const double x = fabs(ax->lr);
-	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0;
+	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0; r[3] = 0.0;
 	if (dp->mode == DIRECT_PATH_EVENT) {
 		if (!dp->enable && ev->t_hold) {
 			const double eb = (-0.45*x+0.8)*x*x-(M_PI/8);
@@ -1112,7 +1112,7 @@ void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
 			if (dp->enable > 1 && zs < 1e-6) goto direct_path_finish;
 			const double m = M_PI_2/(y1-y0);
 			const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2) * zs;
-			r[0] = cos(z); r[1] = sin(z);
+			r[0] = cos(z); r[1] = sin(z); r[3] = z;
 			if (have_rears) {
 				const double y2 = x*(-1.22)+(M_PI/16), y3 = -x-(M_PI/8);
 				const double m2 = M_PI_2/(y3-y2), g = r[1];
@@ -1126,7 +1126,7 @@ void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
 		const double y1 = (-0.52*x+0.93)*x*x-(M_PI/8);
 		const double m = M_PI_2/(y1-y0);
 		const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2);
-		r[0] = cos(z); r[1] = sin(z);
+		r[0] = cos(z); r[1] = sin(z); r[3] = z;
 		if (have_rears) {
 			const double y2 = x*(-1.0/2.0)-(M_PI/66), y3 = x*(-1.0/3.0)-(M_PI/6);
 			const double m2 = M_PI_2/(y3-y2), g = r[1];
