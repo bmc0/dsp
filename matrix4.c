@@ -353,10 +353,7 @@ static void matrix4_effect_signal(struct effect *e)
 static void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	drain_samples[state->c0] += state->len;
-	drain_samples[state->c1] += state->len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i)
-		drain_samples[i] += state->len;
+	matrix4_common_drain_samples(e, state->c0, state->c1, state->len, drain_samples);
 }
 
 static void matrix4_effect_destroy(struct effect *e)
@@ -382,20 +379,19 @@ static void matrix4_effect_destroy(struct effect *e)
 static void matrix4_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	SET_BIT(deps[state->c0], state->c1);
-	SET_BIT(deps[state->c1], state->c0);
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
-		SET_BIT(deps[i], state->c0);
-		SET_BIT(deps[i], state->c1);
-	}
+	matrix4_common_channel_deps(e, state->c0, state->c1, deps);
 }
 
 static void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	latency[state->c0] += state->len;
-	latency[state->c1] += state->len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += state->len;
+	matrix4_common_channel_offsets(e, state->c0, state->c1, state->len, latency);
+}
+
+static const char * matrix4_effect_channel_label(struct effect *e, int ch, int out)
+{
+	struct matrix4_state *state = (struct matrix4_state *) e->data;
+	return matrix4_common_channel_label(e, state->c0, state->c1, state->have_rears, ch, out);
 }
 
 struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -420,6 +416,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->drain_samples = matrix4_effect_drain_samples;
 	e->channel_deps = matrix4_effect_channel_deps;
 	e->channel_offsets = matrix4_effect_channel_offsets;
+	e->channel_label = matrix4_effect_channel_label;
 
 	state = calloc(1, sizeof(struct matrix4_state));
 	if (check_alloc(ei->name, state)) goto fail;

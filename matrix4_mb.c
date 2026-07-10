@@ -424,10 +424,7 @@ static void matrix4_mb_effect_signal(struct effect *e)
 static void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	drain_samples[state->c0] += state->fb_buf_len;
-	drain_samples[state->c1] += state->fb_buf_len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i)
-		drain_samples[i] += state->fb_buf_len;
+	matrix4_common_drain_samples(e, state->c0, state->c1, state->fb_buf_len, drain_samples);
 }
 
 static void matrix4_mb_effect_destroy(struct effect *e)
@@ -476,20 +473,19 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 static void matrix4_mb_effect_channel_deps(struct effect *e, char **deps)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	SET_BIT(deps[state->c0], state->c1);
-	SET_BIT(deps[state->c1], state->c0);
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
-		SET_BIT(deps[i], state->c0);
-		SET_BIT(deps[i], state->c1);
-	}
+	matrix4_common_channel_deps(e, state->c0, state->c1, deps);
 }
 
 static void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	latency[state->c0] += state->len;
-	latency[state->c1] += state->len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += state->len;
+	matrix4_common_channel_offsets(e, state->c0, state->c1, state->len, latency);
+}
+
+static const char * matrix4_mb_effect_channel_label(struct effect *e, int ch, int out)
+{
+	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
+	return matrix4_common_channel_label(e, state->c0, state->c1, state->have_rears, ch, out);
 }
 #endif
 
@@ -547,6 +543,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	e->destroy = matrix4_mb_effect_destroy;
 	e->channel_deps = matrix4_mb_effect_channel_deps;
 	e->channel_offsets = matrix4_mb_effect_channel_offsets;
+	e->channel_label = matrix4_mb_effect_channel_label;
 #endif
 
 	state->c0 = config.c0;
@@ -657,9 +654,10 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		integ += fabs(filter[k]);
 	}
 	phase_lin_frames -= zx;
+	struct effect_info ei_fir = { .name = (config.use_fir_p) ? "fir_p (matrix4_mb)" : "fir (matrix4_mb)" };
 	struct effect *e_fir = (config.use_fir_p)
-		? fir_p_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0)
-		: fir_effect_init_with_filter(ei, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0);
+		? fir_p_effect_init_with_filter(&ei_fir, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0)
+		: fir_effect_init_with_filter(&ei_fir, istream, channel_selector, &filter[zx], 1, phase_lin_frames, 0, 0);
 	free(filter);
 	filter_bank_reset(&state->fb[1]);
 	state->len = state->fb_buf_len + (phase_lin_frames - 1);  /* total delay */

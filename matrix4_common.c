@@ -1136,6 +1136,45 @@ void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
 	}
 }
 
+void matrix4_common_drain_samples(struct effect *e, int c0, int c1, ssize_t len, ssize_t *drain_samples)
+{
+	drain_samples[c0] += len;
+	drain_samples[c1] += len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) drain_samples[i] += len;
+}
+
+void matrix4_common_channel_deps(struct effect *e, int c0, int c1, char **deps)
+{
+	SET_BIT(deps[c0], c1);
+	SET_BIT(deps[c1], c0);
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
+		SET_BIT(deps[i], c0);
+		SET_BIT(deps[i], c1);
+	}
+}
+
+void matrix4_common_channel_offsets(struct effect *e, int c0, int c1, ssize_t len, ssize_t *latency)
+{
+	latency[c0] += len;
+	latency[c1] += len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += len;
+}
+
+static const char *surr_map_2_2[] = { "LS", "RS", "LSd", "RSd" };
+static const char *surr_map_2_4[] = { "LS", "RS", "LR", "RR", "LSd", "RSd", "LRd", "RRd" };
+
+const char * matrix4_common_channel_label(struct effect *e, int c0, int c1, int have_rears, int ch, int out)
+{
+	if (ch == c0) return (out)?"L":"Lt";
+	if (ch == c1) return (out)?"R":"Rt";
+	if (out && ch >= e->istream.channels) {
+		const int idx = ch - e->istream.channels;
+		if (have_rears && idx < LENGTH(surr_map_2_4)) return surr_map_2_4[idx];
+		else if (idx < LENGTH(surr_map_2_4)) return surr_map_2_2[idx];
+	}
+	return NULL;
+}
+
 #ifdef DSP_STATUSLINES
 void draw_steering_bar(double a, int is_event, struct steering_bar *bar)
 {

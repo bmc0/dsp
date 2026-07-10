@@ -236,6 +236,10 @@ void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
 void surr_direct_pan(struct direct_path_state *, const struct event_state *, const struct axes *, int, double [4]);
+void matrix4_common_drain_samples(struct effect *, int, int, ssize_t, ssize_t *);
+void matrix4_common_channel_deps(struct effect *, int, int, char **);
+void matrix4_common_channel_offsets(struct effect *, int, int, ssize_t, ssize_t *);
+const char * matrix4_common_channel_label(struct effect *, int, int, int, int, int);
 
 #ifdef DSP_STATUSLINES
 struct steering_bar {
