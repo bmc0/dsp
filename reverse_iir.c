@@ -55,6 +55,7 @@ struct riir_init_sec {
 	enum riir_pq_type pt, qt;
 	qroots p, q, res;
 	double g, thresh;
+	const char *label;
 };
 
 struct riir_init_state {
@@ -87,6 +88,7 @@ struct riir_state {
 		double c[8], m[8], *buf;
 		int n, idx;
 	} fir;
+	char *label;
 };
 
 #define RIIR_SEC_RUN_X_DEFINE_FN(X, T, C) \
@@ -243,6 +245,7 @@ static void reverse_iir_effect_destroy(struct effect *e)
 			free(state[k].cascade);
 			state[k].cascade = next;
 		}
+		free(state[k].label);
 	}
 	free(state);
 }
@@ -252,6 +255,12 @@ static void reverse_iir_effect_channel_offsets(struct effect *e, ssize_t *latenc
 	struct riir_state *state = (struct riir_state *) e->data;
 	for (int k = 0; k < e->istream.channels; ++k)
 		if (state[k].N > 0) req_delay[k] -= state[k].latency;
+}
+
+static const char * reverse_iir_effect_channel_label(struct effect *e, int ch, int out)
+{
+	struct riir_state *state = (struct riir_state *) e->data;
+	return state[ch].label;
 }
 
 static int riir_init_state_append(struct riir_init_state *v, const struct riir_init_sec *sec, int n)
@@ -391,6 +400,19 @@ static int reverse_iir_effect_prepare(struct effect *e)
 		if (v->n <= 0) continue;  /* nothing to do */
 		struct riir_state *cs = &state[k];
 
+		/* construct label */
+		ssize_t label_len = 0;
+		for (int i = 0; i < v->n; ++i) label_len += strlen(v->sec[i].label)+4;
+		if (label_len > 0) {
+			char *lp = cs->label = calloc(label_len, sizeof(char));
+			if (check_alloc(e->name, cs->label)) goto fail;
+			for (int i = 0; i < v->n; ++i) {
+				lp = stpcpy(lp, v->sec[i].label);
+				lp = stpcpy(lp, " -r");
+				if (i < v->n-1) { *lp = ';'; ++lp; }
+			}
+		}
+
 		/* split sections with repeated real poles */
 		for (int i = 0; i < v->n; ++i) {
 			struct riir_init_sec *sec = &v->sec[i];
@@ -405,7 +427,7 @@ static int reverse_iir_effect_prepare(struct effect *e)
 					split.g = sec->g = sqrt(sec->g);
 				}
 				else split.g = 1.0;
-				if (riir_init_state_append(&cascade_v, &split, 1)) goto fail2;
+				if (riir_init_state_append(&cascade_v, &split, 1)) goto fail;
 			}
 		}
 
@@ -659,6 +681,7 @@ static struct effect * reverse_iir_effect_init_common(const struct effect_info *
 	e->drain_samples = reverse_iir_effect_drain_samples;
 	e->merge = reverse_iir_effect_merge;
 	e->channel_offsets = reverse_iir_effect_channel_offsets;
+	e->channel_label = reverse_iir_effect_channel_label;
 
 	struct riir_init_state *state = calloc(e->istream.channels, sizeof(struct riir_init_state));
 	if (check_alloc(ei->name, state)) goto fail;
@@ -696,6 +719,7 @@ struct effect * reverse_iir_effect_init_from_biquad(const struct effect_info *ei
 	struct riir_init_sec sec = {0};
 	sec.thresh = thresh;
 	sec.g = b->c0;
+	sec.label = ei->name;
 	/* find poles */
 	if (b->c4 == 0.0) {
 		if (b->c3 == 0.0) sec.pt = RIIR_PQ_TYPE_NONE;
