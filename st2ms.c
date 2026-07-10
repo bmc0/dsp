@@ -81,6 +81,15 @@ static void st2ms_effect_channel_deps(struct effect *e, char **deps)
 	SET_BIT(deps[state->c1], state->c0);
 }
 
+static const char * st2ms_effect_channel_label(struct effect *e, int ch, int out)
+{
+	struct st2ms_state *state = (struct st2ms_state *) e->data;
+	if (e->run == ms2st_effect_run) out = !out;
+	if (ch == state->c0) return (out)?"M":"L";
+	if (ch == state->c1) return (out)?"S":"R";
+	return NULL;
+}
+
 struct effect * st2ms_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
 {
 	if (argc != 1) {
@@ -113,6 +122,7 @@ struct effect * st2ms_effect_init(const struct effect_info *ei, const struct str
 	}
 	e->plot = st2ms_effect_plot;
 	e->channel_deps = st2ms_effect_channel_deps;
+	e->channel_label = st2ms_effect_channel_label;
 
 	struct st2ms_state *state = calloc(1, sizeof(struct st2ms_state));
 	if (check_alloc(ei->name, state)) goto fail;
