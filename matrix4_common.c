@@ -814,9 +814,10 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 
 static inline double square(double x) { return x*x; }
 static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
+static inline double safe_sqrt(double x) { return (x>0.0)?sqrt(x):0.0; }
 
 /*
- * No steering of rear-encoded signals.
+ * No steering of rear-encoded sounds.
 */
 void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear,
 	double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
@@ -879,7 +880,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
 	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
 
-	/* level for directional input */
+	/* squared level for directional input */
 	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
 	const double gd_sr2 = square(m->rsl*l_real + m->rsr*r_real) + square(m->rsl*l_imag + m->rsr*r_imag);
 
@@ -888,18 +889,20 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 
 	/* directional power correction and normalization */
 	const double surr_mult2 = square(surr_mult);
-	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double surr_pwr = surr_mult2*adj_norm_mult2;
-	const double pdc_f = sqrt(1.0-surr_pwr*MINIMUM(pd_s, 1.0));
-	const double pdc_s = sqrt(surr_pwr);
+	const double norm_mult2 = 1.0/(1.0+surr_mult2);
+	const double pd_ss = pd_s*surr_mult2;
+	const double pdc_x = surr_mult2-pd_ss;
+	const double pdc_f = safe_sqrt(norm_mult2*(1.0+pdc_x));
+	const double pdc_s = safe_sqrt(norm_mult2*surr_mult2);
 
 	if (r_shelf_mult) {
 		for (int i = 0; i < n_shelf_mult; ++i) {
 			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
-			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-			const double surr_pwr_hf = surr_mult_hf2*adj_norm_mult_hf2;
-			r_shelf_mult[i].ret.front = sqrt(1.0-surr_pwr_hf*MINIMUM(pd_s, 1.0))/pdc_f;
-			r_shelf_mult[i].ret.surr = sqrt(surr_pwr_hf)/MAXIMUM(pdc_s, DBL_MIN);
+			const double norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+			const double pd_ss_hf = pd_s*surr_mult_hf2;
+			const double pdc_x_hf = surr_mult_hf2-pd_ss_hf;
+			r_shelf_mult[i].ret.front = safe_sqrt(norm_mult_hf2*(1.0+pdc_x_hf))/pdc_f;
+			r_shelf_mult[i].ret.surr = safe_sqrt(norm_mult_hf2*surr_mult_hf2)/MAXIMUM(pdc_s, DBL_MIN);
 		}
 	}
 
@@ -926,29 +929,24 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	/* initial surround elements */
 	m->rsr = m->lsl = 1.0;
 	m->rsl = m->lsr = 0.0;
-	const double gl = 1.0+tan(abs_lr-M_PI_4);
+	const double gl = 1.0+tan(abs_lr-M_PI_4), gl2 = gl*gl;
+	const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
 	if (lr > 0.0) {
-		m->lsl -= gl*gl;
+		m->lsl -= gl2;
 		m->lsr -= gl;
 	}
 	else if (lr < 0.0) {
 		m->rsl -= gl;
-		m->rsr -= gl*gl;
+		m->rsr -= gl2;
 	}
 	if (cs > 0.0) {
-		const double gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr -= gc_2;
-		m->rsl -= gc_2;
-		m->rsr -= gc_2;
+		m->lsl -= gc_2; m->lsr -= gc_2;
+		m->rsl -= gc_2; m->rsr -= gc_2;
 	}
 	else if (cs < 0.0) {
-		const double cs_gc = (cs > -M_PI_4/2) ? abs_cs : M_PI_4+cs;
-		const double gc_2 = 0.5+0.5*tan(cs_gc-M_PI_4);
-		m->lsl -= gc_2;
-		m->lsr += gc_2;
-		m->rsl += gc_2;
-		m->rsr -= gc_2;
+		const double sgc_2 = 0.5+0.5*tan((cs > -M_PI_4/2) ? abs_cs-M_PI_4 : cs);
+		m->lsl -= sgc_2; m->lsr += sgc_2;
+		m->rsl += sgc_2; m->rsr -= sgc_2;
 	}
 
 	/* power correction for uncorrelated input */
@@ -959,24 +957,24 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	m->rsl /= pu_sr;
 	m->rsr /= pu_sr;
 
+	/* initial front elements */
 	if (cs >= 0.0) {
 		m->rr = m->ll = 1.0;
 		m->rl = m->lr = 0.0;
 	}
 	else {
-		/* initial front elements */
-		const double front_gc_2 = 0.5+0.5*tan(abs_cs-M_PI_4);
 		const double front_cs = (cs > -M_PI_4/2) ? 4.0*abs_cs : M_PI_2;
-		const double front_lr_mult = ((abs_lr <= M_PI_4/2) ? 1.0 : 1.0+cos(4.0*abs_lr)) * param_adj;
-		m->rr = m->ll = -front_gc_2;
-		m->rl = m->lr = front_gc_2;
+		const double front_lr_mult = param_adj*((abs_lr <= M_PI_4/2) ? 1.0 :
+			(abs_lr < M_PI_4*3/4) ? square(abs_lr*(-16/M_PI)+3.0) : 0.0);
+		m->rr = m->ll = -gc_2;
+		m->rl = m->lr = gc_2;
 		if (lr > 0.0) {
-			m->ll -= gl*gl * sin(front_cs) * front_lr_mult;
+			m->ll -= gl2 * sin(front_cs) * front_lr_mult;
 			m->lr += gl * (1.0-cos(front_cs)) * front_lr_mult;
 		}
 		else if (lr < 0.0) {
 			m->rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
-			m->rr -= gl*gl * sin(front_cs) * front_lr_mult;
+			m->rr -= gl2 * sin(front_cs) * front_lr_mult;
 		}
 		const double cf_sm2 = square(MINIMUM(surr_mult_rear, 1.0));
 		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
@@ -1020,7 +1018,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
 #endif
 
-	/* level for directional input */
+	/* squared level for directional input */
 	const double gd_fl2 = square(m->ll*l_real + m->lr*r_real) + square(m->ll*l_imag + m->lr*r_imag);
 	const double gd_fr2 = square(m->rl*l_real + m->rr*r_real) + square(m->rl*l_imag + m->rr*r_imag);
 	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
@@ -1030,43 +1028,35 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double pd_f = gd_fl2 + gd_fr2;
 	const double pd_s = gd_sl2 + gd_sr2;
 
-	/* weighted directional power */
-	double pd_f_wf = pd_f, pd_s_wf = pd_s;
-	double pd_f_ws = 1.0, pd_s_ws = 1.0;
+	/* directional power correction weighting */
+	const double surr_mult2 = square(surr_mult);
+	double pdc_wf = 1.0;
 	if (ph_cs < 0.0) {
 		if (abs_ph_cs < abs_ph_lr) {
-			const double lr2 = square(ph_lr), cs2 = square(ph_cs);
-			const double wf = (lr2+cs2 > DBL_MIN) ? square((lr2-cs2)/(lr2+cs2)) : 0.0;
-			pd_f_wf = (pd_f-1.0)*wf+1.0;
-			pd_s_wf = (pd_s-1.0)*wf+1.0;
-			pd_f_ws = (pd_f-1.0)*(1.0-wf)+1.0;
-			pd_s_ws = (pd_s-1.0)*(1.0-wf)+1.0;
+			const double w = (abs_ph_lr+abs_ph_cs > DBL_MIN) ? (abs_ph_lr-abs_ph_cs)/(abs_ph_lr+abs_ph_cs) : 0.0;
+			const double pd_fw = pd_f*w*surr_mult2, pd_sw = pd_s*(1.0-w);
+			pdc_wf = ((pd_fw >= pd_sw) ? M_PI_2-atan(pd_sw/pd_fw) : atan(pd_fw/pd_sw))*M_2_PI;
+			if (pdc_wf < 1e-6) pdc_wf = 1e-6;
 		}
-		else {
-			pd_s_wf = pd_f_wf = 1.0;
-			pd_f_ws = pd_f;
-			pd_s_ws = pd_s;
-		}
+		else pdc_wf = 1e-6;
 	}
+	const double pdc_ws = 1.0-pdc_wf;
 
 	/* directional power correction and normalization */
-	const double surr_mult2 = square(surr_mult);
-	const double adj_norm_mult2 = 1.0/(1.0+surr_mult2);
-	const double pdc_fi2 = (1.0-surr_mult2*adj_norm_mult2*pd_s_wf)/pd_f_wf;
-	const double pdc_si2 = (1.0-adj_norm_mult2*pd_f_ws)/pd_s_ws;
-	const double pdc_all2 = 1.0/(pd_f*pdc_fi2 + pd_s*pdc_si2);
-	const double pdc_f = sqrt(MAXIMUM(pdc_fi2, 0.0)*pdc_all2);
-	const double pdc_s = sqrt(MAXIMUM(pdc_si2, 0.0)*pdc_all2);
+	const double pd_ss = pd_s*surr_mult2;
+	const double pdc_x = ((1.0+surr_mult2)-pd_f-pd_ss)/(pd_f*pdc_wf+pd_ss*pdc_ws);
+	const double norm_mult2 = 1.0/(1.0+surr_mult2);
+	const double pdc_f = safe_sqrt(norm_mult2*(1.0+pdc_x*pdc_wf));
+	const double pdc_s = safe_sqrt(norm_mult2*surr_mult2*(1.0+pdc_x*pdc_ws));
 
 	if (r_shelf_mult) {
 		for (int i = 0; i < n_shelf_mult; ++i) {
 			const double surr_mult_hf2 = square(r_shelf_mult[i].arg);
-			const double adj_norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
-			const double pdc_fi_hf2 = (1.0-surr_mult_hf2*adj_norm_mult_hf2*pd_s_wf)/pd_f_wf;
-			const double pdc_si_hf2 = (1.0-adj_norm_mult_hf2*pd_f_ws)/pd_s_ws;
-			const double pdc_all_hf2 = 1.0/(pd_f*pdc_fi_hf2 + pd_s*pdc_si_hf2);
-			r_shelf_mult[i].ret.front = sqrt(MAXIMUM(pdc_fi_hf2, 0.0)*pdc_all_hf2)/pdc_f;
-			r_shelf_mult[i].ret.surr = sqrt(MAXIMUM(pdc_si_hf2, 0.0)*pdc_all_hf2)/MAXIMUM(pdc_s, DBL_MIN);
+			const double pd_ss_hf = pd_s*surr_mult_hf2;
+			const double pdc_x_hf = ((1.0+surr_mult_hf2)-pd_f-pd_ss_hf)/(pd_f*pdc_wf+pd_ss_hf*pdc_ws);
+			const double norm_mult_hf2 = 1.0/(1.0+surr_mult_hf2);
+			r_shelf_mult[i].ret.front = safe_sqrt(norm_mult_hf2*(1.0+pdc_x_hf*pdc_wf))/pdc_f;
+			r_shelf_mult[i].ret.surr = safe_sqrt(norm_mult_hf2*surr_mult_hf2*(1.0+pdc_x_hf*pdc_ws))/MAXIMUM(pdc_s, DBL_MIN);
 		}
 	}
 
