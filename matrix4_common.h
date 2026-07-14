@@ -108,6 +108,7 @@
 #define ENABLE_LOOKBACK 1
 #define ORD_DPWR_USE_ABS_MAX 0
 #define DEBUG_POWER_ERROR 0
+#define MATRIX_V4_PREEMPH 1
 
 struct envs {
 	double l, r, sum, diff;

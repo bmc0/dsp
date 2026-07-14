@@ -863,9 +863,9 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 	m->rsl /= pu_sr;
 	m->rsr /= pu_sr;
 
-	/* input phasors for given lr, cs */
+	/* input phasors */
 	const double ph_lr = ax_dpwr->lr, ph_cs = ax_dpwr->cs;
-	const double sin_lr = sin(ph_lr+M_PI_4), cos_lr = cos(ph_lr+M_PI_4);
+	const double sin_ph_lr = sin(ph_lr+M_PI_4), cos_ph_lr = cos(ph_lr+M_PI_4);
 	double sin_theta, cos_theta;
 	if (fabs(ph_lr)+fabs(ph_cs) < M_PI_4) {
 		const double alpha = sqrt(1.0-square(sin(2.0*ph_cs)/cos(2.0*ph_lr)));
@@ -877,8 +877,8 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 		sin_theta = (ph_cs < 0.0) ? 1.0 : 0.0;
 		cos_theta = (ph_cs < 0.0) ? 0.0 : 1.0;
 	}
-	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
-	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
+	const double l_real = sin_ph_lr*cos_theta, l_imag = sin_ph_lr*sin_theta;
+	const double r_real = cos_ph_lr*cos_theta, r_imag = cos_ph_lr*-sin_theta;
 
 	/* squared level for directional input */
 	const double gd_sl2 = square(m->lsl*l_real + m->lsr*r_real) + square(m->lsl*l_imag + m->lsr*r_imag);
@@ -964,8 +964,12 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	}
 	else {
 		const double front_cs = (cs > -M_PI_4/2) ? 4.0*abs_cs : M_PI_2;
+	#if MATRIX_V4_PREEMPH
+		const double front_lr_mult = param_adj*((abs_lr <= M_PI_4/2) ? 1.0 : square(tan(M_PI_2-2.0*abs_lr)));
+	#else
 		const double front_lr_mult = param_adj*((abs_lr <= M_PI_4/2) ? 1.0 :
 			(abs_lr < M_PI_4*3/4) ? square(abs_lr*(-16/M_PI)+3.0) : 0.0);
+	#endif
 		m->rr = m->ll = -gc_2;
 		m->rl = m->lr = gc_2;
 		if (lr > 0.0) {
@@ -992,17 +996,64 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 		m->rr /= pu_fr;
 	}
 
-	/* input phasors for given lr, cs */
+	/* input phasor steering angles */
 	const double ph_lr = ax_dpwr->lr, ph_cs = ax_dpwr->cs;
 	const double abs_ph_lr = fabs(ph_lr), abs_ph_cs = fabs(ph_cs);
-	const double sin_lr = sin(ph_lr+M_PI_4), cos_lr = cos(ph_lr+M_PI_4);
+
+#if MATRIX_V4_PREEMPH
+	/* pre-emphasis of directional component */
+	const double pe_gl = 1.0+tan(abs_ph_lr-M_PI_4), pe_gl2 = pe_gl*pe_gl;
+	const double pe[2] = { pe_gl2*(1.0+cos(abs_ph_lr+M_PI_4)), pe_gl-pe_gl2 };
+	const double pe_sf = sqrt(1.0+square(MINIMUM(surr_mult, 1.0)))-1.0;
+	if (ph_cs >= 0.0) {
+		const double pe_gcs = (0.5+0.5*tan(abs_ph_cs-M_PI_4))*pe_sf;
+		m->ll += pe_gcs; m->lr += pe_gcs;
+		m->rl += pe_gcs; m->rr += pe_gcs;
+		if (ph_lr > 0.0) {
+			m->ll += pe[0]*pe_sf;
+			m->lr += pe[1]*pe_sf;
+		}
+		else if (ph_lr < 0.0) {
+			m->rl += pe[1]*pe_sf;
+			m->rr += pe[0]*pe_sf;
+		}
+	}
+	else if (ph_cs >= -M_PI_4/2) {
+		const double pe_fsfw = pe_sf*cos(4.0*abs_ph_cs);
+		const double pe_ssfw = M_SQRT1_2*sin(4.0*abs_ph_cs);
+		if (ph_lr > 0.0) {
+			m->ll += pe[0]*pe_fsfw; m->lr += pe[1]*pe_fsfw;
+			m->lsl += pe[0]*pe_ssfw; m->lsr -= pe[1]*pe_ssfw;
+		}
+		else if (ph_lr < 0.0) {
+			m->rl += pe[1]*pe_fsfw; m->rr += pe[0]*pe_fsfw;
+			m->rsl -= pe[1]*pe_ssfw; m->rsr += pe[0]*pe_ssfw;
+		}
+	}
+	else {
+		const double pe_gcs = (0.5+0.5*tan(2.0*abs_ph_cs-M_PI_2))*(M_SQRT2-1);
+		m->lsl += pe_gcs; m->lsr -= pe_gcs;
+		m->rsl -= pe_gcs; m->rsr += pe_gcs;
+		if (ph_lr > 0.0) {
+			m->lsl += pe[0]*M_SQRT1_2;
+			m->lsr -= pe[1]*M_SQRT1_2;
+		}
+		else if (ph_lr < 0.0) {
+			m->rsl -= pe[1]*M_SQRT1_2;
+			m->rsr += pe[0]*M_SQRT1_2;
+		}
+	}
+#endif
+
+	/* input phasors */
+	const double sin_ph_lr = sin(ph_lr+M_PI_4), cos_ph_lr = cos(ph_lr+M_PI_4);
 #if 0
-	/* straightforward calculation */
+	/* straightforward method */
 	const double phase = (abs_ph_lr+abs_ph_cs>=M_PI_4)?(ph_cs<0.0)?-M_PI_4:M_PI_4:0.5*asin(sin(2.0*ph_cs)/cos(2.0*ph_lr));
-	const double l_real = sin_lr*cos(M_PI_4-phase), l_imag = sin_lr*sin(M_PI_4-phase);
-	const double r_real = cos_lr*cos(phase-M_PI_4), r_imag = cos_lr*sin(phase-M_PI_4);
+	const double l_real = sin_ph_lr*cos(M_PI_4-phase), l_imag = sin_ph_lr*sin(M_PI_4-phase);
+	const double r_real = cos_ph_lr*cos(phase-M_PI_4), r_imag = cos_ph_lr*sin(phase-M_PI_4);
 #else
-	/* faster calculation */
+	/* faster method */
 	double sin_theta, cos_theta;
 	if (abs_ph_lr+abs_ph_cs < M_PI_4) {
 		const double alpha = sqrt(1.0-square(sin(2.0*ph_cs)/cos(2.0*ph_lr)));
@@ -1014,8 +1065,8 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 		sin_theta = (ph_cs < 0.0) ? 1.0 : 0.0;
 		cos_theta = (ph_cs < 0.0) ? 0.0 : 1.0;
 	}
-	const double l_real = sin_lr*cos_theta, l_imag = sin_lr*sin_theta;
-	const double r_real = cos_lr*cos_theta, r_imag = cos_lr*-sin_theta;
+	const double l_real = sin_ph_lr*cos_theta, l_imag = sin_ph_lr*sin_theta;
+	const double r_real = cos_ph_lr*cos_theta, r_imag = cos_ph_lr*-sin_theta;
 #endif
 
 	/* squared level for directional input */
