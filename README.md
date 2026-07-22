@@ -276,18 +276,18 @@ Example:
 
 	* `status[=bars|text|none]`  
 		Show real-time steering information.
-	* `matrix=v1|v4[:param]|v2|v3`  
+	* `matrix=v1|v4[:adj[:adj_dir]]|v2|v3`  
 		Controls steering behavior for rear-encoded sounds. `v1` does not
 		remove anything from the front outputs. `v4` fully steers sounds
 		encoded full rear (C/S=-45°) and restores lateral separation of sounds
 		encoded along the C/S axis from 0° to -45° in the front outputs and
 		from 0° to -22.5° in the surround outputs. Steering of sounds encoded
 		to the left and right surround positions (L/R=±22.5° C/S=-22.5°) is
-		adjustable via `param`. The default value of 0.5 gives approximately
-		12dB front/surround separation. `v2` and `v3` are retained for
-		backwards compatability and are the same as `v4` with `param` set to 0
-		(4.8dB separation) or 1 (full separation), respectively. The default
-		matrix is `v4`.
+		adjustable via `adj` and `adj_dir`. The default values of 0.5 and 1
+		result in 12dB front/surround separation during normal steering and full
+		separation while direct path redirection is active. `v2` and `v3` are
+		retained for backwards compatability and are equivalent to `v4:0:0`
+		(4.8dB separation) or `v4:1:1`, respectively. The default matrix is `v4`.
 	* `layout=id`  
 		Channel layout. Recognized values are `2/2` (default) and `2/4`.
 	* `shelf=gain[:f0[k]]|none`  

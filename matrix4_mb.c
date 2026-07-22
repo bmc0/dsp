@@ -89,7 +89,7 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double cmc_param, surr_mult[2], contour_pwrcmp, freq_mask;
+	double matrix_adj[2], surr_mult[2], contour_pwrcmp, freq_mask;
 	ssize_t len, fb_buf_len, fb_buf_p;
 	ssize_t fade_frames, fade_p;
 #if DEBUG_POWER_ERROR
@@ -213,14 +213,14 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 
 				process_events(&band->ev, &state->evc, &env, &pwr_env, ev_thresh*(1.0/EVENT_THRESH), &band->ax, &band->ax_ev, &band->ax_dpwr);
-				double cmc_param = state->cmc_param;
+				double matrix_adj = state->matrix_adj[0];
 				if (state->do_direct_path) {
 					double r_pan[4];
 					surr_direct_pan(&band->dp, &band->ev, &band->ax, state->have_rears, r_pan);
 					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
 					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
 					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
-					cmc_param = cmc_param*(1.0-r_pan[3]) + r_pan[3];
+					matrix_adj = state->matrix_adj[0]*(1.0-r_pan[3]) + state->matrix_adj[1]*r_pan[3];
 				}
 				#if REPORT_EVENT_LEVELS
 					if (band->evl_samples >= 0) {
@@ -239,9 +239,13 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				const double ct1 = (ct0-1.0)*ct_pcf + 1.0;
 				const double ct2 = ct0/ct1;
 
+				struct axes *ax_dpwr = (state->do_dpwr_decouple) ? &band->ax_dpwr : &band->ax;
 				struct matrix_coefs m = {0};
-				state->calc_matrix_coefs(&band->ax, (state->do_dpwr_decouple) ? &band->ax_dpwr : &band->ax,
-					surr_mult*ct1, state->surr_mult[1]*cur_fade_mult, cmc_param, &m, NULL, 0);
+				struct cmc_params cmc_p = {
+					.surr_mult = { surr_mult*ct1, state->surr_mult[1]*cur_fade_mult },
+					.adj = matrix_adj,
+				};
+				state->calc_matrix_coefs(&band->ax, ax_dpwr, &cmc_p, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -558,7 +562,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->have_rears = (config.channel_layout->ns >= 4);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
-	state->cmc_param = config.calc_matrix_coefs_param;
+	state->matrix_adj[0] = config.matrix_adj[0];
+	state->matrix_adj[1] = config.matrix_adj[1];
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;
 #if DEBUG_POWER_ERROR
 	state->pwr_err_file = config.pwr_err_file;

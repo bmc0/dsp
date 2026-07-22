@@ -61,7 +61,8 @@
 #define PWRCMP_FACTOR_SENS    0.2
 #define OFFSET_BASE_SCALE     1.0
 
-#define MATRIX_V4_PARAM_DEFAULT    0.5
+#define MATRIX_V4_ADJ0_DEFAULT     0.5
+#define MATRIX_V4_ADJ1_DEFAULT     1.0
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
 #define LOOKAHEAD_DEFAULT          0.5
@@ -168,12 +169,17 @@ enum status_type {
 	STATUS_TYPE_TEXT,
 };
 
+struct cmc_params {
+	double surr_mult[2], adj;
+};
+
 union cmc_shelf_mult {
 	double arg;
 	struct { double front, surr; } ret;
 };
-typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, double, double,
-	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
+
+typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, const struct cmc_params *,
+	struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 enum channel_layout {
 	CHANNEL_LAYOUT_2_2 = 0,
@@ -201,7 +207,7 @@ struct matrix4_config {
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double calc_matrix_coefs_param;
+	double matrix_adj[2];
 	const struct channel_layout_info *channel_layout;
 	char fb_id[32];
 #if DEBUG_POWER_ERROR

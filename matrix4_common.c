@@ -24,10 +24,10 @@
 #include "matrix4_common.h"
 #include "delay.h"
 
-void calc_matrix_coefs_v1(const struct axes *, const struct axes *, double, double,
-	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
-void calc_matrix_coefs_v4(const struct axes *, const struct axes *, double, double,
-	double, struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v1(const struct axes *, const struct axes *, const struct cmc_params *,
+	struct matrix_coefs *, union cmc_shelf_mult *, int);
+void calc_matrix_coefs_v4(const struct axes *, const struct axes *, const struct cmc_params *,
+	struct matrix_coefs *, union cmc_shelf_mult *, int);
 
 #define CHANNEL_LAYOUT_DEF(NF, NS) { \
 	.name = XSTR(NF) "/" XSTR(NS), \
@@ -122,7 +122,8 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	memset(config->fb_id, 0, sizeof(config->fb_id));
 	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
-	config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
+	config->matrix_adj[0] = MATRIX_V4_ADJ0_DEFAULT;
+	config->matrix_adj[1] = MATRIX_V4_ADJ1_DEFAULT;
 	config->channel_layout = &ch_layout_info[0];
 
 	/* parse args */
@@ -179,21 +180,29 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 						config->calc_matrix_coefs = calc_matrix_coefs_v1;
 					else if (is_opt_arg(opt_arg, "v2")) {
 						config->calc_matrix_coefs = calc_matrix_coefs_v4;
-						config->calc_matrix_coefs_param = 0.0;
+						config->matrix_adj[1] = config->matrix_adj[0] = 0.0;
 					}
 					else if (is_opt_arg(opt_arg, "v3")) {
 						config->calc_matrix_coefs = calc_matrix_coefs_v4;
-						config->calc_matrix_coefs_param = 1.0;
+						config->matrix_adj[1] = config->matrix_adj[0] = 1.0;
 					}
 					else if (is_opt_arg(opt_arg, "v4:")) {
 						config->calc_matrix_coefs = calc_matrix_coefs_v4;
-						config->calc_matrix_coefs_param = MATRIX_V4_PARAM_DEFAULT;
+						config->matrix_adj[0] = MATRIX_V4_ADJ0_DEFAULT;
+						config->matrix_adj[1] = MATRIX_V4_ADJ1_DEFAULT;
 						char *opt_subarg = isolate(opt_arg, ':');
+						char *opt_subarg1 = isolate(opt_subarg, ':');
 						if (*opt_subarg != '\0') {
-							const double param = strtod(opt_subarg, &endptr);
-							CHECK_ENDPTR(opt_subarg, endptr, "matrix: v4: param", goto opt_fail);
-							CHECK_RANGE(param >= 0.0 && param <= 1.0, "matrix: v4: param", goto opt_fail);
-							config->calc_matrix_coefs_param = param;
+							const double v = strtod(opt_subarg, &endptr);
+							CHECK_ENDPTR(opt_subarg, endptr, "matrix: v4: adj", goto opt_fail);
+							CHECK_RANGE(v >= 0.0 && v <= 1.0, "matrix: v4: adj", goto opt_fail);
+							config->matrix_adj[0] = v;
+						}
+						if (*opt_subarg1 != '\0') {
+							const double v = strtod(opt_subarg1, &endptr);
+							CHECK_ENDPTR(opt_subarg1, endptr, "matrix: v4: adj_dir", goto opt_fail);
+							CHECK_RANGE(v >= 0.0 && v <= 1.0, "matrix: v4: adj_dir", goto opt_fail);
+							config->matrix_adj[1] = v;
 						}
 					}
 					else {
@@ -819,8 +828,8 @@ static inline double safe_sqrt(double x) { return (x>0.0)?sqrt(x):0.0; }
 /*
  * No steering of rear-encoded sounds.
 */
-void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear,
-	double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, const struct cmc_params *p,
+	struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr);
@@ -888,7 +897,7 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double pd_s = gd_sl2 + gd_sr2;
 
 	/* directional power correction and normalization */
-	const double surr_mult2 = square(surr_mult);
+	const double surr_mult2 = square(p->surr_mult[0]);
 	const double norm_mult2 = 1.0/(1.0+surr_mult2);
 	const double pd_ss = pd_s*surr_mult2;
 	const double pdc_x = surr_mult2-pd_ss;
@@ -920,8 +929,8 @@ void calc_matrix_coefs_v1(const struct axes *ax, const struct axes *ax_dpwr, dou
  * cs=0° to cs=-22.5°, and adjustable steering of left-/right-surround-
  * encoded sounds (lr=±22.5° cs=-22.5°).
 */
-void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, double surr_mult, double surr_mult_rear,
-	double param_adj, struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
+void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, const struct cmc_params *p,
+	struct matrix_coefs *m, union cmc_shelf_mult *r_shelf_mult, int n_shelf_mult)
 {
 	const double lr = ax->lr, cs = ax->cs;
 	const double abs_lr = fabs(lr), abs_cs = fabs(cs);
@@ -965,9 +974,9 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	else {
 		const double front_cs = (cs > -M_PI_4/2) ? 4.0*abs_cs : M_PI_2;
 	#if MATRIX_V4_PREEMPH
-		const double front_lr_mult = param_adj*((abs_lr <= M_PI_4/2) ? 1.0 : square(tan(M_PI_2-2.0*abs_lr)));
+		const double front_lr_mult = p->adj*((abs_lr <= M_PI_4/2) ? 1.0 : square(tan(M_PI_2-2.0*abs_lr)));
 	#else
-		const double front_lr_mult = param_adj*((abs_lr <= M_PI_4/2) ? 1.0 :
+		const double front_lr_mult = p->adj*((abs_lr <= M_PI_4/2) ? 1.0 :
 			(abs_lr < M_PI_4*3/4) ? square(abs_lr*(-16/M_PI)+3.0) : 0.0);
 	#endif
 		m->rr = m->ll = -gc_2;
@@ -980,7 +989,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 			m->rl += gl * (1.0-cos(front_cs)) * front_lr_mult;
 			m->rr -= gl2 * sin(front_cs) * front_lr_mult;
 		}
-		const double cf_sm2 = square(MINIMUM(surr_mult_rear, 1.0));
+		const double cf_sm2 = square(MINIMUM(p->surr_mult[1], 1.0));
 		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
 		m->ll = 1.0 + m->ll*cf;
 		m->lr = m->lr*cf;
@@ -1004,7 +1013,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	/* pre-emphasis of directional component */
 	const double pe_gl = 1.0+tan(abs_ph_lr-M_PI_4), pe_gl2 = pe_gl*pe_gl;
 	const double pe[2] = { pe_gl2*(1.0+cos(abs_ph_lr+M_PI_4)), pe_gl-pe_gl2 };
-	const double pe_sf = sqrt(1.0+square(MINIMUM(surr_mult, 1.0)))-1.0;
+	const double pe_sf = sqrt(1.0+square(MINIMUM(p->surr_mult[0], 1.0)))-1.0;
 	if (ph_cs >= 0.0) {
 		const double pe_gcs = (0.5+0.5*tan(abs_ph_cs-M_PI_4))*pe_sf;
 		m->ll += pe_gcs; m->lr += pe_gcs;
@@ -1080,7 +1089,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, dou
 	const double pd_s = gd_sl2 + gd_sr2;
 
 	/* directional power correction weighting */
-	const double surr_mult2 = square(surr_mult);
+	const double surr_mult2 = square(p->surr_mult[0]);
 	double pdc_wf = 1.0;
 	if (ph_cs < 0.0) {
 		if (abs_ph_cs < abs_ph_lr) {

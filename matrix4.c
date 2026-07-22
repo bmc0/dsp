@@ -62,7 +62,7 @@ struct matrix4_state {
 	struct phase_flip_params pf_params;
 	struct direct_path_state dp;
 	calc_matrix_coefs_func calc_matrix_coefs;
-	double cmc_param, surr_mult[2], shelf_mult, lowpass_mult, contour_pwrcmp;
+	double matrix_adj[2], surr_mult[2], shelf_mult, lowpass_mult, contour_pwrcmp;
 	ssize_t len, p, fade_frames, fade_p;
 #if DEBUG_POWER_ERROR
 	struct {
@@ -126,14 +126,14 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 		if (1) {
 		#endif
 			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
-			double cmc_param = state->cmc_param;
+			double matrix_adj = state->matrix_adj[0];
 			if (state->do_direct_path) {
 				double r_pan[4];
 				surr_direct_pan(&state->dp, &state->ev, &state->ax, state->have_rears, r_pan);
 				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
 				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
 				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
-				cmc_param = cmc_param*(1.0-r_pan[3]) + r_pan[3];
+				matrix_adj = state->matrix_adj[0]*(1.0-r_pan[3]) + state->matrix_adj[1]*r_pan[3];
 			}
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
@@ -145,13 +145,17 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 			const double lp_ct0 = w + (1.0-w)*state->lowpass_mult;
 			const double lp_ct1 = (lp_ct0-1.0)*pow(ct_pcf, 1.0/state->shelf_mult) + 1.0;
 
+			struct axes *ax_dpwr = (state->do_dpwr_decouple) ? &state->ax_dpwr : &state->ax;
 			struct matrix_coefs m = {0};
+			struct cmc_params cmc_p = {
+				.surr_mult = { surr_mult, state->surr_mult[1]*cur_fade_mult },
+				.adj = matrix_adj,
+			};
 			union cmc_shelf_mult r_shelf_mult[2] = {
 				{ .arg = surr_mult*shelf_ct1 },
 				{ .arg = surr_mult*shelf_ct1*lp_ct1 },
 			};
-			state->calc_matrix_coefs(&state->ax, (state->do_dpwr_decouple) ? &state->ax_dpwr : &state->ax,
-				surr_mult, state->surr_mult[1]*cur_fade_mult, cmc_param, &m, r_shelf_mult, LENGTH(r_shelf_mult));
+			state->calc_matrix_coefs(&state->ax, ax_dpwr, &cmc_p, &m, r_shelf_mult, LENGTH(r_shelf_mult));
 
 			cs_interp_insert(&state->m_interp.ll, m.ll);
 			cs_interp_insert(&state->m_interp.lr, m.lr);
@@ -433,7 +437,8 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->have_rears = (config.channel_layout->ns >= 4);
 	state->calc_matrix_coefs = config.calc_matrix_coefs;
-	state->cmc_param = config.calc_matrix_coefs_param;
+	state->matrix_adj[0] = config.matrix_adj[0];
+	state->matrix_adj[1] = config.matrix_adj[1];
 	e->signal = (config.enable_signal) ? matrix4_effect_signal : NULL;
 #if DEBUG_POWER_ERROR
 	state->pwr_err_file = config.pwr_err_file;
