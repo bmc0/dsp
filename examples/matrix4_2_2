@@ -4,10 +4,10 @@
 #     0: Left
 #     1: Right
 # Output channel map:
-#     0: Front Left
-#     1: Front Right
-#     2: Surround Left
-#     3: Surround Right
+#     0: Left Front
+#     1: Right Front
+#     2: Left Surround
+#     3: Right Surround
 
-matrix4 signal -3/0
+matrix4 signal
 :2,3 delay 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 :

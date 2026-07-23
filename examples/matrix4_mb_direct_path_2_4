@@ -5,17 +5,17 @@
 #     0: Left
 #     1: Right
 # Output channel map:
-#     0: Front Left
-#     1: Front Right
-#     2: Side Left
-#     3: Side Right
-#     4: Rear Left
-#     5: Rear Right
+#     0: Left Front
+#     1: Right Front
+#     2: Left Side
+#     3: Right Side
+#     4: Left Rear
+#     5: Right Rear
 
-matrix4_mb signal,layout=2/4,matrix=v4:1,direct_path,rear_event_mask=0 -3/0
+matrix4_mb signal,layout=2/4,matrix=v4:0.39:1,direct_path,rear_event_mask=0
 :2-5 {
 	# delayed path
-	delay -m3.1m -b0.5 5m decorrelate -s1 -m -f0.7k -l35m 5 lowshelf 11 2s -8 allpass 80 0.6
+	delay -m3.1m -b0.5 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
 	:2,3 delay 2m decorrelate -s7 -m -f0.7k -l35m 5 allpass 80 0.6 allpass 25 0.8 :
 } :
 :6-9 {
