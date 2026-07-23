@@ -1535,7 +1535,8 @@ void generate_effects_chain_digraph(struct effects_chain *chain)
 				for (int k = 0, f = 0; k < e->istream.channels; ++k) {
 					if (OPT_CH_SET(e, k)) {
 						printf("%s <i%d> ", (f>0)?" |":"", f);
-						if (e->channel_label) fputs(e->channel_label(e, k, 0), stdout);
+						const char *ch_l = (e->channel_label) ? e->channel_label(e, k, 0) : NULL;
+						if (ch_l) fputs(ch_l, stdout);
 						else printf("%d", f);
 						++f;
 					}
@@ -1544,7 +1545,8 @@ void generate_effects_chain_digraph(struct effects_chain *chain)
 				for (int i = 0, f = 0; i < e->ostream.channels; ++i) {
 					if (i >= e->istream.channels || OPT_CH_SET(e, i)) {
 						printf("%s <o%d> ", (f>0)?" |":"", f);
-						if (e->channel_label) fputs(e->channel_label(e, i, 1), stdout);
+						const char *ch_l = (e->channel_label) ? e->channel_label(e, i, 1) : NULL;
+						if (ch_l) fputs(ch_l, stdout);
 						else printf("%d", f);
 						++f;
 					}
