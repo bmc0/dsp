@@ -239,7 +239,7 @@ void surr_direct_pan(struct direct_path_state *, const struct event_state *, con
 void matrix4_common_drain_samples(struct effect *, int, int, ssize_t, ssize_t *);
 void matrix4_common_channel_deps(struct effect *, int, int, char **);
 void matrix4_common_channel_offsets(struct effect *, int, int, ssize_t, ssize_t *);
-const char * matrix4_common_channel_label(struct effect *, int, int, int, int, int);
+const char * matrix4_common_channel_label(struct effect *, enum channel_layout, int, int, int, int);
 
 #ifdef DSP_STATUSLINES
 struct steering_bar {

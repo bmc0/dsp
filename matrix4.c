@@ -41,6 +41,7 @@ struct matrix4_state {
 	int s, c0, c1;
 	char disable, do_phase_flip, do_direct_path, do_dpwr_decouple, have_rears;
 	enum status_type status_type;
+	enum channel_layout layout_id;
 	sample_t *bufs[2];
 	struct biquad_state in_hp[2], in_lp[2];
 	struct dyn_shelf_state surr_shelf[2], surr_lp[2], front_shelf[2], front_lp[2], sr_shelf[4];
@@ -391,7 +392,7 @@ static void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, s
 static const char * matrix4_effect_channel_label(struct effect *e, int ch, int out)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	return matrix4_common_channel_label(e, state->c0, state->c1, state->have_rears, ch, out);
+	return matrix4_common_channel_label(e, state->layout_id, state->c0, state->c1, ch, out);
 }
 
 struct effect * matrix4_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -426,6 +427,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->c0 = config.c0;
 	state->c1 = config.c1;
 	state->status_type = config.status_type;
+	state->layout_id = config.channel_layout->id;
 	state->do_phase_flip = !!config.do_phase_flip;
 	state->do_direct_path = !!config.dp_mode;
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;

@@ -1163,14 +1163,14 @@ void matrix4_common_channel_offsets(struct effect *e, int c0, int c1, ssize_t le
 static const char *surr_map_2_2[] = { "LS", "RS", "LSd", "RSd" };
 static const char *surr_map_2_4[] = { "LS", "RS", "LR", "RR", "LSd", "RSd", "LRd", "RRd" };
 
-const char * matrix4_common_channel_label(struct effect *e, int c0, int c1, int have_rears, int ch, int out)
+const char * matrix4_common_channel_label(struct effect *e, enum channel_layout id, int c0, int c1, int ch, int out)
 {
 	if (ch == c0) return (out)?"L":"Lt";
 	if (ch == c1) return (out)?"R":"Rt";
 	if (out && ch >= e->istream.channels) {
 		const int idx = ch - e->istream.channels;
-		if (have_rears && idx < LENGTH(surr_map_2_4)) return surr_map_2_4[idx];
-		else if (idx < LENGTH(surr_map_2_4)) return surr_map_2_2[idx];
+		if (id == CHANNEL_LAYOUT_2_2 && idx < LENGTH(surr_map_2_2)) return surr_map_2_2[idx];
+		if (id == CHANNEL_LAYOUT_2_4 && idx < LENGTH(surr_map_2_4)) return surr_map_2_4[idx];
 	}
 	return NULL;
 }
