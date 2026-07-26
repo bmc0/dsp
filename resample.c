@@ -69,7 +69,7 @@ static double window(const double x)
 		5.382909093381945363528e-4, 2.442086527507867730168e-5, 2.706153764205043532817e-7,
 	};
 #else
-	#error "error: illegal WINDOW_SHAPE"
+	#error "error: illegal WINDOW_FUNCTION"
 #endif
 	double w = a[0];
 	for (int i = 1; i < LENGTH(a); ++i) {
@@ -230,7 +230,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	if (bw_arg) {
 		bw = strtod(bw_arg, &endptr);
 		CHECK_ENDPTR(bw_arg, endptr, "bandwidth", return NULL);
-		CHECK_RANGE(bw >= 0.7 && bw <= 0.999, "bandwidth", return NULL);
+		CHECK_RANGE(bw >= 0.0 && bw <= 0.999, "bandwidth", return NULL);
 	}
 	if (rate_arg[0] == 'x') {
 		rate = istream->fs * strtol(rate_arg+1, &endptr, 10);
