@@ -35,6 +35,7 @@
 #include "fir_p.h"
 #include "zita_convolver.h"
 #include "hilbert.h"
+#include "sinc.h"
 #include "decorrelate.h"
 #include "noise.h"
 #include "dither.h"
@@ -57,6 +58,7 @@ static const struct effect_info effects[] = {
 	FIR_P_EFFECT_INFO,
 	ZITA_CONVOLVER_EFFECT_INFO,
 	HILBERT_EFFECT_INFO,
+	SINC_EFFECT_INFO,
 	DECORRELATE_EFFECT_INFO,
 	NOISE_EFFECT_INFO,
 	DITHER_EFFECT_INFO,

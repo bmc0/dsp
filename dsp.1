@@ -402,7 +402,7 @@ Convert mid/side to stereo.
 Delay line. The unit for the \fIdelay\fR argument depends on the suffix used:
 `\fBs\fR' is seconds (the default), `\fBm\fR' is milliseconds, and `\fBS\fR' is samples. If
 \fIdelay\fR is negative, a positive delay is applied to all channels which are
-\fBnot\fR selected (except when plotting\(eman actual negative delay is
+\fBnot\fR selected (except when plotting\[em]an actual negative delay is
 possible in that case).
 .sp 0.5
 By default, the delay is rounded to whole samples. The \fB\-f\fR option enables
@@ -497,6 +497,36 @@ odd. Bandwidth is controlled by the number of taps. If \fB\-p\fR is given, the
 Similarly, if \fB\-z\fR is given, \fBzita_convolver\fR is used (if available). If
 \fB\-c\fR is given, channels are automatically aligned to the middle tap. The
 \fB\-a\fR option sets the phase shift in degrees. The default is -90°.
+.TP
+\fBsinc\fR [\fB\-hpzc\fR] [\fB\-t\fR \fIwidth\fR] [\fB\-w\fR \fIwindow\fR] \fIf0\fR[\fBk\fR]
+Windowed sinc highpass (\fB\-h\fR) or lowpass (default) filter. The \fB\-t\fR option
+sets the approximate transition band width normalized to \fIf0\fR. The default
+\fIwidth\fR is 0.5. Available window functions are:
+
+.TS
+tab (|);
+lB lB
+l l.
+Window|Notes
+_
+\fIrect\fR|Rectangular window.
+\fIhann\fR|Hann window.
+\fIhamming\fR|Hamming window (a0=0.54).
+\fIblackman\fR|Blackman window (\[*a]=0.16).
+\fInuttall4c1\fR|Nuttall 4-term window, continuous first derivative.
+\fIalbrecht9c3\fR|9-term L=3 window from [1].
+\fIkaiser\fR[:\fIbeta\fR]|Kaiser window. The default \fIbeta\fR is 12.
+.TE
+
+The default \fIwindow\fR is \fIkaiser\fR. See the \fBhilbert\fR effect description for
+an explanation of the \fB\-p\fR, \fB\-z\fR, and \fB\-c\fR options.
+.sp 0.5
+.RS
+.IP [1] 4
+Hans-Helge Albrecht, ``Tailoring of Minimum Sidelobe Cosine-Sum
+Windows for High-Resolution Measurements,'' The Open Signal
+Processing Journal, 2010, Vol. 3.
+.RE
 .TP
 \fBdecorrelate\fR [\fIoptions\fR] [\fIstages\fR]
 Allpass decorrelator as described in ``Frequency-Dependent Schroeder

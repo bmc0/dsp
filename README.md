@@ -456,6 +456,28 @@ Example:
 	Similarly, if `-z` is given, `zita_convolver` is used (if available). If
 	`-c` is given, channels are automatically aligned to the middle tap. The
 	`-a` option sets the phase shift in degrees. The default is -90°.
+* `sinc [-hpzc] [-t width] [-w window] f0[k]`  
+	Windowed sinc highpass (`-h`) or lowpass (default) filter. The `-t` option
+	sets the approximate transition band width normalized to `f0`. The default
+	`width` is 0.5. Available window functions are:
+
+	Window          | Notes
+	--------------- | --------------------------------------
+	`rect`          | Rectangular window.
+	`hann`          | Hann window.
+	`hamming`       | Hamming window (a0=0.54).
+	`blackman`      | Blackman window (α=0.16).
+	`nuttall4c1`    | Nuttall 4-term window, continuous first derivative.
+	`albrecht9c3`   | 9-term L=3 window from [1].
+	`kaiser[:beta]` | Kaiser window. The default `beta` is 12.
+
+	The default `window` is `kaiser`. See the `hilbert` effect description for
+	an explanation of the `-p`, `-z`, and `-c` options.
+
+	[1] Hans-Helge Albrecht, "Tailoring of Minimum Sidelobe Cosine-Sum
+	Windows for High-Resolution Measurements," The Open Signal
+	Processing Journal, 2010, Vol. 3.
+
 * `decorrelate [options] [stages]`  
 	Allpass decorrelator as described in "Frequency-Dependent Schroeder
 	Allpass Filters" by Sebastian J. Schlecht (doi:10.3390/app10010187). With
