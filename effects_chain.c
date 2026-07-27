@@ -1360,11 +1360,9 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 		}
 		stream.fs = e->ostream.fs;
 	}
-	LIST_FOREACH(chain, sc) {  /* link subchains */
-		if (sc->next) {
-			sc->tail->next = sc->next->head;
-			sc->next->head->prev = sc->tail;
-		}
+	LIST_FOREACH(chain, sc) if (sc->next) {  /* link subchains */
+		sc->tail->next = sc->next->head;
+		sc->next->head->prev = sc->tail;
 	}
 	printf("%sset xrange [10:%d/2]\n%s\n",
 		gnuplot_header, stream.fs, (plot_phase)?gnuplot_header_phase:"");
@@ -1402,7 +1400,7 @@ void plot_effects_chain(struct effects_chain *chain, int plot_phase)
 		printf("Ht%d_phase_deg(f)=Ht%d_phase(f)*180/pi\n", k, k);
 		printf("Hsum%d(f)=Ht%d_mag_dB(f)\n", k, k);
 	}
-	LIST_FOREACH(chain, sc) {  /* unlink subchains */
+	LIST_FOREACH(chain, sc) if (sc->head) {  /* unlink subchains */
 		sc->head->prev = NULL;
 		sc->tail->next = NULL;
 	}
