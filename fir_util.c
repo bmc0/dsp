@@ -22,6 +22,10 @@
 #include <math.h>
 #include "fir_util.h"
 
+#include "fir.h"
+#include "fir_p.h"
+#include "zita_convolver.h"
+
 sample_t * fir_read_filter(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, const struct codec_params *p, int *channels, ssize_t *frames)
 {
 	static const char coefs_str_prefix[] = "coefs:";
@@ -202,4 +206,19 @@ ssize_t fir_get_offset(const struct fir_config *config, const sample_t *filter_d
 		}
 	}
 	return offset;
+}
+
+struct effect * init_convolver(enum conv_id conv, const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, sample_t *filter_data, int filter_channels, ssize_t filter_frames, ssize_t ref)
+{
+	if (conv == CONV_ID_FIR_P)
+		return fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, ref, 0);
+	else if (conv == CONV_ID_ZITA_CONVOLVER) {
+		#ifdef HAVE_ZITA_CONVOLVER
+			return zita_convolver_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, ref, 0, 0);
+		#else
+			LOG_FMT(LL_ERROR, "%s: warning: zita_convolver not available; using fir_p instead", ei->name);
+			return fir_p_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, ref, 0);
+		#endif
+	}
+	return fir_effect_init_with_filter(ei, istream, channel_selector, filter_data, filter_channels, filter_frames, ref, 0);
 }

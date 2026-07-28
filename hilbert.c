@@ -20,9 +20,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "hilbert.h"
-#include "fir.h"
-#include "fir_p.h"
-#include "zita_convolver.h"
+#include "fir_util.h"
 #include "util.h"
 
 struct effect * hilbert_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -30,13 +28,14 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 	char *endptr;
 	struct effect *e;
 	struct dsp_getopt_state g = DSP_GETOPT_STATE_INITIALIZER;
-	int conv = 0, do_align = 0, opt;
+	enum conv_id conv = CONV_ID_FIR;
+	int do_align = 0, opt;
 	double angle = -M_PI_2;
 
 	while ((opt = dsp_getopt(&g, argc-1, argv, "pzca:")) != -1) {
 		switch (opt) {
-		case 'p': conv = 1; break;
-		case 'z': conv = 2; break;
+		case 'p': conv = CONV_ID_FIR_P; break;
+		case 'z': conv = CONV_ID_ZITA_CONVOLVER; break;
 		case 'c': do_align = 1; break;
 		case 'a':
 			angle = strtod(g.arg, &endptr)/180.0*M_PI;
@@ -76,17 +75,7 @@ struct effect * hilbert_effect_init(const struct effect_info *ei, const struct s
 		}
 	}
 	const ssize_t ref = (do_align) ? taps/2 : 0;
-	if (conv == 1)
-		e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
-	else if (conv == 2) {
-		#ifdef HAVE_ZITA_CONVOLVER
-			e = zita_convolver_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0, 0);
-		#else
-			LOG_FMT(LL_ERROR, "%s: warning: zita_convolver not available; using fir_p instead", argv[0]);
-			e = fir_p_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
-		#endif
-	}
-	else e = fir_effect_init_with_filter(ei, istream, channel_selector, h, 1, taps, ref, 0);
+	e = init_convolver(conv, ei, istream, channel_selector, h, 1, taps, ref);
 	free(h);
 	return e;
 }

@@ -34,9 +34,16 @@ struct fir_config {
 	struct codec_params p;
 };
 
+enum conv_id {
+	CONV_ID_FIR = 0,
+	CONV_ID_FIR_P,
+	CONV_ID_ZITA_CONVOLVER,
+};
+
 sample_t * fir_read_filter(const struct effect_info *, const struct stream_info *, const char *, const char *, const struct codec_params *, int *, ssize_t *);
 int fir_parse_opts(const struct effect_info *, const struct stream_info *, struct fir_config *, struct dsp_getopt_state *, int, const char *const *, const char *,
 	int (*)(const struct effect_info *, const struct stream_info *, const struct fir_config *, int, const char *, void *), void *);
 ssize_t fir_get_offset(const struct fir_config *, const sample_t *, int, ssize_t);
+struct effect * init_convolver(enum conv_id, const struct effect_info *, const struct stream_info *, const char *, sample_t *, int, ssize_t, ssize_t);
 
 #endif
