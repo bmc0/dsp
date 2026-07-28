@@ -23,18 +23,15 @@
 #include <complex.h>
 #include <fftw3.h>
 #include "resample.h"
+#include "window.h"
 #include "util.h"
 
 /* Tunables */
 #define DEFAULT_BANDWIDTH   0.939
-#define SINC_SELF_CONVOLVE  0
 #define SINC_MAX_OVERSAMPLE 2
-/*
- * 1: Blackman (-58dB, 18dB/oct)
- * 2: Nuttall 4-term, continuous first derivative (-93dB, 18dB/oct)
- * 3: Albrecht 9-term, L=3 (-220dB, 42dB/oct)
-*/
-#define WINDOW_FUNCTION 3
+
+#define window(x) window_albrecht9c3(x)
+#define M_FACT 17.7822
 
 struct resample_state {
 	struct {
@@ -48,43 +45,6 @@ struct resample_state {
 	fftw_plan *r2c_plan, *c2r_plan;
 	int has_output, is_draining;
 };
-
-static double window(const double x)
-{
-	if (x >= 1.0 || x <= 0.0) return 0.0;
-#if WINDOW_FUNCTION == 1
-	/* Blackman */
-	#define M_FACT 6
-	const double a[] = {0.42, 0.5, 0.08};
-#elif WINDOW_FUNCTION == 2
-	/* Nuttall 4-term, continuous first derivative */
-	#define M_FACT 8
-	const double a[] = {0.355768, 0.487396, 0.144232, 0.012604};
-#elif WINDOW_FUNCTION == 3
-	/* Albrecht 9-term, L=3 */
-	#define M_FACT 17.7822
-	const double a[] = {
-		2.318028013590306028393e-1, 3.932575471789488615081e-1, 2.385434764970747429454e-1,
-		1.014370437785239811268e-1, 2.911516061918003918645e-2, 5.280988177252078698806e-3,
-		5.382909093381945363528e-4, 2.442086527507867730168e-5, 2.706153764205043532817e-7,
-	};
-#else
-	#error "error: illegal WINDOW_FUNCTION"
-#endif
-	double w = a[0];
-	for (int i = 1; i < LENGTH(a); ++i) {
-		const double c = (i&1) ? -a[i] : a[i];
-		w += c*cos(2*i*M_PI*x);
-	}
-	return w;
-}
-
-static double norm_sinc(const double x, const double fc)
-{
-	if (fabs(x) < 1e-9)
-		return fc;
-	return sin(M_PI*fc*x) / (M_PI*x);
-}
 
 static sample_t * resample_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
@@ -288,13 +248,8 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	const int m_os = (m + 1) * sinc_os - 1;
 
 	/* determine array lengths */
-#if SINC_SELF_CONVOLVE
-	const int m1 = (m + 1) * 2 - 1;
-#else
-	const int m1 = m;
-#endif
-	int len_mult = (m1 + 1) / max_factor;
-	if ((m1 + 1) % max_factor != 0) len_mult += 1;
+	int len_mult = (m + 1) / max_factor;
+	if ((m + 1) % max_factor != 0) len_mult += 1;
 	if (len_mult > 16) {  /* 17 is the first slow size */
 		const int fast_len_mult = next_fast_fftw_len(len_mult);
 		if (fast_len_mult != len_mult
@@ -311,9 +266,9 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 
 	/* calculate output delay */
 	if (rate == max_rate)
-		state->out_delay = m1 / 2;
+		state->out_delay = m / 2;
 	else
-		state->out_delay = lround(m1 / 2 * ((double) state->ratio.n / state->ratio.d));
+		state->out_delay = lround(m / 2 * ((double) state->ratio.n / state->ratio.d));
 
 	/* allocate arrays, construct fftw plans */
 	state->input = calloc(e->ostream.channels, sizeof(sample_t *));
@@ -358,8 +313,7 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	memset(state->tmp_fr, 0, state->tmp_fr_len * sizeof(fftw_complex));
 	memset(state->tmp_fr_2, 0, state->tmp_fr_len * sizeof(fftw_complex));
 
-	/* generate windowed sinc function */
-	/* note: all supported windows are zero at endpoints, so skip the first and last indicies */
+	/* generate windowed sinc function (note: endpoints are assumed to be zero) */
 	for (int i = 1; i < m_os; ++i)
 		sinc[i] = norm_sinc((i*2 - m_os)/2.0, fc_os) * window((double) i / m_os);
 
@@ -367,14 +321,8 @@ struct effect * resample_effect_init(const struct effect_info *ei, const struct 
 	fftw_destroy_plan(sinc_plan);
 	fftw_free(sinc);
 
-#if SINC_SELF_CONVOLVE
-	/* convolve sinc function with itself (doubles stopband attenuation) */
-	for (int i = 0; i < state->sinc_fr_len; ++i)
-		state->sinc_fr[i] *= state->sinc_fr[i];
-#endif
-
 	LOG_FMT(LL_VERBOSE, "%s: info: gcd=%d ratio=%d/%d width=%fHz fc=%f filter_len=%d in_len=%d out_len=%d sinc_oversample=%d",
-		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, m1+1, state->in_len, state->out_len, sinc_os);
+		argv[0], gcd, state->ratio.n, state->ratio.d, width, fc, m+1, state->in_len, state->out_len, sinc_os);
 
 	return e;
 
