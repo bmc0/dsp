@@ -42,6 +42,11 @@ struct ap4_state {
 	struct ap2_state ap2[2];
 };
 
+struct cap3_state {
+	struct ap1_state a1;
+	struct ap2_state a2;
+};
+
 struct cap5_state {
 	struct ap2_state a1;
 	struct ap3_state a2;
@@ -78,6 +83,7 @@ int capn_ap(enum capn_filter_type, int, const double [2], double complex *);
 		*hp = (a1-a2)*0.5; \
 	}
 
+CAPN_DEF_H_FUNCS(3, 1, 2)
 CAPN_DEF_H_FUNCS(5, 2, 3)
 CAPN_DEF_H_FUNCS(7, 3, 4)
 

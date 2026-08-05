@@ -252,6 +252,20 @@ static void ap4_init_coefs(struct ap4_state *ap, double complex p0, double compl
 	ap2_init_coefs(&ap->ap2[1], p1);
 }
 
+void cap3_reset(struct cap3_state *state)
+{
+	ap1_reset(&state->a1);
+	ap2_reset(&state->a2);
+}
+
+void cap3_init(struct cap3_state *state, double fs, double fc, const double complex ap[2])
+{
+	double complex p[2] = {0};
+	capn_bilinear(3, fs, fc, ap, p);
+	ap1_init_coefs(&state->a1, creal(p[1]));
+	ap2_init_coefs(&state->a2, p[0]);
+	cap3_reset(state);
+}
 void cap5_reset(struct cap5_state *state)
 {
 	ap2_reset(&state->a1);
