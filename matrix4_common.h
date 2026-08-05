@@ -66,7 +66,7 @@
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
 #define LOOKAHEAD_DEFAULT          0.5
-#define LOOKAHEAD_MB_DEFAULT       0.7
+#define LOOKAHEAD_MB_DEFAULT       0.5
 #define SHELF_MULT_DEFAULT         M_SQRT1_2
 #define SHELF_F0_DEFAULT         500.0
 #define CONTOUR_PWRCMP_DEFAULT     1.0
@@ -80,7 +80,6 @@
 #define DIRECT_PATH_MODE_DEFAULT   DIRECT_PATH_NONE
 
 #define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
-#define FREQ_MASK_DEFAULT        0.0
 
 /* fade parameters when toggling effect via signal() */
 #define FADE_TIME 500.0
@@ -202,7 +201,7 @@ struct matrix4_config {
 	int c0, c1, enable_signal, do_phase_flip, do_dpwr_decouple, use_fir_p;
 	int lookahead_frames;
 	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
-	double fb_stop[2], freq_mask;
+	double fb_stop[2];
 	enum status_type status_type;
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;
@@ -235,10 +234,11 @@ struct direct_path_state {
 #define DOWNSAMPLED_FS(fs) (((double) (fs)) / DOWNSAMPLE_FACTOR)
 #define CBUF_NEXT(x, len) (((x)+1<(len))?(x)+1:0)
 #define CBUF_PREV(x, len) (((x)>0)?(x)-1:(len)-1)
+#define CBUF_WRAP(x, len) (((x)<0)?(x)+(len):((x)>=(len))?(x)-(len):(x))
 
 int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
 	const char *, int, const char *const *, int, struct matrix4_config *);
-void smooth_state_init(struct smooth_state *, const struct stream_info *);
+void smooth_state_init(struct smooth_state *, double);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
@@ -552,6 +552,7 @@ struct cs_interp_state {
 #define cs_interp(s, x) ((s)->m)
 #define cs_interp_set(s, x) cs_interp_insert(s, x)
 #define CS_INTERP_PEEK(s) ((s)->m)
+#define CS_INTERP_DELAY_FRAMES 0
 #endif
 #endif /* DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS */
 

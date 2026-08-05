@@ -465,7 +465,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	cs_interp_set(&state->m_interp.sdir, 0.0);
 	cs_interp_set(&state->m_interp.rdir, 0.0);
 	direct_path_state_init(&state->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
-	smooth_state_init(&state->sm, istream);
+	smooth_state_init(&state->sm, istream->fs);
 	if (event_state_init(&state->ev, istream, 1.0, BASE_ORD_NOTCH_SCALE)) goto fail;
 #if DEBUG_POWER_ERROR
 	for (int i = 0; i < 6; ++i) {

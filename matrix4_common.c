@@ -120,7 +120,6 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
 	memset(config->fb_id, 0, sizeof(config->fb_id));
-	config->freq_mask = FREQ_MASK_DEFAULT;
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
 	config->matrix_adj[0] = MATRIX_V4_ADJ0_DEFAULT;
 	config->matrix_adj[1] = MATRIX_V4_ADJ1_DEFAULT;
@@ -334,14 +333,6 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					HANDLE_BOOLEAN_ARG(config->use_fir_p, opt_arg);
 					if (!is_mb) goto mb_only;
 				}
-				else if (is_opt(opt, "freq_mask=")) {  /* undocumented; for testing */
-					char *opt_arg = isolate(opt, '=');
-					if (!is_mb) goto mb_only;
-					if (*opt_arg == '\0') goto needs_arg;
-					config->freq_mask = strtod(opt_arg, &endptr);
-					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
-					CHECK_RANGE(config->freq_mask >= 0.0 && config->freq_mask <= 1.0, opt, goto opt_fail);
-				}
 				else if (is_opt(opt, "lookahead=")) {  /* undocumented; for testing */
 					char *opt_arg = isolate(opt, '=');
 					if (*opt_arg == '\0') goto needs_arg;
@@ -406,10 +397,10 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	return 1;
 }
 
-void smooth_state_init(struct smooth_state *sm, const struct stream_info *istream)
+void smooth_state_init(struct smooth_state *sm, double fs)
 {
-	for (int i = 0; i < 4; ++i) ewma_init(&sm->env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
-	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+	for (int i = 0; i < 4; ++i) ewma_init(&sm->env[i], fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
+	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
 /* SVF based on F. Adriaensen, "Digital State-Variable Filters" */
