@@ -72,11 +72,12 @@
 #define CONTOUR_PWRCMP_DEFAULT     1.0
 #define CONTOUR_PWRCMP_MB_DEFAULT  1.0
 #define LOWPASS_F0_DEFAULT      6000.0
+#define LOWPASS_ORDER_DEFAULT      0.5
 #define REAR_EVENT_MASK_DEFAULT    1.0
 #define REAR_EVENT_MASK_MB_DEFAULT 0.3
 #define DO_PHASE_FLIP_DEFAULT      0
-#define DO_DPWR_DECOUPLE_DEFAULT   1
 #define USE_FIR_P_DEFAULT          0
+#define DO_DPWR_DECOUPLE_DEFAULT   1
 #define DIRECT_PATH_MODE_DEFAULT   DIRECT_PATH_NONE
 
 #define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
@@ -198,10 +199,10 @@ enum direct_path_mode {
 };
 
 struct matrix4_config {
-	int c0, c1, enable_signal, do_phase_flip, do_dpwr_decouple, use_fir_p;
-	int lookahead_frames;
-	double surr_mult[2], shelf_mult, shelf_f0, lowpass_f0, contour_pwrcmp, rear_ev_mask;
-	double fb_stop[2];
+	int c0, c1, enable_signal, do_phase_flip, use_fir_p;
+	int lookahead_frames, do_dpwr_decouple;
+	double surr_mult[2], fb_stop[2], rear_ev_mask;
+	double shelf_mult, shelf_f0, lowpass_f0, lowpass_order, contour_pwrcmp;
 	enum status_type status_type;
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;

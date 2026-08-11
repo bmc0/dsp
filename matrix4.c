@@ -491,7 +491,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	state->contour_pwrcmp = config.contour_pwrcmp;
 	if (config.lowpass_f0 > 0.0) {
 		const double lp_f = (istream->fs+config.lowpass_f0)/2.0;
-		state->lowpass_mult = sqrt(1.0/(1.0+(lp_f*lp_f/(config.lowpass_f0*config.lowpass_f0))));
+		state->lowpass_mult = pow(1.0/(1.0+(lp_f*lp_f/(config.lowpass_f0*config.lowpass_f0))), config.lowpass_order/2.0);
 	}
 	else state->lowpass_mult = 1.0;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);

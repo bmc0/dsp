@@ -727,7 +727,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		band->contour = sqrt((1.0+shelf_mult2*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		if (lowpass_f02 > 0.0) {
 			const double lowpass_norm_f2 = fc2/lowpass_f02;
-			band->contour *= sqrt(1.0/(1.0+lowpass_norm_f2));
+			band->contour *= pow(1.0/(1.0+lowpass_norm_f2), config.lowpass_order/2.0);
 		}
 		band->rear_shelf = sqrt((1.0+0.1*shelf_norm_f2)/(1.0+shelf_norm_f2));
 		/* LOG_FMT(LL_VERBOSE, "%s: band %d: contour=%.4g", ei->name, k, band->contour); */

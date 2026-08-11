@@ -108,14 +108,15 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	/* set config defaults */
 	config->status_type = LOGLEVEL(LL_VERBOSE) ? STATUS_TYPE_BARS : STATUS_TYPE_NONE;
 	config->lookahead_frames = CALC_LOOKAHEAD_FRAMES((is_mb)?LOOKAHEAD_MB_DEFAULT:LOOKAHEAD_DEFAULT, istream->fs);
+	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
 	config->shelf_mult = SHELF_MULT_DEFAULT;
 	config->shelf_f0 = SHELF_F0_DEFAULT;
-	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->lowpass_f0 = LOWPASS_F0_DEFAULT;
-	config->rear_ev_mask = (is_mb) ? REAR_EVENT_MASK_MB_DEFAULT : REAR_EVENT_MASK_DEFAULT;
+	config->lowpass_order = LOWPASS_ORDER_DEFAULT;
+	config->contour_pwrcmp = (is_mb) ? CONTOUR_PWRCMP_MB_DEFAULT : CONTOUR_PWRCMP_DEFAULT;
 	config->do_phase_flip = -1;
-	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->use_fir_p = USE_FIR_P_DEFAULT;
+	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->dp_mode = DIRECT_PATH_MODE_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
 	set_fb_stop_default(config);
@@ -239,11 +240,17 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 				else if (is_opt(opt, "lowpass=")) {
 					char *opt_arg = isolate(opt, '=');
 					if (*opt_arg == '\0') goto needs_arg;
+					char *opt_subarg = isolate(opt_arg, ':');
 					if (strcmp(opt_arg, "none") == 0) config->lowpass_f0 = 0.0;
-					else {
+					else if (*opt_arg != '\0') {
 						config->lowpass_f0 = parse_freq(opt_arg, &endptr);
 						CHECK_ENDPTR(opt_arg, endptr, "lowpass: f0", goto opt_fail);
 						CHECK_FREQ(config->lowpass_f0, istream->fs, "lowpass: f0", goto opt_fail);
+					}
+					if (*opt_subarg != '\0') {
+						config->lowpass_order = strtod(opt_subarg, &endptr);
+						CHECK_ENDPTR(opt_subarg, endptr, "lowpass: order", goto opt_fail);
+						CHECK_RANGE(config->lowpass_order >= 0.1 && config->lowpass_order <= 1.0, "lowpass: order", goto opt_fail);
 					}
 				}
 				else if (is_opt(opt, "contour_pwrcmp=")) {

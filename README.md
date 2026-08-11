@@ -294,10 +294,11 @@ Example:
 		Dynamic shelving of frequencies above `f0` in surround outputs. Active
 		when C/S is positive and gradually removed as C/S goes from 0° to
 		-22.5°. The default values are -3dB and 500Hz.
-	* `lowpass=f0[k]|none`  
-		Dynamic high-frequency rolloff (first-order lowpass shape) above `f0`
-		in surround outputs. Active when C/S is positive and gradually removed
-		as C/S goes from 0° to -22.5°. The default is 6kHz.
+	* `lowpass=f0[k][:order]|none`  
+		Dynamic high-frequency rolloff above `f0` in surround outputs. Active
+		when C/S is positive and gradually removed as C/S goes from 0° to
+		-22.5°. The default values for `f0` and `order` are 6kHz and 0.5
+		(3dB/octave), respectively.
 	* `contour_pwrcmp=factor`  
 		Dynamic compensation for loss of high-frequency power related to
 		frequency contouring in surround outputs. Attempts to minimize

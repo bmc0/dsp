@@ -298,10 +298,11 @@ Dynamic shelving of frequencies above \fIf0\fR in surround outputs. Active
 when C/S is positive and gradually removed as C/S goes from 0° to
 \-22.5°. The default values are \-3dB and 500Hz.
 .TP
-lowpass=\fIf0\fR[\fBk\fR]|\fInone\fR
-Dynamic high-frequency rolloff (first-order lowpass shape) above \fIf0\fR
-in surround outputs. Active when C/S is positive and gradually removed
-as C/S goes from 0° to \-22.5°. The default is 6kHz.
+lowpass=\fIf0\fR[\fBk\fR][:\fIorder\fR]|\fInone\fR
+Dynamic high-frequency rolloff above \fIf0\fR in surround outputs. Active
+when C/S is positive and gradually removed as C/S goes from 0° to
+\-22.5°. The default values for \fIf0\fR and \fIorder\fR are 6kHz and 0.5
+(3dB/octave), respectively.
 .TP
 contour_pwrcmp=\fIfactor\fR
 Dynamic compensation for loss of high-frequency power related to
