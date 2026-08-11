@@ -56,9 +56,9 @@
 #define DIFF_WEIGHT_SCALE     2.5
 #define ORD_DPWR_SENS_ERR     2.0
 /* #define ORD_DPWR_FALL_SCALE   2.0 */
-#define PWRCMP_RISE_TIME    100.0
+#define PWRCMP_RISE_TIME    160.0
 #define PWRCMP_FALL_TIME     15.0
-#define PWRCMP_FACTOR_SENS    0.2
+#define PWRCMP_FACTOR_SENS    0.1
 #define OFFSET_BASE_SCALE     1.0
 
 #define MATRIX_V4_ADJ0_DEFAULT     0.5

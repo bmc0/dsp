@@ -611,13 +611,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	ev->slope_buf[ev->buf_p][0] = l_slope;
 	ev->slope_buf[ev->buf_p][1] = r_slope;
 #endif
-	const double max_d = ev->max_buf[ev->buf_p];
-	ev->max_buf[ev->buf_p] = MAXIMUM(l_event, r_event);
-#if DEBUG_POWER_ERROR
-	ewma_set(&ev->pwrcmp_factor, 1.0);
-#else
-	ewma_run_scale_asym(&ev->pwrcmp_factor, 1.0-smoothstep(max_d*ev->pcf_sens), 1.0, PWRCMP_RISE_TIME/PWRCMP_FALL_TIME);
-#endif
 
 	if (!ev->t_sample && ((l_slope > 0.0 && l_event > thresh) || (r_slope > 0.0 && r_event > thresh))) {
 		ev->flags[1] = 0;
@@ -739,6 +732,14 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	const double ord_abs_err = (fabs(ord_lr_err)+fabs(ord_cs_err))*M_2_PI;
 	const double ds_ord = ewma_run_set_max(&ev->drift_scale[0], ev->ds_ord_buf[ev->buf_p]*(1.0 + ord_abs_err*ORD_SENS_ERR))
 		* ewma_run_scale(&ev->drift_scale[1], 1.0, ev->rts_off);
+	const double max_d = ev->max_buf[ev->buf_p];
+	ev->max_buf[ev->buf_p] = MAXIMUM(l_event, r_event);
+#if DEBUG_POWER_ERROR
+	ewma_set(&ev->pwrcmp_factor, 1.0);
+#else
+	ewma_run_scale_asym(&ev->pwrcmp_factor, 1.0-smoothstep(max_d*ev->pcf_sens),
+		ewma_get_last(&ev->drift_scale[1]), PWRCMP_RISE_TIME/PWRCMP_FALL_TIME);
+#endif
 	if (ev->t_hold) {
 		ax->lr = ax_ev->lr = ewma_run_scale(&ev->drift[2], ev->dir.lr, ev->ds_diff);
 		ax->cs = ax_ev->cs = ewma_run_scale(&ev->drift[3], ev->dir.cs, ev->ds_diff);
