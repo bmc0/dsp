@@ -147,7 +147,7 @@ struct event_state {
 	double *ds_ord_buf, *max_buf;
 	ssize_t t, t_sample, t_hold, t_end[2], t_off_ord;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
-	int hold, buf_len, buf_p;
+	int buf_len, buf_p;
 	enum {
 		EVENT_FLAG_L = 1<<0,
 		EVENT_FLAG_R = 1<<1,

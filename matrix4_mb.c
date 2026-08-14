@@ -307,7 +307,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				struct event_state *ev = &band->ev;
 				process_events(ev, &state->evc, &band->env, &band->pwr_env, ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
 				ax_f.pwrcmp_factor = ewma_get_last(&band->ev.pwrcmp_factor);
-				ax_f.ev_hold = band->ev.hold;
+				ax_f.ev_hold = !!band->ev.t_hold;
 				ax_f.ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
 					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
 				ax_f.diff_last = ev->diff_last;

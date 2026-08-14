@@ -317,8 +317,8 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 			);
 		}
 		else {
-			draw_steering_bar(state->ax.lr, state->ev.hold, &state->lr_bar);
-			draw_steering_bar(state->ax.cs, state->ev.hold, &state->cs_bar);
+			draw_steering_bar(state->ax.lr, !!state->ev.t_hold, &state->lr_bar);
+			draw_steering_bar(state->ax.cs, !!state->ev.t_hold, &state->cs_bar);
 			snprintf(state->statusline.s, LENGTH(state->statusline.s),
 				"%s%s: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd"
 			#if DEBUG_POWER_ERROR

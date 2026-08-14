@@ -661,36 +661,34 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		}
 		if (ev->t - ev->t_sample >= evc->sample_frames || (ev->flags[1] & EVENT_FLAG_FUSE && ev->t_end[1])) {
 			ev->t_sample = 0;
-			const double diff_lr_avg = ewma_get_last(&ev->avg[2]);
-			const double diff_cs_avg = ewma_get_last(&ev->avg[3]);
-			if (fabs(diff_lr_avg)+fabs(diff_cs_avg) > evc->diff_lim)
+			double ev_dir_lr = ewma_get_last(&ev->avg[2]);
+			double ev_dir_cs = ewma_get_last(&ev->avg[3]);
+			if (fabs(ev_dir_lr)+fabs(ev_dir_cs) > evc->diff_lim) {
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
+				ev_dir_lr = ewma_get_last(&ev->avg[0]);
+				ev_dir_cs = ewma_get_last(&ev->avg[1]);
+			}
 			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
-					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
+					__func__, TO_DEGREES(ev_dir_lr), TO_DEGREES(ev_dir_cs)); */
 			}
-			else if (evc->rear_ev_mask > 0.0 && diff_cs_avg < -M_PI_4/12
+			else if (evc->rear_ev_mask > 0.0 && ev_dir_cs < -M_PI_4/12
 					&& ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh*evc->rear_ev_mask)
 						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh*evc->rear_ev_mask))) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring short-duration rear event: lr: %+06.2f°; cs: %+06.2f°",
-					__func__, TO_DEGREES(diff_lr_avg), TO_DEGREES(diff_cs_avg)); */
+					__func__, TO_DEGREES(ev_dir_lr), TO_DEGREES(ev_dir_cs)); */
 			}
 			else {
-				ev->hold = 1;
-				ev->dir.lr = diff_lr_avg;
-				ev->dir.cs = diff_cs_avg;
+				ev->dir.lr = ev_dir_lr;
+				ev->dir.cs = ev_dir_cs;
 				if (!(ev->flags[1] & EVENT_FLAG_FUSE)) {
 					ev->t_hold = ev->t;
 					if (ev->flags[1] & EVENT_FLAG_USE_ORD) ++ev->ord_count;
 					else ++ev->diff_count;
 				}
-				if (ev->flags[1] & EVENT_FLAG_USE_ORD) {
-					ev->dir.lr = ewma_get_last(&ev->avg[0]);
-					ev->dir.cs = ewma_get_last(&ev->avg[1]);
-					ev->ord_factor += 1.0;
-				}
+				if (ev->flags[1] & EVENT_FLAG_USE_ORD) ev->ord_factor += 1.0;
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
 				ev->t_end[0] = ev->t_end[1];
@@ -764,7 +762,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				}
 			}
 			ev->t_hold = 0;
-			ev->hold = 0;
 		}
 
 		const double dpwr_lr_err = ev->dir.lr - ax->lr;
