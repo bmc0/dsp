@@ -1126,15 +1126,15 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 	m->rsr *= pdc_s;
 }
 
-void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
-	const struct axes *ax, int have_rears, double r[4])
+void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs,
+	double ev_ds_diff, const struct axes *ax, int have_rears, double r[4])
 {
 	const double x = fabs(ax->lr);
 	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0; r[3] = 0.0;
 	if (dp->mode == DIRECT_PATH_EVENT) {
-		if (!dp->enable && ev->t_hold) {
+		if (!dp->enable && ev_hold) {
 			const double eb = (-0.45*x+0.8)*x*x-(M_PI/8);
-			if (ev->dir.cs <= eb) {
+			if (ev_cs <= eb) {
 				if (ax->cs >= 0.0) ewma_set(&dp->zs, 1.0);
 				dp->enable = 1;
 			}
@@ -1142,8 +1142,8 @@ void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
 		if (dp->enable) {
 			const double y0 = (-0.05*x+0.17)*x*x-(M_PI/32);
 			const double y1 = (-0.15*x+0.37)*x*x-(M_PI/12);
-			if (ev->t_hold) {
-				if (ev->dir.cs >= y1) {
+			if (ev_hold) {
+				if (ev_cs >= y1) {
 					if (ax->cs >= y0) goto direct_path_finish;
 					else dp->enable = 2;
 				}
@@ -1154,7 +1154,7 @@ void surr_direct_pan(struct direct_path_state *dp, const struct event_state *ev,
 				ewma_set(&dp->zs, 0.0);
 				return;
 			}
-			const double zs = ewma_run_scale(&dp->zs, (dp->enable == 1) ? 1.0 : 0.0, ev->ds_diff);
+			const double zs = ewma_run_scale(&dp->zs, (dp->enable == 1) ? 1.0 : 0.0, ev_ds_diff);
 			if (dp->enable > 1 && zs < 1e-6) goto direct_path_finish;
 			const double m = M_PI_2/(y1-y0);
 			const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2) * zs;

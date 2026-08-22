@@ -129,7 +129,8 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 			double matrix_adj = state->matrix_adj[0];
 			if (state->do_direct_path) {
 				double r_pan[4];
-				surr_direct_pan(&state->dp, &state->ev, &state->ax, state->have_rears, r_pan);
+				surr_direct_pan(&state->dp, !!state->ev.t_hold, state->ev.dir.cs,
+					state->ev.ds_diff, &state->ax, state->have_rears, r_pan);
 				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
 				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
 				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);

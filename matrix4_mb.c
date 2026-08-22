@@ -54,8 +54,8 @@ struct matrix4_mb_input_state {
 };
 
 struct ax_buf_frame {
-	struct axes ax, ax_ev, ax_dpwr, diff_last;
-	double pwrcmp_factor;
+	struct axes ax, ax_ev, ax_dpwr, diff_last, ev_dir;
+	double pwrcmp_factor, ev_ds_diff;
 	int ev_hold, ev_maybe;
 };
 
@@ -306,11 +306,13 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				struct ax_buf_frame ax_f = {0};
 				struct event_state *ev = &band->ev;
 				process_events(ev, &state->evc, &band->env, &band->pwr_env, ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
+				ax_f.diff_last = ev->diff_last;
+				ax_f.ev_dir = ev->dir;
 				ax_f.pwrcmp_factor = ewma_get_last(&band->ev.pwrcmp_factor);
+				ax_f.ev_ds_diff = ev->ds_diff;
 				ax_f.ev_hold = !!band->ev.t_hold;
 				ax_f.ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
 					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
-				ax_f.diff_last = ev->diff_last;
 				if (band->ax_buf_len > 0) {
 					band->ax_f = band->ax_buf[band->ax_buf_p];
 					band->ax_buf[band->ax_buf_p] = ax_f;
@@ -320,7 +322,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				double matrix_adj = state->matrix_adj[0];
 				if (state->do_direct_path) {
 					double r_pan[4];
-					surr_direct_pan(&band->dp, &band->ev, &band->ax_f.ax, state->have_rears, r_pan);
+					surr_direct_pan(&band->dp, band->ax_f.ev_hold, band->ax_f.ev_dir.cs,
+						band->ax_f.ev_ds_diff, &band->ax_f.ax, state->have_rears, r_pan);
 					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
 					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
 					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
