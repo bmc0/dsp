@@ -523,6 +523,34 @@ void direct_path_state_init(struct direct_path_state *dp, double fs, enum direct
 	dp->mode = mode;
 }
 
+static inline double square(double x) { return x*x; }
+static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
+static inline double safe_sqrt(double x) { return (x>0.0)?sqrt(x):0.0; }
+
+/* valid for 0≤x≤1 */
+static inline double atan_approx(double x)
+{
+#if 0  /* abs. error: +0.09°/-0.08° 0≤x≤√2-1; ±0.09° √2-1≤x≤1 */
+	return M_PI_4*x - x*(x-1.0)*(0.2447+0.0663*x);
+#else  /* abs. error: +0.25°/-0° 0≤x≤√2-1; +0°/-0.15° √2-1≤x≤1 */
+	return M_PI_4*x + 0.2777*x*(1.0-x);
+#endif
+}
+
+static inline double calc_angle(double a, double b)
+{
+	if (a <= DBL_MIN && b <= DBL_MIN) return 0.0;
+	const double r = atan_approx((a < b) ? a/b : b/a);
+	return (a < b) ? r - M_PI_4 : M_PI_4 - r;
+}
+
+static inline double calc_angle_pwr(double a, double b)
+{
+	if (a <= DBL_MIN && b <= DBL_MIN) return 0.0;
+	const double r = atan_approx(sqrt((a < b) ? a/b : b/a));
+	return (a < b) ? r - M_PI_4 : M_PI_4 - r;
+}
+
 static inline void norm_axes(struct axes *ax)
 {
 	const double abs_sum = fabs(ax->lr)+fabs(ax->cs);
@@ -561,8 +589,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
 	const struct axes ord = {
-		.lr = CALC_LR(env->l, env->r, env->l/env->r),
-		.cs = CALC_CS(env->sum, env->diff, env->sum/env->diff),
+		.lr = calc_angle(env->l, env->r),
+		.cs = calc_angle(env->sum, env->diff),
 	};
 	const struct axes ord_lp = {
 		.lr = biquad(&ev->ord_lp[0], ord.lr),
@@ -581,8 +609,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		.diff = pwr_env->diff - ewma_run_set_max(&ev->accom[3], pwr_env->diff),
 	};
 	const struct axes diff = {
-		.lr = CALC_LR(adapt.l, adapt.r, sqrt(adapt.l/adapt.r)),
-		.cs = CALC_CS(adapt.sum, adapt.diff, sqrt(adapt.sum/adapt.diff)),
+		.lr = calc_angle_pwr(adapt.l, adapt.r),
+		.cs = calc_angle_pwr(adapt.sum, adapt.diff),
 	};
 	ev->diff_last = diff;
 	ev->ord_buf[ev->buf_p] = ord;
@@ -816,10 +844,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	++ev->t;
 	ev->buf_p = CBUF_NEXT(ev->buf_p, ev->buf_len);
 }
-
-static inline double square(double x) { return x*x; }
-static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
-static inline double safe_sqrt(double x) { return (x>0.0)?sqrt(x):0.0; }
 
 /*
  * No steering of rear-encoded sounds.
