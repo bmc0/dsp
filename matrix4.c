@@ -118,12 +118,13 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 		#else
 		if (1) {
 		#endif
-			process_events(&state->ev, &state->evc, &env, &pwr_env, 1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
+			process_events(&state->ev, &state->evc, &env, &pwr_env, NULL, NULL,
+				1.0, &state->ax, &state->ax_ev, &state->ax_dpwr);
 			double matrix_adj = state->matrix_adj[0];
 			if (state->do_direct_path) {
 				double r_pan[4];
-				surr_direct_pan(&state->dp, !!state->ev.t_hold, state->ev.dir.cs,
-					state->ev.ds_diff, &state->ax, state->have_rears, r_pan);
+				surr_direct_pan(&state->dp, !!state->ev.t_hold, state->ev.dir.cs, state->ev.ds_diff,
+					&state->ax, state->ev.unaligned, state->have_rears, r_pan);
 				cs_interp_insert(&state->m_interp.amb, r_pan[0]);
 				cs_interp_insert(&state->m_interp.sdir, r_pan[1]);
 				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
@@ -139,17 +140,21 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
-			const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
+			const double rs_scale = ewma_get_last(&state->ev.rs_scale), wct = w*rs_scale;
+			const double sm_f[2] = { state->surr_mult[0]*cur_fade_mult, state->surr_mult[1]*cur_fade_mult };
+			const double surr_mult_rear = rs_scale*sm_f[1] + (1.0-rs_scale)*sm_f[0];
+			const double surr_mult = w*surr_mult_rear + (1.0-w)*sm_f[0];
 			const double ct_pcf = state->contour_pwrcmp * ewma_get_last(&state->ev.pwrcmp_factor);
-			const double shelf_ct0 = w + (1.0-w)*state->shelf_mult;
+			const double shelf_ct0 = wct + (1.0-wct)*state->shelf_mult;
 			const double shelf_ct1 = (shelf_ct0-1.0)*ct_pcf + 1.0;
-			const double lp_ct0 = w + (1.0-w)*state->lowpass_mult;
+			const double lp_ct0 = wct + (1.0-wct)*state->lowpass_mult;
 			const double lp_ct1 = (lp_ct0-1.0)*pow(ct_pcf, 1.0/state->shelf_mult) + 1.0;
 
 			struct axes *ax_dpwr = (state->do_dpwr_decouple) ? &state->ax_dpwr : &state->ax;
 			struct matrix_coefs m = {0};
 			struct cmc_params cmc_p = {
-				.surr_mult = { surr_mult, state->surr_mult[1]*cur_fade_mult },
+				.surr_mult = { surr_mult, surr_mult_rear },
+				.rs = rs_scale,
 				.adj = matrix_adj,
 			};
 			union cmc_shelf_mult r_shelf_mult[2] = {
@@ -174,7 +179,7 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 			cs_interp_insert(&state->m_interp.g_front_lp, r_shelf_mult[1].ret.front/r_shelf_mult[0].ret.front);
 
 			if (state->have_rears) {
-				const double rsw = smoothstep(state->ax.cs*(-2/M_PI_4)-1.0);
+				const double rsw = smoothstep(state->ax.cs*(-2/M_PI_4)-1.0)*rs_scale;
 				const double sg = rsw*0.316228 + (1.0-rsw);
 				const double s_norm = CALC_NORM_MULT(sg)*M_SQRT2;
 				cs_interp_insert(&state->m_interp.g_side_shelf, sg*s_norm);
@@ -359,7 +364,8 @@ static void matrix4_effect_signal(struct effect *e)
 static void matrix4_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	matrix4_common_drain_samples(e, state->c0, state->c1, state->len, drain_samples);
+	drain_samples[state->c0] += state->len; drain_samples[state->c1] += state->len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) drain_samples[i] += state->len;
 }
 
 static void matrix4_effect_destroy(struct effect *e)
@@ -382,16 +388,11 @@ static void matrix4_effect_destroy(struct effect *e)
 	free(state);
 }
 
-static void matrix4_effect_channel_deps(struct effect *e, char **deps)
-{
-	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	matrix4_common_channel_deps(e, state->c0, state->c1, deps);
-}
-
 static void matrix4_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
-	matrix4_common_channel_offsets(e, state->c0, state->c1, state->len, latency);
+	latency[state->c0] += state->len; latency[state->c1] += state->len;
+	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += state->len;
 }
 
 static const char * matrix4_effect_channel_label(struct effect *e, int ch, int out)
@@ -420,7 +421,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	e->run = matrix4_effect_run;
 	e->reset = matrix4_effect_reset;
 	e->drain_samples = matrix4_effect_drain_samples;
-	e->channel_deps = matrix4_effect_channel_deps;
 	e->channel_offsets = matrix4_effect_channel_offsets;
 	e->channel_label = matrix4_effect_channel_label;
 
@@ -496,7 +496,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	}
 	else state->lowpass_mult = 1.0;
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, DOWNSAMPLED_FS(istream->fs));
-	event_config_init(&state->evc, istream, config.rear_ev_mask);
+	event_config_init(&state->evc, istream, config.rear_ev_mask, UNALIGNED_EVENT_ACTION_NONE);
 
 	return e;
 

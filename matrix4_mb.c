@@ -37,6 +37,7 @@
 #define PHASE_LIN_TRUNC_THRESH 1e-6
 #define DO_FILTER_BANK_TEST 0
 #define FILTER_BANK_TEST_ANALYSIS 0
+#define STATUS_SHOW_ALIGN 1
 
 #if DEBUG_POWER_ERROR
 	#include "smf.h"
@@ -55,15 +56,31 @@ struct matrix4_mb_input_state {
 
 struct ax_buf_frame {
 	struct axes ax, ax_ev, ax_dpwr, diff_last, ev_dir;
-	double pwrcmp_factor, ev_ds_diff;
-	int ev_hold, ev_maybe;
+	double pwrcmp_factor, ev_ds_diff, align_syn_dt, rs_scale;
+	int ev_hold, ev_maybe, ev_unaligned, ev_realign;
+};
+
+struct ch_align_an_state {
+	union {
+		struct ap1_state ap;
+		sample_t s[2];
+	};
+	int dt;
+};
+
+struct ch_align_syn_state {
+	struct ap1_state ap[4];
+	int dt[4];
 };
 
 struct matrix4_band {
 	struct smooth_state sm;
 	struct envs env, pwr_env;
+	struct delay_est_state de;
 	struct event_state ev;
 	struct ax_buf_frame ax_f;
+	struct ch_align_an_state align_an;
+	struct ch_align_syn_state align_syn;
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
@@ -76,7 +93,8 @@ struct matrix4_band {
 	struct ewma_state ev_thresh;
 	struct ax_buf_frame *ax_buf;
 	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
-	int ax_buf_p, ax_buf_len;
+	double syn_dt, syn_tol_r, align_xfade_scale;
+	int ax_buf_p, ax_buf_len, align_xfade_p;
 #if DEBUG_POWER_ERROR
 	struct ewma_state pwr_err[2];
 	struct smf_state pwr_err_sm;
@@ -101,10 +119,13 @@ struct matrix4_mb_state {
 	struct filter_bank fb;
 	struct matrix4_band band[FB_MAX_BANDS];
 	struct event_config evc;
+	struct delay_est_hist de_hist;
 	struct phase_flip_params pf_params;
 	calc_matrix_coefs_func calc_matrix_coefs;
+	sample_t *syn_buf;
 	double matrix_adj[2], surr_mult[2], contour_pwrcmp;
-	ssize_t drain_frames, latency_frames, fade_frames, fade_p;
+	ssize_t drain_frames, latency_frames, align_latency_frames;
+	int syn_buf_p, syn_buf_len, align_ref_syn, fade_frames, fade_p;
 #if DEBUG_POWER_ERROR
 	FILE *pwr_err_file;
 #endif
@@ -238,6 +259,90 @@ static struct effect * matrix4_mb_input_effect_init(const struct stream_info *is
 	return NULL;
 }
 
+#define CH_ALIGN_LATENCY 1
+static inline void ch_align_set(double dt, int *r_dt, struct ap1_state *ap)
+{
+	*r_dt = (int) (dt-0.1);
+	const double dt_frac = dt-(*r_dt);
+	ap->c0 = (1.0-dt_frac)/(1.0+dt_frac);
+}
+
+static void ch_align_an_state_init(struct ch_align_an_state *a, struct delay_est_state *de)
+{
+	if (de->buf) {
+		ch_align_set(CH_ALIGN_LATENCY, &a->dt, &a->ap);
+		ap1_reset(&a->ap);
+	}
+	else a->s[1] = a->s[0] = 0.0;
+}
+
+static inline void ch_align_an_set(struct ch_align_an_state *a, struct delay_est_state *de, double dt)
+{
+	if (!de->buf) return;
+	ch_align_set(fabs(dt)+CH_ALIGN_LATENCY, &a->dt, &a->ap);
+	if (signbit(dt)) a->dt = -a->dt;
+	ap1_reset(&a->ap);
+}
+
+static inline void ch_align_an_run(struct ch_align_an_state *a, struct delay_est_state *de, sample_t *s0, sample_t *s1)
+{
+	if (de->buf) {
+		const int p = de->p-1;
+		if (a->dt < 0) {
+			*s0 = de->buf[CBUF_WRAP(p-CH_ALIGN_LATENCY, de->len)][0];
+			*s1 = ap1_run(&a->ap, de->buf[CBUF_WRAP(p+a->dt, de->len)][1]);
+		}
+		else {
+			*s0 = ap1_run(&a->ap, de->buf[CBUF_WRAP(p-a->dt, de->len)][0]);
+			*s1 = de->buf[CBUF_WRAP(p-CH_ALIGN_LATENCY, de->len)][1];
+		}
+	}
+	else {
+		sample_t rs[2] = { a->s[0], a->s[1] };
+		a->s[0] = *s0; a->s[1] = *s1;
+		*s0 = rs[0]; *s1 = rs[1];
+	}
+}
+
+static void ch_align_syn_state_init(struct ch_align_syn_state *a, int ref)
+{
+	for (int i = 0; i < 4; ++i) {
+		ch_align_set(ref, &a->dt[i], &a->ap[i]);
+		ap1_reset(&a->ap[i]);
+	}
+}
+
+static inline void ch_align_syn_xfade_start(struct ch_align_syn_state *a, int ref, double dt)
+{
+	a->ap[0] = a->ap[2]; a->ap[1] = a->ap[3];
+	a->dt[0] = a->dt[2]; a->dt[1] = a->dt[3];
+	ch_align_set(ref-dt, &a->dt[2], &a->ap[2]);
+	ch_align_set(ref+dt, &a->dt[3], &a->ap[3]);
+	ap1_reset(&a->ap[2]); ap1_reset(&a->ap[3]);
+}
+
+static inline sample_t * syn_buf_get_frame(struct matrix4_mb_state *state, int dt)
+{
+	int p = state->syn_buf_p - dt;
+	if (p < 0) p += state->syn_buf_len;
+	return state->syn_buf + p*state->n_bands*2;
+}
+
+static inline void ch_align_syn_run(struct ch_align_syn_state *a, struct matrix4_mb_state *state,
+	int k, double t, sample_t *s0, sample_t *s1)
+{
+	const sample_t s_dt2 = syn_buf_get_frame(state, a->dt[2])[state->n_bands+k];
+	const sample_t s_dt3 = syn_buf_get_frame(state, a->dt[3])[k];
+	*s0 = ap1_run(&a->ap[2], s_dt2);
+	*s1 = ap1_run(&a->ap[3], s_dt3);
+	if (t < 1.0) {
+		const sample_t s_dt0 = syn_buf_get_frame(state, a->dt[0])[state->n_bands+k];
+		const sample_t s_dt1 = syn_buf_get_frame(state, a->dt[1])[k];
+		*s0 = (*s0)*t + ap1_run(&a->ap[0], s_dt0)*(1.0-t);
+		*s1 = (*s1)*t + ap1_run(&a->ap[1], s_dt1)*(1.0-t);
+	}
+}
+
 static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
@@ -260,8 +365,12 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 		for (int k = 0; k < state->n_bands; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			if (!(state->fb.an.p & state->fb.an.mask[k]))
-				calc_input_envs(&band->sm, state->fb.an.s[k][0], state->fb.an.s[k][1], &band->env, &band->pwr_env);
+			if (!(state->fb.an.p & state->fb.an.mask[k])) {
+				delay_est_insert(&band->de, state->fb.an.s[k][0], state->fb.an.s[k][1]);
+				sample_t s0a_an = state->fb.an.s[k][0], s1a_an = state->fb.an.s[k][1];
+				if (state->syn_buf) ch_align_an_run(&band->align_an, &band->de, &s0a_an, &s1a_an);
+				calc_input_envs(&band->sm, s0a_an, s1a_an, &band->env, &band->pwr_env);
+			}
 		}
 
 	#if DOWNSAMPLE_FACTOR > 1
@@ -270,11 +379,19 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		if (1) {
 	#endif
 			int n_angles = 0;
-			struct axes angles[FB_MAX_BANDS];
+			struct {
+				struct axes ax;
+				double dt, tol_r;
+			} angles[FB_MAX_BANDS];
 			/* find bands with possible events */
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
-				if (band->ax_f.ev_maybe) angles[n_angles++] = band->ax_f.diff_last;
+				if (band->ax_f.ev_maybe) {
+					angles[n_angles].ax = band->ax_f.diff_last;
+					angles[n_angles].dt = band->syn_dt;
+					angles[n_angles].tol_r = band->syn_tol_r;
+					++n_angles;
+				}
 			}
 
 			double cur_fade_mult = 1.0;
@@ -291,9 +408,10 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				double ev_thresh_fact = 0.0;
 				if (band->ax_f.ev_maybe) {
 					for (int j = 0; j < n_angles; ++j) {
-						const double d_lr = fabs(angles[j].lr - band->ax_f.diff_last.lr);
-						const double d_cs = fabs(angles[j].cs - band->ax_f.diff_last.cs);
-						ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI));
+						const double d_lr = fabs(angles[j].ax.lr - band->ax_f.diff_last.lr);
+						const double d_cs = fabs(angles[j].ax.cs - band->ax_f.diff_last.cs);
+						ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI)) *
+							smoothstep(2.0-fabs(band->syn_dt-angles[j].dt)*MINIMUM(band->syn_tol_r, angles[j].tol_r));
 					}
 					ev_thresh_fact -= 1.0;
 				}
@@ -302,14 +420,23 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 				struct ax_buf_frame ax_f = {0};
 				struct event_state *ev = &band->ev;
-				process_events(ev, &state->evc, &band->env, &band->pwr_env, ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
+				process_events(ev, &state->evc, &band->env, &band->pwr_env, &band->de, &state->de_hist,
+					ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
 				ax_f.diff_last = ev->diff_last;
 				ax_f.ev_dir = ev->dir;
-				ax_f.pwrcmp_factor = ewma_get_last(&band->ev.pwrcmp_factor);
+				ax_f.pwrcmp_factor = ewma_get_last(&ev->pwrcmp_factor);
 				ax_f.ev_ds_diff = ev->ds_diff;
-				ax_f.ev_hold = !!band->ev.t_hold;
+				ax_f.rs_scale = ewma_get_last(&ev->rs_scale);
+				ax_f.ev_hold = !!ev->t_hold;
 				ax_f.ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
 					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
+				ax_f.ev_unaligned = ev->unaligned;
+				ax_f.ev_realign = ev->realign;
+				if (ax_f.ev_realign) {
+					ax_f.align_syn_dt = ev->align_dt[0] * (state->fb.an.mask[k]+1);
+					ch_align_an_set(&band->align_an, &band->de, ev->align_dt[0]);
+					ev->realign = 0;
+				}
 				if (band->ax_buf_len > 0) {
 					band->ax_f = band->ax_buf[band->ax_buf_p];
 					band->ax_buf[band->ax_buf_p] = ax_f;
@@ -319,8 +446,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				double matrix_adj = state->matrix_adj[0];
 				if (state->do_direct_path) {
 					double r_pan[4];
-					surr_direct_pan(&band->dp, band->ax_f.ev_hold, band->ax_f.ev_dir.cs,
-						band->ax_f.ev_ds_diff, &band->ax_f.ax, state->have_rears, r_pan);
+					surr_direct_pan(&band->dp, band->ax_f.ev_hold, band->ax_f.ev_dir.cs, band->ax_f.ev_ds_diff,
+						&band->ax_f.ax, band->ax_f.ev_unaligned, state->have_rears, r_pan);
 					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
 					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
 					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
@@ -337,16 +464,20 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				#endif
 
 				const double w = smoothstep(band->ax_f.ax.cs*(-2/M_PI_4));
-				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
+				const double rs_scale = band->ax_f.rs_scale, wct = w*rs_scale;
+				const double sm_f[2] = { state->surr_mult[0]*cur_fade_mult, state->surr_mult[1]*cur_fade_mult };
+				const double surr_mult_rear = rs_scale*sm_f[1] + (1.0-rs_scale)*sm_f[0];
+				const double surr_mult = w*surr_mult_rear + (1.0-w)*sm_f[0];
 				const double ct_pcf = state->contour_pwrcmp * band->ax_f.pwrcmp_factor;
-				const double ct0 = w + (1.0-w)*band->contour;
+				const double ct0 = wct + (1.0-wct)*band->contour;
 				const double ct1 = (ct0-1.0)*ct_pcf + 1.0;
 				const double ct2 = ct0/ct1;
 
 				struct axes *ax_dpwr = (state->do_dpwr_decouple) ? &band->ax_f.ax_dpwr : &band->ax_f.ax;
 				struct matrix_coefs m = {0};
 				struct cmc_params cmc_p = {
-					.surr_mult = { surr_mult*ct1, state->surr_mult[1]*cur_fade_mult },
+					.surr_mult = { surr_mult*ct1, surr_mult_rear },
+					.rs = rs_scale,
 					.adj = matrix_adj,
 				};
 				state->calc_matrix_coefs(&band->ax_f.ax, ax_dpwr, &cmc_p, &m, NULL, 0);
@@ -362,7 +493,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				cs_interp_insert(&band->m_interp.rsr, m.rsr*ct2);
 
 				if (state->have_rears) {
-					const double rsw = smoothstep(band->ax_f.ax.cs*(-2/M_PI_4)-1.0);
+					const double rsw = smoothstep(band->ax_f.ax.cs*(-2/M_PI_4)-1.0)*rs_scale;
 					const double sg = rsw*band->rear_shelf + (1.0-rsw);
 					const double s_norm = CALC_NORM_MULT(sg);
 					cs_interp_insert(&band->m_interp.sg, sg*s_norm);
@@ -373,17 +504,46 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					cs_interp_insert(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 				}
+				if (state->syn_buf && band->ax_f.ev_realign) {
+					band->syn_dt = band->ax_f.align_syn_dt;
+					ch_align_syn_xfade_start(&band->align_syn, state->align_ref_syn, band->syn_dt);
+					const double align_xfade_frames = e->istream.fs * (RISE_TIME_FAST*1.183/1000.0)/band->ax_f.ev_ds_diff;
+					band->align_xfade_p = lrint(align_xfade_frames) + CS_INTERP_DELAY_FRAMES;
+					band->align_xfade_scale = 1.0/align_xfade_frames;
+				}
 			}
 		}
 
+		sample_t *syn_ref = NULL;
+		if (state->syn_buf) {
+			sample_t *syn_f = state->syn_buf + state->syn_buf_p*state->n_bands*2;
+			memcpy(syn_f, state->fb.syn[0].s, sizeof(sample_t)*state->n_bands);
+			memcpy(syn_f + state->n_bands, state->fb.syn[1].s, sizeof(sample_t)*state->n_bands);
+			syn_ref = syn_buf_get_frame(state, state->align_ref_syn);
+		}
 		for (int k = 0; k < state->n_bands; ++k) {
 			struct matrix4_band *band = &state->band[k];
-			const sample_t s0_d_fb = state->fb.syn[0].s[k];
-			const sample_t s1_d_fb = state->fb.syn[1].s[k];
-			sample_t b_l = s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
-			sample_t b_r = s0_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
-			sample_t b_ls = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
-			sample_t b_rs = s0_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
+			sample_t s0_d_fb, s1_d_fb, s0x_d_fb, s1x_d_fb;
+			if (syn_ref) {
+				s0_d_fb = syn_ref[k];
+				s1_d_fb = syn_ref[state->n_bands+k];
+				double t = 1.0;
+				if (band->align_xfade_p > 0) {
+					const double x = band->align_xfade_p*band->align_xfade_scale;
+					t = (x < 1.0) ? 1.0-x*x : 0.0;
+					--band->align_xfade_p;
+				}
+				ch_align_syn_run(&band->align_syn, state, k, t, &s1x_d_fb, &s0x_d_fb);
+			}
+			else {
+				s0x_d_fb = s0_d_fb = state->fb.syn[0].s[k];
+				s1x_d_fb = s1_d_fb = state->fb.syn[1].s[k];
+			}
+
+			sample_t b_l = s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1x_d_fb*cs_interp(&band->m_interp.lr, state->s);
+			sample_t b_r = s0x_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
+			sample_t b_ls = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1x_d_fb*cs_interp(&band->m_interp.lsr, state->s);
+			sample_t b_rs = s0x_d_fb*cs_interp(&band->m_interp.rsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rsr, state->s);
 
 		#if DEBUG_POWER_ERROR
 		#ifdef DSP_STATUSLINES
@@ -456,6 +616,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			obuf_p[2] = out_ls_dir;
 			obuf_p[3] = out_rs_dir;
 		}
+
+		state->syn_buf_p = CBUF_NEXT(state->syn_buf_p, state->syn_buf_len);
 	}
 #ifdef DSP_STATUSLINES
 	if (state->status_type) {
@@ -471,6 +633,9 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				snprintf(band->statusline.s, LENGTH(band->statusline.s),
 					"%s%s: band %2d: lr: %+06.2f (%+06.2f); cs: %+06.2f (%+06.2f); "
 					"adj: %05.3f; thresh: %05.3f; pwrcmp: %05.3f; ord: %zd; diff: %zd; early: %zd; ign: %zd"
+				#if STATUS_SHOW_ALIGN
+					"; dt: %+.1fus%s"
+				#endif
 				#if DEBUG_POWER_ERROR
 					"; pwr_err: %+05.2fdB"
 				#endif
@@ -478,6 +643,9 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					TO_DEGREES(band->ax_f.ax.lr), TO_DEGREES(band->ax_f.ax_ev.lr), TO_DEGREES(band->ax_f.ax.cs), TO_DEGREES(band->ax_f.ax_ev.cs),
 					band->ev.adj, ewma_get_last(&band->ev_thresh), state->contour_pwrcmp*band->ax_f.pwrcmp_factor,
 					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count
+				#if STATUS_SHOW_ALIGN
+					, band->syn_dt*(1000.0*1000.0)/e->istream.fs, (band->ev.unaligned) ? "*" : ""
+				#endif
 				#if DEBUG_POWER_ERROR
 					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
 				#endif
@@ -491,11 +659,17 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				draw_steering_bar(band->ax_f.ax.cs, band->ax_f.ev_hold, &band->cs_bar);
 				snprintf(band->statusline.s, LENGTH(band->statusline.s),
 					"%s%s: band %2d: L[%s]R; C[%s]S; ord: %zd; diff: %zd; ign: %zd"
+				#if STATUS_SHOW_ALIGN
+					"; dt: %+.1fus%s"
+				#endif
 				#if DEBUG_POWER_ERROR
 					"; pwr_err: %+05.2fdB"
 				#endif
 					, e->name, (state->disable) ? " [off]" : "", i,
 					band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count
+				#if STATUS_SHOW_ALIGN
+					, band->syn_dt*(1000.0*1000.0)/e->istream.fs, (band->ev.unaligned) ? "*" : ""
+				#endif
 				#if DEBUG_POWER_ERROR
 					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
 				#endif
@@ -513,6 +687,10 @@ static void matrix4_mb_effect_reset(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	filter_bank_reset(&state->fb);
+	if (state->syn_buf) {
+		memset(state->syn_buf, 0, sizeof(sample_t)*state->syn_buf_len*state->n_bands*2);
+		for (int i = 0; i < state->n_bands; ++i) state->band[i].align_xfade_p = 0;
+	}
 }
 
 static void matrix4_mb_effect_signal(struct effect *e)
@@ -527,18 +705,20 @@ static void matrix4_mb_effect_signal(struct effect *e)
 static void matrix4_mb_effect_drain_samples(struct effect *e, ssize_t *drain_samples)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	matrix4_common_drain_samples(e, state->c0, state->c1, state->drain_frames, drain_samples);
-	drain_samples[e->istream.channels-2] += state->drain_frames;
-	drain_samples[e->istream.channels-1] += state->drain_frames;
+	drain_samples[state->c0] += state->drain_frames; drain_samples[state->c1] += state->drain_frames;
+	for (int i = e->istream.channels-2; i < e->ostream.channels; ++i) drain_samples[i] += state->drain_frames;
 }
 
 static void matrix4_mb_effect_destroy(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (int i = 0; i < state->n_bands; ++i) {
+		delay_est_state_cleanup(&state->band[i].de);
 		event_state_cleanup(&state->band[i].ev);
 		free(state->band[i].ax_buf);
 	}
+	delay_est_hist_cleanup(&state->de_hist);
+	free(state->syn_buf);
 #if DEBUG_POWER_ERROR
 	if (state->pwr_err_file)
 		fclose(state->pwr_err_file);
@@ -578,10 +758,12 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 static void matrix4_mb_effect_channel_offsets(struct effect *e, ssize_t *latency, ssize_t *req_delay)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
-	latency[state->c0] += state->latency_frames; latency[state->c1] += state->latency_frames;
-	req_delay[state->c0] += state->latency_frames; req_delay[state->c1] += state->latency_frames;
+	latency[state->c0] += state->latency_frames + state->align_latency_frames;
+	latency[state->c1] += state->latency_frames + state->align_latency_frames;
+	req_delay[state->c0] += state->latency_frames;
+	req_delay[state->c1] += state->latency_frames;
 	for (int i = e->istream.channels-2; i < e->ostream.channels; ++i) {
-		latency[i] += state->latency_frames;
+		latency[i] += state->latency_frames + state->align_latency_frames;
 		req_delay[i] += state->latency_frames;
 	}
 }
@@ -679,10 +861,26 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->pwr_err_file = config.pwr_err_file;
 #endif
 
+	int max_syn_dt = 0;
+	if (config.uev_action == UNALIGNED_EVENT_ACTION_ALIGN) {
+		max_syn_dt = ceil(DELAY_EST_MAX_DELTA/1000.0 * istream->fs);
+		state->align_ref_syn = max_syn_dt + CH_ALIGN_LATENCY;
+		state->syn_buf_len = max_syn_dt*2 + CH_ALIGN_LATENCY;
+		state->syn_buf = calloc(state->syn_buf_len, sizeof(sample_t)*state->n_bands*2);
+		if (check_alloc(ei->name, state->syn_buf)) goto fail;
+	}
+	if (config.uev_action && delay_est_hist_init(&state->de_hist,
+		lround(pow(state->n_bands, 0.7)*DELAY_EST_HIST_BASE_N))) goto fail;
 	phase_flip_init_params(&state->pf_params, istream->fs);
+	const double an_tpeak_ref = fbp->an_tpeak[0] + ((state->syn_buf) ? (state->fb.an.mask[0]+1)*1000.0/istream->fs : 0.0);
 	for (int k = 0; k < state->n_bands; ++k) {
 		struct matrix4_band *band = &state->band[k];
-		smooth_state_init(&band->sm, (double) istream->fs / (state->fb.an.mask[k]+1));
+		const double an_fs = (double) istream->fs / (state->fb.an.mask[k]+1);
+		smooth_state_init(&band->sm, an_fs);
+		if (config.uev_action && delay_est_state_init(&band->de, an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
+			MAXIMUM(MINIMUM(2.0-0.241*(log(fbp->fc[k])-3.4), 2.0), 0.5),
+			DOWNSAMPLED_FS(istream->fs))) goto fail;
+		band->syn_tol_r = (fbp->fc[k]*8.0)/istream->fs;  /* ±45°; for event threshold modulation */
 		const double thresh_scale = (fbp->thresh_scale[k] > 0.0) ? fbp->thresh_scale[k] : 1.0;
 		band->ev_thresh_max = EVENT_THRESH_MAX * thresh_scale;
 		band->ev_thresh_min = EVENT_THRESH_MIN * thresh_scale;
@@ -691,7 +889,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 			exp(-3.465735902799727e-01*ns_fc*ns_fc))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
-		band->ax_buf_len = TIME_TO_FRAMES((fbp->an_tpeak[0]-fbp->an_tpeak[k])*0.7, DOWNSAMPLED_FS(istream->fs));
+		const double an_tpeak = fbp->an_tpeak[k] + ((state->syn_buf) ? (state->fb.an.mask[k]+1)*1000.0/istream->fs : 0.0);
+		band->ax_buf_len = TIME_TO_FRAMES((an_tpeak_ref-an_tpeak)*0.7, DOWNSAMPLED_FS(istream->fs));
 		if (band->ax_buf_len > 0) {
 			band->ax_buf = calloc(band->ax_buf_len, sizeof(struct ax_buf_frame));
 			if (check_alloc(ei->name, band->ax_buf)) goto fail;
@@ -705,6 +904,10 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		cs_interp_set(&band->m_interp.sdir, 0.0);
 		cs_interp_set(&band->m_interp.rdir, 0.0);
 		direct_path_state_init(&band->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
+		if (state->syn_buf) {
+			ch_align_an_state_init(&band->align_an, &band->de);
+			ch_align_syn_state_init(&band->align_syn, state->align_ref_syn);
+		}
 	#if DEBUG_POWER_ERROR
 		ewma_init(&band->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
@@ -717,7 +920,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	}
 
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, DOWNSAMPLED_FS(istream->fs));
-	event_config_init(&state->evc, istream, config.rear_ev_mask);
+	event_config_init(&state->evc, istream, config.rear_ev_mask, config.uev_action);
 #endif
 	fshape_init(&state->fshape[0], istream->fs, fshape_lf, fshape_hf, 0);
 	state->fshape[1] = state->fshape[0];
@@ -767,7 +970,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 
 #if !(DO_FILTER_BANK_TEST)
 	const ssize_t lookahead_frames = config.lookahead_frames + CS_INTERP_DELAY_FRAMES
-		+ state->band[state->n_bands-1].ax_buf_len*DOWNSAMPLE_FACTOR;
+		+ state->band[state->n_bands-1].ax_buf_len*DOWNSAMPLE_FACTOR - max_syn_dt;
 	struct effect *e_input = matrix4_mb_input_effect_init(istream, channel_selector, state->c0, state->c1, lookahead_frames);
 	if (!e_input) goto fail;
 
@@ -776,6 +979,10 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	SET_BIT(e->channel_selector, istream->channels+1);
 	state->drain_frames = MAXIMUM(lookahead_frames-(phase_lin_frames-1), 0);
 	state->latency_frames = MAXIMUM(lookahead_frames, phase_lin_frames-1);
+	if (state->syn_buf) {
+		state->align_latency_frames = max_syn_dt + CH_ALIGN_LATENCY;
+		state->drain_frames += state->align_latency_frames;
+	}
 
 	effect_list_append(e_input, e_fir);
 	effect_list_append(e_fir, e);

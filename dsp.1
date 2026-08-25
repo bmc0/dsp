@@ -330,6 +330,17 @@ is the same for all directions. If set to a high value (e.g. 5), most
 rear events will be ignored. The default values are 1 for \fBmatrix4\fR
 and 0.3 for \fBmatrix4_mb\fR.
 .TP
+unaligned_event_action=\fInone\fR|\fIneutralize\fR|\fIalign\fR (\fBmatrix4_mb\fR only)
+The standard matrix surround signal model assumes zero interchannel
+time difference for direct sound components, making it incompatible
+with time/amplitude panning (``stereo shuffling'') and many spaced
+microphone techniques. This option sets steering behavior for sounds
+with clear onsets but apparently nonzero interchannel time difference.
+If set to \fIneutralize\fR, steering is forced to neutral (zero in both
+axes). If set to \fIalign\fR, opposite-channel matrix inputs are advanced
+or delayed according to the detected interchannel time difference. The
+default is \fIalign\fR.
+.TP
 filter_bank=\fIid\fR (\fBmatrix4_mb\fR only)
 .TS
 tab (|);

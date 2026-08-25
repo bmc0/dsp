@@ -60,6 +60,16 @@
 #define PWRCMP_FACTOR_SENS    0.1
 #define OFFSET_BASE_SCALE     1.0
 
+#define DELAY_EST_MAX_DELTA    1.0
+#define DELAY_EST_SAMPLE_TIME 15.0
+#define DELAY_EST_WINDOW_ALPHA 0.35
+#define DELAY_EST_HIST_BASE_N  8
+#define DELAY_EST_HIST_SCALE   0.1
+#define DELAY_EST_FRONT_BIAS   1
+#define DELAY_EST_INDETERM     1.05
+#define DELAY_EST_AVG_THRESH  -0.3
+#define DELAY_EST_ALIGN_RESET  1
+
 #define MATRIX_V4_ADJ0_DEFAULT     0.5
 #define MATRIX_V4_ADJ1_DEFAULT     1.0
 #define SURR_MULT_DEFAULT          M_SQRT1_2
@@ -78,6 +88,7 @@
 #define USE_FIR_P_DEFAULT          0
 #define DO_DPWR_DECOUPLE_DEFAULT   1
 #define DIRECT_PATH_MODE_DEFAULT   DIRECT_PATH_NONE
+#define UEV_ACTION_MB_DEFAULT      UNALIGNED_EVENT_ACTION_ALIGN
 
 #define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
 
@@ -131,10 +142,24 @@ struct svf_pk_state {
 	double m0, m1, a0, alpha, beta;
 };
 
+struct delay_est_state {
+	struct ewma_state agc[2], sm[2];
+	double (*buf)[2], (*rot)[2], (*os)[2], (*ihc)[2];
+	double fs, tol, ra_tol, bin_tol, thresh, ws, ihc_norm[2];
+	int p, len, os_len, dt, ev_lag, n_bins;
+	struct { double dt; size_t n; } bin[8];
+};
+
+struct delay_est_hist {
+	struct ewma_state align_avg;
+	double *h, scale;
+	int p, len;
+};
+
 struct event_state {
 	struct ewma_state accom[6], norm[4], slow[2], smooth[2], avg[4];
 	struct ewma_state drift[4], drift_scale[2], drift_err[4], offset[4];
-	struct ewma_state pwrcmp_factor, ord_notch_scale;
+	struct ewma_state pwrcmp_factor, ord_notch_scale, align_avg, rs_scale;
 	struct biquad_state ord_lp[2];
 	struct svf_pk_state ord_notch[4];
 	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
@@ -144,21 +169,30 @@ struct event_state {
 #endif
 	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
 	double ord_factor, base_ord_ns, adj, ds_diff, off_thresh, rts_off;
+	double align_dt[2], align_max;
 	double *ds_ord_buf, *max_buf;
-	ssize_t t, t_sample, t_hold, t_end[2], t_off_ord;
+	ssize_t t, t_sample, t_delay_est, t_hold, t_end[2], t_off_ord;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
-	int buf_len, buf_p;
+	int buf_len, buf_p, unaligned, realign;
 	enum {
 		EVENT_FLAG_L = 1<<0,
 		EVENT_FLAG_R = 1<<1,
 		EVENT_FLAG_USE_ORD = 1<<2,
 		EVENT_FLAG_FUSE = 1<<3,
+		EVENT_FLAG_UNALIGNED = 1<<4,
 	} flags[2];
 	enum { OFF_FLAG_L = 1<<0, OFF_FLAG_R = 1<<1 } off_flags;
 };
 
+enum unaligned_event_action {
+	UNALIGNED_EVENT_ACTION_NONE = 0,
+	UNALIGNED_EVENT_ACTION_NEUTRALIZE,
+	UNALIGNED_EVENT_ACTION_ALIGN,
+};
+
 struct event_config {
 	int sample_frames, max_hold_frames;
+	enum unaligned_event_action uev_action;
 	double ord_factor_c, diff_lim, rear_ev_mask, offset_scale_slope;
 };
 
@@ -169,7 +203,7 @@ enum status_type {
 };
 
 struct cmc_params {
-	double surr_mult[2], adj;
+	double surr_mult[2], rs, adj;
 };
 
 union cmc_shelf_mult {
@@ -205,6 +239,7 @@ struct matrix4_config {
 	enum status_type status_type;
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;
+	enum unaligned_event_action uev_action;
 	calc_matrix_coefs_func calc_matrix_coefs;
 	double matrix_adj[2];
 	const struct channel_layout_info *channel_layout;
@@ -235,13 +270,14 @@ struct direct_path_state {
 int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
 	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, double);
+int delay_est_state_init(struct delay_est_state *, double, double, double, double, double);
+void delay_est_state_cleanup(struct delay_est_state *);
+int delay_est_hist_init(struct delay_est_hist *, int);
+void delay_est_hist_cleanup(struct delay_est_hist *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
-void surr_direct_pan(struct direct_path_state *, int, double, double, const struct axes *, int, double [4]);
-void matrix4_common_drain_samples(struct effect *, int, int, ssize_t, ssize_t *);
-void matrix4_common_channel_deps(struct effect *, int, int, char **);
-void matrix4_common_channel_offsets(struct effect *, int, int, ssize_t, ssize_t *);
+void surr_direct_pan(struct direct_path_state *, int, double, double, const struct axes *, int, int, double [4]);
 const char * matrix4_common_channel_label(struct effect *, enum channel_layout, int, int, int, int);
 
 #ifdef DSP_STATUSLINES
@@ -254,10 +290,10 @@ void draw_steering_bar(double, int, struct steering_bar *);
 
 /* private functions */
 int event_state_init_priv(struct event_state *, double, double, double);
-void event_config_init_priv(struct event_config *, double, double, double);
+void event_config_init_priv(struct event_config *, double, double, double, enum unaligned_event_action);
 void process_events_priv(struct event_state *, const struct event_config *, const struct envs *,
-	const struct envs *, double, double,
-	struct axes *, struct axes *, struct axes *);
+	const struct envs *, struct delay_est_state *, struct delay_est_hist *, double,
+	double, struct axes *, struct axes *, struct axes *);
 
 static inline double smoothstep_nc(double x)
 {
@@ -279,15 +315,17 @@ static int event_state_init(struct event_state *ev, const struct stream_info *is
 	return event_state_init_priv(ev, DOWNSAMPLED_FS(istream->fs), base_thresh_scale, base_ord_notch_scale);
 }
 
-static void event_config_init(struct event_config *evc, const struct stream_info *istream, double rear_ev_mask)
+static void event_config_init(struct event_config *evc, const struct stream_info *istream,
+	double rear_ev_mask, enum unaligned_event_action uev_action)
 {
-	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), rear_ev_mask, DIFF_OVERSHOOT);
+	event_config_init_priv(evc, DOWNSAMPLED_FS(istream->fs), rear_ev_mask, DIFF_OVERSHOOT, uev_action);
 }
 
 static void process_events(struct event_state *ev, const struct event_config *evc, const struct envs *env,
-	const struct envs *pwr_env, double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
+	const struct envs *pwr_env, struct delay_est_state *de, struct delay_est_hist *hist, double thresh_scale,
+	struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
-	process_events_priv(ev, evc, env, pwr_env, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev, ax_dpwr);
+	process_events_priv(ev, evc, env, pwr_env, de, hist, NORM_ACCOM_FACTOR, thresh_scale, ax, ax_ev, ax_dpwr);
 }
 
 static inline double fade_mult(ssize_t pos, ssize_t n, int is_out)
@@ -320,6 +358,15 @@ static inline void calc_input_envs(struct smooth_state *sm, double l, double r, 
 	pwr_env->r = ewma_run(&sm->pwr_env[1], r*r);
 	pwr_env->sum = ewma_run(&sm->pwr_env[2], sum*sum);
 	pwr_env->diff = ewma_run(&sm->pwr_env[3], diff*diff);
+}
+
+static inline void delay_est_insert(struct delay_est_state *de, double l, double r)
+{
+	if (de->buf) {
+		de->buf[de->p][0] = l;
+		de->buf[de->p][1] = r;
+		de->p = CBUF_NEXT(de->p, de->len);
+	}
 }
 
 static inline double phase_flip_pos_rs(struct axes *ax)

@@ -321,6 +321,16 @@ Example:
 		is the same for all directions. If set to a high value (e.g. 5), most
 		rear events will be ignored. The default values are 1 for `matrix4`
 		and 0.3 for `matrix4_mb`.
+	* `unaligned_event_action=none|neutralize|align` (`matrix4_mb` only)  
+		The standard matrix surround signal model assumes zero interchannel
+		time difference for direct sound components, making it incompatible
+		with time/amplitude panning ("stereo shuffling") and many spaced
+		microphone techniques. This option sets steering behavior for sounds
+		with clear onsets but apparently nonzero interchannel time difference.
+		If set to `neutralize`, steering is forced to neutral (zero in both
+		axes). If set to `align`, opposite-channel matrix inputs are advanced
+		or delayed according to the detected interchannel time difference. The
+		default is `align`.
 	* `filter_bank=id` (`matrix4_mb` only)  
 
 		ID           | Notes

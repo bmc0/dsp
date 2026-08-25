@@ -119,6 +119,7 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->do_dpwr_decouple = DO_DPWR_DECOUPLE_DEFAULT;
 	config->dp_mode = DIRECT_PATH_MODE_DEFAULT;
 	config->fb_type = FILTER_BANK_TYPE_DEFAULT;
+	config->uev_action = (is_mb) ? UEV_ACTION_MB_DEFAULT : UNALIGNED_EVENT_ACTION_NONE;
 	set_fb_stop_default(config);
 	memset(config->fb_id, 0, sizeof(config->fb_id));
 	config->calc_matrix_coefs = calc_matrix_coefs_v4;
@@ -281,6 +282,21 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					CHECK_ENDPTR(opt_arg, endptr, opt, goto opt_fail);
 					CHECK_RANGE(config->rear_ev_mask >= 0.0 && config->rear_ev_mask <= 100.0, opt, goto opt_fail);
 				}
+				else if (is_opt(opt, "unaligned_event_action=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (!is_mb) goto mb_only;
+					if (*opt_arg == '\0') goto needs_arg;
+					if (strcmp(opt_arg, "none") == 0)
+						config->uev_action = UNALIGNED_EVENT_ACTION_NONE;
+					else if (strcmp(opt_arg, "neutralize") == 0)
+						config->uev_action = UNALIGNED_EVENT_ACTION_NEUTRALIZE;
+					else if (strcmp(opt_arg, "align") == 0)
+						config->uev_action = UNALIGNED_EVENT_ACTION_ALIGN;
+					else {
+						LOG_FMT(LL_ERROR, "%s: error: unrecognized unaligned event action: %s", ei->name, opt_arg);
+						goto opt_fail;
+					}
+				}
 				else if (is_opt(opt, "filter_bank=")) {
 					char *opt_arg = isolate(opt, '=');
 					if (!is_mb) goto mb_only;
@@ -410,6 +426,70 @@ void smooth_state_init(struct smooth_state *sm, double fs)
 	for (int i = 0; i < 4; ++i) ewma_init(&sm->pwr_env[i], fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 }
 
+#define DELAY_EST_VERBOSITY      0
+#define DELAY_EST_OVERSAMPLE     2
+#define DELAY_EST_POLYPHASE_TAPS 8
+int delay_est_state_init(struct delay_est_state *de, double fs, double fc, double bw, double st_sc, double ev_fs)
+{
+	de->fs = fs;
+	de->tol = fs/(fc*16.0);                  /* ±22.5° at fc */
+	de->ra_tol = fs/MAXIMUM(fc*64.0, 8e4);   /* ±5.625° at fc or ±12.5µs */
+	de->bin_tol = fs/MAXIMUM(fc*16.0, 2e4);  /* ±22.5° at fc or ±50µs */
+	if (bw > 0.0) {
+		de->thresh = 1.0/sqrt(sqrt(bw*st_sc*(DELAY_EST_SAMPLE_TIME/1000.0)));
+		if (de->thresh > 0.9) de->thresh = 0.9;
+		else if (de->thresh < 0.5) de->thresh = 0.5;
+	}
+	else de->thresh = 0.5;
+	de->thresh *= M_PI_4;
+	de->ws = 1000.0/(DELAY_EST_MAX_DELTA*fs);
+	const double os_fs = fs*DELAY_EST_OVERSAMPLE;
+	de->dt = TIME_TO_FRAMES(DELAY_EST_MAX_DELTA, os_fs) + 1;
+	for (int i = 0; i < 2; ++i) ewma_init(&de->agc[i], os_fs, EWMA_RISE_TIME(63.0));
+	for (int i = 0; i < 2; ++i) ewma_init(&de->sm[i], os_fs, EWMA_RISE_TIME(0.5));
+	const double sample_time = st_sc*DELAY_EST_SAMPLE_TIME;
+	const int sample_frames = TIME_TO_FRAMES(sample_time, fs);
+	de->len = sample_frames + DELAY_EST_POLYPHASE_TAPS + (de->dt/DELAY_EST_OVERSAMPLE + (de->dt&(DELAY_EST_OVERSAMPLE-1)));
+	de->os_len = (de->len-DELAY_EST_POLYPHASE_TAPS)*DELAY_EST_OVERSAMPLE;
+	de->ev_lag = TIME_TO_FRAMES(MINIMUM(sample_time/2.0 + (DELAY_EST_POLYPHASE_TAPS/2)*1000/fs, EVENT_SAMPLE_TIME), ev_fs);
+#if DELAY_EST_VERBOSITY
+	LOG_FMT(LL_VERBOSE, "%s: dt=%d thresh=%g*pi/4 frames=%d (%gms) lag=%d", __func__,
+		de->dt, de->thresh/M_PI_4, sample_frames, sample_time, de->ev_lag);
+#endif
+	de->n_bins = 1;
+	de->bin[0].dt = 0.0;
+	de->bin[0].n = 1;
+	de->buf = calloc(de->len*2 + de->os_len*2, sizeof(double [2]));
+	if (check_alloc(__func__, de->buf)) return 1;
+	de->rot = de->buf+de->len;
+	de->os = de->rot+de->len;
+	de->ihc = de->os+de->os_len;
+	return 0;
+}
+
+void delay_est_state_cleanup(struct delay_est_state *de)
+{
+	free(de->buf);
+}
+
+int delay_est_hist_init(struct delay_est_hist *hist, int n)
+{
+	if (n > 0) {
+		hist->len = n;
+		hist->scale = DELAY_EST_HIST_SCALE/log(hist->len+2);
+		ewma_init(&hist->align_avg, 1.0, 10.0*n);
+		hist->h = calloc(hist->len, sizeof(double));
+		if (check_alloc(__func__, hist->h)) return 1;
+	}
+	else memset(hist, 0, sizeof(struct delay_est_hist));
+	return 0;
+}
+
+void delay_est_hist_cleanup(struct delay_est_hist *hist)
+{
+	free(hist->h);
+}
+
 /* SVF based on F. Adriaensen, "Digital State-Variable Filters" */
 static void svf_pk_init(struct svf_pk_state *state, double fs, double f0, double q, double g0)
 {
@@ -455,9 +535,12 @@ int event_state_init_priv(struct event_state *ev, double fs, double base_thresh_
 	for (int i = 0; i < 2; ++i) ewma_init(&ev->offset[i], fs, EWMA_RISE_TIME(NORM_TIME*1.25));
 	for (int i = 2; i < 4; ++i) ewma_init(&ev->offset[i], fs, EWMA_RISE_TIME(NORM_TIME));
 	ewma_init(&ev->pwrcmp_factor, fs, EWMA_RISE_TIME(PWRCMP_RISE_TIME));
-	ev->base_ord_ns = base_ord_notch_scale;
+	ev->base_ord_ns = (base_ord_notch_scale >= 1e-6) ? base_ord_notch_scale : 0.0;
 	ewma_init(&ev->ord_notch_scale, fs, EWMA_RISE_TIME(ORD_NOTCH_SCALE_RT*1000.0));
 	ewma_set(&ev->ord_notch_scale, 1.0);
+	ewma_init(&ev->align_avg, 1.0, 10.0);
+	ewma_init(&ev->rs_scale, fs, EWMA_RISE_TIME(RISE_TIME_FAST));
+	ewma_set(&ev->rs_scale, 1.0);
 	for (int i = 0; i < 2; ++i) biquad_init_using_type(&ev->ord_lp[i],
 		BIQUAD_LOWPASS, fs, (0.34*1000*1.5)/RISE_TIME_FAST, 0.577, 0, 0, BIQUAD_WIDTH_Q);
 	for (int i = 0; i < 2; ++i) svf_pk_init(&ev->ord_notch[i], fs, ORD_NOTCH_FREQ_1, 0.5, ORD_NOTCH_GAIN_1);
@@ -498,10 +581,12 @@ void event_state_cleanup(struct event_state *ev)
 	free(ev->max_buf);
 }
 
-void event_config_init_priv(struct event_config *evc, double fs, double rear_ev_mask, double diff_overshoot)
+void event_config_init_priv(struct event_config *evc, double fs, double rear_ev_mask,
+	double diff_overshoot, enum unaligned_event_action uev_action)
 {
 	evc->sample_frames = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	evc->max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, fs);
+	evc->uev_action = uev_action;
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
 	evc->diff_lim = M_PI_4*diff_overshoot;
 	evc->rear_ev_mask = rear_ev_mask;
@@ -583,9 +668,292 @@ static inline double ewma_run_scale_abs_asym(struct ewma_state *state, double s,
 }
 #endif
 
+static void delay_est_hist_insert(struct delay_est_hist *hist, double ndt)
+{
+	if (!hist || !hist->h) return;
+	hist->h[hist->p] = ndt;
+	hist->p = CBUF_NEXT(hist->p, hist->len);
+}
+
+static double delay_est_hist_weight(struct delay_est_hist *hist, double ndt, double ntol_r, double ref_ndt, double cs)
+{
+	if (!hist || !hist->h) return 1.0;
+	double n = 1.0 + smoothstep(1.5-fabs(ndt-ref_ndt)*ntol_r);
+	for (int i = 0; i < hist->len; ++i)
+		n += smoothstep(1.5-fabs(ndt-hist->h[i])*ntol_r);
+	return 1.0 + log(n)*hist->scale;
+}
+
+#if DELAY_EST_OVERSAMPLE == 4
+#if DELAY_EST_POLYPHASE_TAPS == 10
+static void delay_est_oversample(const double y[10][2], double z[4][2])
+{
+	/* Windowed sinc (Hamming); 4 phase; 10 taps/phase */
+	static const double flt[3][10] = {
+		/* phase 0 not stored */
+		/* phase 1 */
+		{ +3.90469813571417846e-03, -1.27203426833713048e-02, +3.81524257230108771e-02, -9.61975346330668224e-02,
+		  +2.85005409038896040e-01, +8.95199319354109790e-01, -1.55716688736421971e-01, +6.10791001088399968e-02,
+		  -2.27696801154778188e-02, +6.72778569505829739e-03, },
+		/* phase 2 */
+		{ +7.02504753823030969e-03, -2.42838444949337318e-02, +6.85461241303622071e-02, -1.71824776613028640e-01,
+		  +6.22235813459549369e-01, +6.22235813459549369e-01, -1.71824776613028640e-01, +6.85461241303622071e-02,
+		  -2.42838444949337318e-02, +7.02504753823030969e-03, },
+		/* phase 3 */
+		{ +6.72778569505829739e-03, -2.27696801154778188e-02, +6.10791001088399968e-02, -1.55716688736421971e-01,
+		  +8.95199319354109790e-01, +2.85005409038896040e-01, -9.61975346330668224e-02, +3.81524257230108771e-02,
+		  -1.27203426833713048e-02, +3.90469813571417846e-03, },
+	};
+	z[0][0] = y[4][0];
+	z[0][1] = y[4][1];
+	z[1][0] = y[0][0]*flt[2][0] + y[1][0]*flt[2][1] + y[2][0]*flt[2][2] + y[3][0]*flt[2][3] + y[4][0]*flt[2][4] +
+	          y[5][0]*flt[2][5] + y[6][0]*flt[2][6] + y[7][0]*flt[2][7] + y[8][0]*flt[2][8] + y[9][0]*flt[2][9];
+	z[1][1] = y[0][1]*flt[2][0] + y[1][1]*flt[2][1] + y[2][1]*flt[2][2] + y[3][1]*flt[2][3] + y[4][1]*flt[2][4] +
+	          y[5][1]*flt[2][5] + y[6][1]*flt[2][6] + y[7][1]*flt[2][7] + y[8][1]*flt[2][8] + y[9][1]*flt[2][9];
+	z[2][0] = y[0][0]*flt[1][0] + y[1][0]*flt[1][1] + y[2][0]*flt[1][2] + y[3][0]*flt[1][3] + y[4][0]*flt[1][4] +
+	          y[5][0]*flt[1][5] + y[6][0]*flt[1][6] + y[7][0]*flt[1][7] + y[8][0]*flt[1][8] + y[9][0]*flt[1][9];
+	z[2][1] = y[0][1]*flt[1][0] + y[1][1]*flt[1][1] + y[2][1]*flt[1][2] + y[3][1]*flt[1][3] + y[4][1]*flt[1][4] +
+	          y[5][1]*flt[1][5] + y[6][1]*flt[1][6] + y[7][1]*flt[1][7] + y[8][1]*flt[1][8] + y[9][1]*flt[1][9];
+	z[3][0] = y[0][0]*flt[0][0] + y[1][0]*flt[0][1] + y[2][0]*flt[0][2] + y[3][0]*flt[0][3] + y[4][0]*flt[0][4] +
+	          y[5][0]*flt[0][5] + y[6][0]*flt[0][6] + y[7][0]*flt[0][7] + y[8][0]*flt[0][8] + y[9][0]*flt[0][9];
+	z[3][1] = y[0][1]*flt[0][0] + y[1][1]*flt[0][1] + y[2][1]*flt[0][2] + y[3][1]*flt[0][3] + y[4][1]*flt[0][4] +
+	          y[5][1]*flt[0][5] + y[6][1]*flt[0][6] + y[7][1]*flt[0][7] + y[8][1]*flt[0][8] + y[9][1]*flt[0][9];
+}
+#elif DELAY_EST_POLYPHASE_TAPS == 8
+static void delay_est_oversample(const double y[8][2], double z[4][2])
+{
+	/* Windowed sinc (Lanczos); 4 phase; 8 taps/phase */
+	static const double flt[3][8] = {
+		/* phase 0 not stored */
+		/* phase 1 */
+		{ -7.82185008844197595e-03, +3.60421810242501015e-02, -9.56300628156539906e-02, +2.84966675025496774e-01,
+		  +8.95200626784895315e-01, -1.55512902680823739e-01, +5.98897588199378758e-02, -1.94209828137056895e-02, },
+		/* phase 2 */
+		{ -1.85052736214735593e-02, +6.62682525841995357e-02, -1.71320341329502052e-01, +6.22224364383214268e-01,
+		  +6.22224364383214268e-01, -1.71320341329502052e-01, +6.62682525841995357e-02, -1.85052736214735593e-02, },
+		/* phase 3 */
+		{ -1.94209828137056895e-02, +5.98897588199378758e-02, -1.55512902680823739e-01, +8.95200626784895315e-01,
+		  +2.84966675025496774e-01, -9.56300628156539906e-02, +3.60421810242501015e-02, -7.82185008844197595e-03, },
+	};
+	z[0][0] = y[3][0];
+	z[0][1] = y[3][1];
+	z[1][0] = y[0][0]*flt[2][0] + y[1][0]*flt[2][1] + y[2][0]*flt[2][2] + y[3][0]*flt[2][3] +
+	          y[4][0]*flt[2][4] + y[5][0]*flt[2][5] + y[6][0]*flt[2][6] + y[7][0]*flt[2][7];
+	z[1][1] = y[0][1]*flt[2][0] + y[1][1]*flt[2][1] + y[2][1]*flt[2][2] + y[3][1]*flt[2][3] +
+	          y[4][1]*flt[2][4] + y[5][1]*flt[2][5] + y[6][1]*flt[2][6] + y[7][1]*flt[2][7];
+	z[2][0] = y[0][0]*flt[1][0] + y[1][0]*flt[1][1] + y[2][0]*flt[1][2] + y[3][0]*flt[1][3] +
+	          y[4][0]*flt[1][4] + y[5][0]*flt[1][5] + y[6][0]*flt[1][6] + y[7][0]*flt[1][7];
+	z[2][1] = y[0][1]*flt[1][0] + y[1][1]*flt[1][1] + y[2][1]*flt[1][2] + y[3][1]*flt[1][3] +
+	          y[4][1]*flt[1][4] + y[5][1]*flt[1][5] + y[6][1]*flt[1][6] + y[7][1]*flt[1][7];
+	z[3][0] = y[0][0]*flt[0][0] + y[1][0]*flt[0][1] + y[2][0]*flt[0][2] + y[3][0]*flt[0][3] +
+	          y[4][0]*flt[0][4] + y[5][0]*flt[0][5] + y[6][0]*flt[0][6] + y[7][0]*flt[0][7];
+	z[3][1] = y[0][1]*flt[0][0] + y[1][1]*flt[0][1] + y[2][1]*flt[0][2] + y[3][1]*flt[0][3] +
+	          y[4][1]*flt[0][4] + y[5][1]*flt[0][5] + y[6][1]*flt[0][6] + y[7][1]*flt[0][7];
+}
+#endif /* DELAY_EST_POLYPHASE_TAPS */
+#elif DELAY_EST_OVERSAMPLE == 2
+#if DELAY_EST_POLYPHASE_TAPS == 10
+static void delay_est_oversample(const double y[10][2], double z[2][2])
+{
+	/* Windowed sinc (Hamming); 2 phase; 10 taps/phase */
+	static const double flt[10] = {
+		+7.02504753823030969e-03, -2.42838444949337318e-02, +6.85461241303622071e-02, -1.71824776613028640e-01,
+		+6.22235813459549369e-01, +6.22235813459549369e-01, -1.71824776613028696e-01, +6.85461241303622210e-02,
+		-2.42838444949337422e-02, +7.02504753823030969e-03,
+	};
+	z[0][0] = y[4][0];
+	z[0][1] = y[4][1];
+	z[1][0] = y[0][0]*flt[0] + y[1][0]*flt[1] + y[2][0]*flt[2] + y[3][0]*flt[3] + y[4][0]*flt[4] +
+	          y[5][0]*flt[5] + y[6][0]*flt[6] + y[7][0]*flt[7] + y[8][0]*flt[8] + y[9][0]*flt[9];
+	z[1][1] = y[0][1]*flt[0] + y[1][1]*flt[1] + y[2][1]*flt[2] + y[3][1]*flt[3] + y[4][1]*flt[4] +
+	          y[5][1]*flt[5] + y[6][1]*flt[6] + y[7][1]*flt[7] + y[8][1]*flt[8] + y[9][1]*flt[9];
+}
+#elif DELAY_EST_POLYPHASE_TAPS == 8
+static void delay_est_oversample(const double y[8][2], double z[2][2])
+{
+	/* Windowed sinc (Lanczos); 2 phase; 8 taps/phase */
+	static const double flt[8] = {
+		-2.39245719590458310e-02, +7.18429587806505288e-02, -1.75493437951545650e-01, +6.23769943523017845e-01,
+		+6.23769943523017845e-01, -1.75493437951545650e-01, +7.18429587806505288e-02, -2.39245719590458310e-02,
+	};
+	z[0][0] = y[3][0];
+	z[0][1] = y[3][1];
+	z[1][0] = y[0][0]*flt[0] + y[1][0]*flt[1] + y[2][0]*flt[2] + y[3][0]*flt[3] +
+	          y[4][0]*flt[4] + y[5][0]*flt[5] + y[6][0]*flt[6] + y[7][0]*flt[7];
+	z[1][1] = y[0][1]*flt[0] + y[1][1]*flt[1] + y[2][1]*flt[2] + y[3][1]*flt[3] +
+	          y[4][1]*flt[4] + y[5][1]*flt[5] + y[6][1]*flt[6] + y[7][1]*flt[7];
+}
+#endif /* DELAY_EST_POLYPHASE_TAPS */
+#endif /* DELAY_EST_OVERSAMPLE */
+
+static int delay_est_ihc_model(struct delay_est_state *de)
+{
+	ewma_set(&de->agc[1], ewma_set(&de->agc[0], 0.35));
+	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
+	double max[2] = {0};
+	for (int i = 0; i < de->os_len; ++i) {
+		const double x[2] = {
+			(smoothstep(de->os[i][0]*0.25+0.1)+smoothstep(de->os[i][0]*-0.25+0.1))*(1.0-ewma_get_last(&de->agc[0])),
+			(smoothstep(de->os[i][1]*0.25+0.1)+smoothstep(de->os[i][1]*-0.25+0.1))*(1.0-ewma_get_last(&de->agc[1])),
+		};
+		ewma_run(&de->agc[0], x[0]*10.0);
+		ewma_run(&de->agc[1], x[1]*10.0);
+		de->ihc[i][0] = ewma_run(&de->sm[0], x[0]*0.5);
+		de->ihc[i][1] = ewma_run(&de->sm[1], x[1]*0.5);
+		if (de->ihc[i][0] > max[0]) max[0] = de->ihc[i][0];
+		if (de->ihc[i][1] > max[1]) max[1] = de->ihc[i][1];
+	}
+	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
+	for (int i = de->os_len-1; i >= 0; --i) {
+		de->ihc[i][0] = ewma_run(&de->sm[0], de->ihc[i][0]);
+		de->ihc[i][1] = ewma_run(&de->sm[1], de->ihc[i][1]);
+	}
+	if (MINIMUM(max[0], max[1]) < MAXIMUM(max[0], max[1])*0.3+0.021) return 1;
+	return 0;
+}
+
+static inline double delay_est_step(struct delay_est_state *de, int dt, double *r_wt)
+{
+	double avg[2] = {0}, wt = 0.0;
+	const int dt0 = MINIMUM(-dt, 0), dt1 = MINIMUM(dt, 0);
+	for (int i = de->dt; i < de->os_len; ++i) {
+		const double w = de->ihc[i+dt0][0]*de->ihc[i+dt1][1];
+		const double v[2] = { de->os[i+dt0][0], de->os[i+dt1][1] };
+		avg[0] += square(v[0]+v[1])*w;
+		avg[1] += square(v[0]-v[1])*w;
+		wt += w;
+	}
+	if (r_wt) *r_wt = wt;
+	return calc_angle_pwr(avg[0], avg[1]);
+}
+
+static inline double interp_peak_quadratic(const double y[3], double *r_pk)
+{
+	if (y[0] == 0.0 && y[1] == 0.0 && y[2] == 0.0) return NAN;
+	const double num = y[0]-y[2], den = y[0]+y[2]-2.0*y[1];
+	if (fabs(num) > fabs(den)) return NAN;
+	const double x = num/(2.0*den);
+	*r_pk = y[1]-0.25*num*x;
+	return x;
+}
+
+static inline double interp_pts_quadratic(const double y[3], double t)
+{
+	const double c[3] = {
+		y[1],
+		(1.0/2.0)*(y[2]-y[0]),
+		(1.0/2.0)*(y[2]+y[0]) - y[1],
+	};
+	return (c[2]*t+c[1])*t+c[0];
+}
+
+static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *hist,
+	double ref_dt, const double accom[2], double *r_max_cs)
+{
+	memcpy(de->rot, de->buf[de->p], sizeof(double [2])*(de->len-de->p));
+	memcpy(de->rot[de->len-de->p], de->buf, sizeof(double [2])*de->p);
+	/* compute accommodated l/r normalization */
+	double norm[2] = {0};
+	for (int i = 0; i < de->len; ++i) {
+		norm[0] += square(de->rot[i][0]);
+		norm[1] += square(de->rot[i][1]);
+	}
+	norm[0] /= de->len; norm[1] /= de->len;
+	const double norm_accom[2] = { norm[0]-accom[0], norm[1]-accom[1] };
+	if (MINIMUM(norm_accom[0], norm_accom[1]) < MAXIMUM(norm_accom[0], norm_accom[1])*0.01) return ref_dt;
+	norm[0] = 1.0/(sqrt((accom[0] < norm[0]*0.9) ? norm_accom[0] : norm[0]*0.1)*de->ihc_norm[0]);
+	norm[1] = 1.0/(sqrt((accom[1] < norm[1]*0.9) ? norm_accom[1] : norm[1]*0.1)*de->ihc_norm[1]);
+	/* normalize for IHC model */
+	for (int i = 0; i < de->len; ++i) {
+		de->rot[i][0] *= de->ihc_norm[0];
+		de->rot[i][1] *= de->ihc_norm[1];
+	}
+	/* oversample */
+	for (int i = 0; i < de->len-DELAY_EST_POLYPHASE_TAPS; ++i)
+		delay_est_oversample(&de->rot[i], &de->os[i*DELAY_EST_OVERSAMPLE]);
+	if (delay_est_ihc_model(de)) return ref_dt;
+	/* re-normalize for c/s computation */
+	for (int i = 0; i < de->os_len; ++i) {
+		de->os[i][0] *= norm[0];
+		de->os[i][1] *= norm[1];
+	}
+	/* find c/s values; interpolate peaks */
+	const double ref_ndt = ref_dt*de->ws, ntol_r = 1.0/(de->tol*de->ws);
+	double max_cs[3] = {0}, max_cs_dt = NAN;
+	double w[3] = {0}, y[3] = {
+		0.0,
+		delay_est_step(de, -de->dt,   &w[1]),
+		delay_est_step(de, -de->dt+1, &w[2]),
+	};
+	for (int dt = -de->dt+2; dt <= de->dt; ++dt) {
+		w[0] = w[1]; w[1] = w[2];
+		y[0] = y[1]; y[1] = y[2]; y[2] = delay_est_step(de, dt, &w[2]);
+		double cs;
+		const double x = interp_peak_quadratic(y, &cs);
+		if (!isnan(x)) {
+			const double idt = ((dt-1)+x)*(1.0/DELAY_EST_OVERSAMPLE);
+			const double abs_idt = fabs(idt), wx = abs_idt*de->ws;
+			if (wx < 1.0) {
+				const double awcs = fabs(cs) * interp_pts_quadratic(w, x) *
+					delay_est_hist_weight(hist, idt*de->ws, ntol_r, ref_ndt, cs) *
+					smoothstep((1.0-wx)*(1.0/DELAY_EST_WINDOW_ALPHA));
+				if (awcs > max_cs[1]) {
+					max_cs[0] = cs;
+					max_cs[2] = max_cs[1];
+					max_cs[1] = awcs;
+					max_cs_dt = idt;
+				}
+				else if (awcs > max_cs[2])
+					max_cs[2] = awcs;
+			}
+			#if DELAY_EST_VERBOSITY > 2
+				LOG_FMT(LL_VERBOSE, "%s: peak at dt=%.1fµs (%.2f): %g°",
+					__func__, idt*1e6/de->fs, idt, TO_DEGREES(cs));
+			#endif
+		}
+	}
+	#if DELAY_EST_VERBOSITY > 1
+		LOG_FMT(LL_VERBOSE, "%s: max_cs=%g° dt=%.1fµs (%.2f)", __func__,
+			TO_DEGREES(max_cs[0]), max_cs_dt*(1000.0*1000.0)/de->fs, max_cs_dt);
+	#endif
+	if (isnan(max_cs_dt)) return NAN;
+	if (max_cs[2] > DBL_MIN && fabs(max_cs_dt-ref_dt) > de->tol
+			&& max_cs[1] < max_cs[2]*DELAY_EST_INDETERM) {
+		#if DELAY_EST_VERBOSITY
+			LOG_FMT(LL_VERBOSE, "%s: likely indeterminate dt: close peak magnitudes %g %g",
+				__func__, max_cs[1], max_cs[2]);
+		#endif
+		return NAN;
+	}
+	if (fabs(max_cs[0]) > de->thresh) {
+		int b = 0;
+		while (b < de->n_bins && fabs(max_cs_dt-de->bin[b].dt) > de->bin_tol) ++b;
+		if (b > 0) {
+			if (b < de->n_bins) {
+				char tmp_bin[sizeof(de->bin[0])];
+				memcpy(&tmp_bin, &de->bin[b], sizeof(de->bin[0]));
+				memmove(&de->bin[1], &de->bin[0], b*sizeof(de->bin[0]));
+				memcpy(&de->bin[0], &tmp_bin, sizeof(de->bin[0]));
+			}
+			else {
+				if (b < LENGTH(de->bin)) ++de->n_bins;
+				else b = LENGTH(de->bin)-1;
+				memmove(&de->bin[1], &de->bin[0], b*sizeof(de->bin[0]));
+				memset(&de->bin[0], 0, sizeof(de->bin[0]));
+			}
+		}
+		++de->bin[0].n;
+		de->bin[0].dt = max_cs_dt = de->bin[0].dt + (max_cs_dt-de->bin[0].dt)/MINIMUM(de->bin[0].n, 16);
+		/* LOG_FMT(LL_VERBOSE, "%s: binned: dt=%g n=%zd (n_bins=%d)", __func__, de->bin[0].dt, de->bin[0].n, de->n_bins); */
+		delay_est_hist_insert(hist, max_cs_dt*de->ws);
+	}
+	if (r_max_cs) *r_max_cs = max_cs[0];
+	return max_cs_dt;
+}
+
 void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env,
-	const struct envs *pwr_env, double norm_accom_factor, double thresh_scale,
-	struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
+	const struct envs *pwr_env, struct delay_est_state *de, struct delay_est_hist *hist, double norm_accom_factor,
+	double thresh_scale, struct axes *ax, struct axes *ax_ev, struct axes *ax_dpwr)
 {
 	const struct axes ord = {
 		.lr = calc_angle(env->l, env->r),
@@ -676,8 +1044,23 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			}
 			/* LOG_FMT(LL_VERBOSE, "%s(): lookback: %zd samples", __func__, ev->t - ev->t_sample); */
 		#endif
+			if (de && de->buf) ev->t_delay_est = ev->t_sample + de->ev_lag;
 		}
-		else ev->flags[1] |= EVENT_FLAG_FUSE;
+		else {
+			ev->flags[1] |= EVENT_FLAG_FUSE;
+			if (ev->flags[0] & EVENT_FLAG_UNALIGNED)
+				ev->t_delay_est = ev->t_sample + de->ev_lag;
+		}
+		if (ev->t_delay_est) {
+			de->ihc_norm[1] = de->ihc_norm[0] = 0.0;
+			for (int i = 0; i < de->len; ++i) {
+				de->ihc_norm[0] += square(de->buf[i][0]);
+				de->ihc_norm[1] += square(de->buf[i][1]);
+			}
+			de->ihc_norm[0] = 1.0/(sqrt(de->ihc_norm[0]/de->len)+DBL_MIN);
+			de->ihc_norm[1] = 1.0/(sqrt(de->ihc_norm[1]/de->len)+DBL_MIN);
+		}
+		ev->align_max = 0.0;
 	}
 
 	if (ev->t_sample) {
@@ -693,8 +1076,30 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			if (l_event > ev->max[1]) ev->max[1] = l_event;
 			if (r_event > ev->max[1]) ev->max[1] = r_event;
 		}
+		if (ev->t_delay_est && ev->t >= ev->t_delay_est) {
+			const double lr_accom[2] = { ewma_get_last(&ev->accom[0]), ewma_get_last(&ev->accom[1]) };
+			const double dt = ev->align_dt[1] = estimate_delay(de, hist, ev->align_dt[0], lr_accom, &ev->align_max);
+			const double tol = (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN) ? de->ra_tol : de->tol;
+			const double avg_v = (isnan(dt) || fabs(dt) > de->tol) ? -1.0 : 1.0;
+			const double align_wavg = (hist && hist->h) ? ewma_run(&ev->align_avg, avg_v)*0.5 +
+				ewma_run(&hist->align_avg, avg_v)*0.5 : ewma_run(&ev->align_avg, avg_v);
+			if (isnan(dt) || fabs(dt-ev->align_dt[0]) > tol
+		#if DELAY_EST_FRONT_BIAS
+				|| (ev->align_max < 0.0 && (fabs(dt) > de->tol || align_wavg < DELAY_EST_AVG_THRESH))
+		#endif
+			) {
+				ev->flags[1] |= EVENT_FLAG_UNALIGNED;
+				#if DELAY_EST_VERBOSITY
+					LOG_FMT(LL_VERBOSE, "%s: unaligned event: max_cs=%g° dt=%.1fµs (%.2f)", __func__,
+						TO_DEGREES(ev->align_max), dt*(1000.0*1000.0)/de->fs, dt);
+				#endif
+			}
+			ev->t_delay_est = 0;
+		}
 		if (ev->t - ev->t_sample >= evc->sample_frames || (ev->flags[1] & EVENT_FLAG_FUSE && ev->t_end[1])) {
-			ev->t_sample = 0;
+			ev->t_delay_est = ev->t_sample = 0;
+			const double align_wavg = (hist && hist->h) ? ewma_get_last(&ev->align_avg)*0.5 +
+				ewma_get_last(&hist->align_avg)*0.5 : ewma_get_last(&ev->align_avg);
 			double ev_dir_lr = ewma_get_last(&ev->avg[2]);
 			double ev_dir_cs = ewma_get_last(&ev->avg[3]);
 			if (fabs(ev_dir_lr)+fabs(ev_dir_cs) > evc->diff_lim) {
@@ -702,7 +1107,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				ev_dir_lr = ewma_get_last(&ev->avg[0]);
 				ev_dir_cs = ewma_get_last(&ev->avg[1]);
 			}
-			if ((ev->flags[1] & EVENT_FLAG_FUSE) && (ev->flags[1] & EVENT_FLAG_USE_ORD) && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
+			if (ev->flags[1] & EVENT_FLAG_FUSE && ev->flags[1] & EVENT_FLAG_USE_ORD && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(ev_dir_lr), TO_DEGREES(ev_dir_cs)); */
@@ -723,6 +1128,41 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					else ++ev->diff_count;
 				}
 				if (ev->flags[1] & EVENT_FLAG_USE_ORD) ev->ord_factor += 1.0;
+				if (ev->flags[1] & EVENT_FLAG_UNALIGNED) {
+					const int dt_valid = (!isnan(ev->align_dt[1]) && fabs(ev->align_max) >= de->thresh);
+					if (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN && dt_valid
+				#if DELAY_EST_FRONT_BIAS
+						&& !(ev->align_max < 0.0 && fabs(ev->align_dt[1]) > de->tol)
+				#endif
+					) {
+						ev->dir.lr = ewma_get_last(&ev->avg[2]);
+						ev->dir.cs = ev->align_max * (1.0 - fabs(ev->dir.lr)*(1.0/M_PI_4));
+						ev->align_dt[0] = ev->align_dt[1];
+						ev->realign = 1;
+						#if DELAY_EST_VERBOSITY
+							LOG_FMT(LL_VERBOSE, "%s: align: dt=%.1fµs cs=%g°→%g°", __func__,
+								ev->align_dt[0]*(1000.0*1000.0)/de->fs, TO_DEGREES(ev_dir_cs), TO_DEGREES(ev->dir.cs));
+						#endif
+					}
+					else if (evc->uev_action) {
+						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH
+								&& ev->dir.cs < 0.06*square(ev->dir.lr)-(M_PI_4/16))) {
+							ev->dir.cs = ev->dir.lr = 0.0;
+						#if DELAY_EST_ALIGN_RESET
+							if (align_wavg >= DELAY_EST_AVG_THRESH && ev->align_dt[0] != 0.0) {
+								ev->align_dt[0] = 0.0;
+								ev->realign = 1;
+							}
+						#endif
+						}
+						else {  /* indeterminate/unreliable dt; use ord angles */
+							ev->dir.lr = ewma_get_last(&ev->avg[0]);
+							ev->dir.cs = ewma_get_last(&ev->avg[1]);
+						}
+					}
+				}
+				else if (!(ev->flags[1] & EVENT_FLAG_USE_ORD) && fabs(ev->align_max) > fabs(ev->dir.lr)+fabs(ev->dir.cs))
+					ev->dir.cs = ev->align_max * (1.0 - fabs(ev->dir.lr)*(1.0/M_PI_4));
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
 				ev->t_end[0] = ev->t_end[1];
@@ -731,6 +1171,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					__func__, (ev->flags[1] & EVENT_FLAG_USE_ORD) ? "ord" : "diff", ev->max[1],
 					TO_DEGREES(ev->dir.lr), TO_DEGREES(ev->dir.cs)); */
 			}
+			ev->unaligned = (de && (align_wavg < DELAY_EST_AVG_THRESH || fabs(ev->align_dt[0]) > de->tol));
 		}
 	}
 
@@ -833,6 +1274,16 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 	}
 	norm_axes(ax);
 	norm_axes(ax_dpwr);
+	if (ev->unaligned && ewma_get_last(&ev->rs_scale) > 0.0) {
+		if (ax->cs >= 0.0 || ax_ord_last.cs >= 0.0) ewma_set(&ev->rs_scale, 0.0);
+		else if (ewma_get_last(&ev->rs_scale) < 0.0001) ewma_set(&ev->rs_scale, 0.0);
+		else ewma_run_scale(&ev->rs_scale, 0.0, (ev->t_hold) ? ev->ds_diff : (RISE_TIME_FAST/ACCOM_TIME)*ds_ord);
+	}
+	else if (!ev->unaligned && ewma_get_last(&ev->rs_scale) < 1.0) {
+		if (ax->cs >= 0.0 || ax_ord_last.cs >= 0.0) ewma_set(&ev->rs_scale, 1.0);
+		else if (ewma_get_last(&ev->rs_scale) > 0.9999) ewma_set(&ev->rs_scale, 1.0);
+		else ewma_run_scale(&ev->rs_scale, 1.0, (ev->t_hold) ? ev->ds_diff : (RISE_TIME_FAST/ACCOM_TIME)*ds_ord);
+	}
 	ewma_run_set_max(&ev->ord_notch_scale, ord_notch_scale(ax));
 	const double ds_ord_thresh = thresh*ORD_WEIGHT_THRESH;
 	ev->ds_ord_buf[ev->buf_p] = 1.0;
@@ -1009,7 +1460,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 			m->rr -= gl2 * sin(front_cs) * front_lr_mult;
 		}
 		const double cf_sm2 = square(MINIMUM(p->surr_mult[1], 1.0));
-		const double cf = 1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2));
+		const double cf = (1.0-sqrt((1.0-cf_sm2)/(1.0+cf_sm2)))*p->rs;
 		m->ll = 1.0 + m->ll*cf;
 		m->lr = m->lr*cf;
 		m->rl = m->rl*cf;
@@ -1048,7 +1499,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 	}
 	else if (ph_cs >= -M_PI_4/2) {
 		const double pe_fsfw = pe_sf*cos(4.0*abs_ph_cs);
-		const double pe_ssfw = M_SQRT1_2*sin(4.0*abs_ph_cs);
+		const double pe_ssfw = M_SQRT1_2*sin(4.0*abs_ph_cs)*p->rs;
 		if (ph_lr > 0.0) {
 			m->ll += pe[0]*pe_fsfw; m->lr += pe[1]*pe_fsfw;
 			m->lsl += pe[0]*pe_ssfw; m->lsr -= pe[1]*pe_ssfw;
@@ -1059,16 +1510,17 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 		}
 	}
 	else {
-		const double pe_gcs = (0.5+0.5*tan(2.0*abs_ph_cs-M_PI_2))*(M_SQRT2-1);
+		const double pe_ssf = M_SQRT1_2*p->rs;
+		const double pe_gcs = (0.5+0.5*tan(2.0*abs_ph_cs-M_PI_2))*(2-M_SQRT2)*pe_ssf;
 		m->lsl += pe_gcs; m->lsr -= pe_gcs;
 		m->rsl -= pe_gcs; m->rsr += pe_gcs;
 		if (ph_lr > 0.0) {
-			m->lsl += pe[0]*M_SQRT1_2;
-			m->lsr -= pe[1]*M_SQRT1_2;
+			m->lsl += pe[0]*pe_ssf;
+			m->lsr -= pe[1]*pe_ssf;
 		}
 		else if (ph_lr < 0.0) {
-			m->rsl -= pe[1]*M_SQRT1_2;
-			m->rsr += pe[0]*M_SQRT1_2;
+			m->rsl -= pe[1]*pe_ssf;
+			m->rsr += pe[0]*pe_ssf;
 		}
 	}
 #endif
@@ -1149,13 +1601,13 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 	m->rsr *= pdc_s;
 }
 
-void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs,
-	double ev_ds_diff, const struct axes *ax, int have_rears, double r[4])
+void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs, double ev_ds_diff,
+	const struct axes *ax, int ev_unaligned, int have_rears, double r[4])
 {
 	const double x = fabs(ax->lr);
 	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0; r[3] = 0.0;
 	if (dp->mode == DIRECT_PATH_EVENT) {
-		if (!dp->enable && ev_hold) {
+		if (!dp->enable && ev_hold && !ev_unaligned) {
 			const double eb = (-0.45*x+0.8)*x*x-(M_PI/8);
 			if (ev_cs <= eb) {
 				if (ax->cs >= 0.0) ewma_set(&dp->zs, 1.0);
@@ -1166,7 +1618,7 @@ void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs,
 			const double y0 = (-0.05*x+0.17)*x*x-(M_PI/32);
 			const double y1 = (-0.15*x+0.37)*x*x-(M_PI/12);
 			if (ev_hold) {
-				if (ev_cs >= y1) {
+				if (ev_cs >= y1 || ev_unaligned) {
 					if (ax->cs >= y0) goto direct_path_finish;
 					else dp->enable = 2;
 				}
@@ -1203,30 +1655,6 @@ void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs,
 			r[1] = g*cos(z2); r[2] = g*sin(z2);
 		}
 	}
-}
-
-void matrix4_common_drain_samples(struct effect *e, int c0, int c1, ssize_t len, ssize_t *drain_samples)
-{
-	drain_samples[c0] += len;
-	drain_samples[c1] += len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) drain_samples[i] += len;
-}
-
-void matrix4_common_channel_deps(struct effect *e, int c0, int c1, char **deps)
-{
-	SET_BIT(deps[c0], c1);
-	SET_BIT(deps[c1], c0);
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) {
-		SET_BIT(deps[i], c0);
-		SET_BIT(deps[i], c1);
-	}
-}
-
-void matrix4_common_channel_offsets(struct effect *e, int c0, int c1, ssize_t len, ssize_t *latency)
-{
-	latency[c0] += len;
-	latency[c1] += len;
-	for (int i = e->istream.channels; i < e->ostream.channels; ++i) latency[i] += len;
 }
 
 static const char *surr_map_2_2[] = { "LS", "RS", "LSd", "RSd" };
