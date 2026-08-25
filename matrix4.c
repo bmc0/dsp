@@ -104,13 +104,6 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 {
 	struct matrix4_state *state = (struct matrix4_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
-		double cur_fade_mult = 1.0;
-		if (state->fade_p > 0) {
-			cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
-			--state->fade_p;
-		}
-		else if (state->disable) cur_fade_mult = 0.0;
-
 		const sample_t s0 = ibuf[i*e->istream.channels + state->c0];
 		const sample_t s1 = ibuf[i*e->istream.channels + state->c1];
 		const sample_t s0_bp = biquad(&state->in_lp[0], biquad(&state->in_hp[0], s0));
@@ -136,6 +129,13 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 				if (state->have_rears) cs_interp_insert(&state->m_interp.rdir, r_pan[2]);
 				matrix_adj = state->matrix_adj[0]*(1.0-r_pan[3]) + state->matrix_adj[1]*r_pan[3];
 			}
+
+			double cur_fade_mult = 1.0;
+			if (state->fade_p > 0) {
+				cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
+				--state->fade_p;
+			}
+			else if (state->disable) cur_fade_mult = 0.0;
 
 			const double w_step = smoothstep(state->ax.cs*(-2/M_PI_4));
 			const double w = smf_asym_run(&state->bg_cs, w_step+1.0)-1.0;
@@ -495,7 +495,7 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 		state->lowpass_mult = pow(1.0/(1.0+(lp_f*lp_f/(config.lowpass_f0*config.lowpass_f0))), config.lowpass_order/2.0);
 	}
 	else state->lowpass_mult = 1.0;
-	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
+	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, DOWNSAMPLED_FS(istream->fs));
 	event_config_init(&state->evc, istream, config.rear_ev_mask);
 
 	return e;

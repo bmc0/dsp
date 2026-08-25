@@ -242,15 +242,6 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (ssize_t i = 0; i < *frames; ++i) {
-		double cur_fade_mult = 1.0;
-		if (state->fade_p > 0) {
-			cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
-			--state->fade_p;
-		}
-		else if (state->disable) cur_fade_mult = 0.0;
-
-		int n_angles = 0;
-		struct axes angles[FB_MAX_BANDS];
 		sample_t out_l = 0.0, out_r = 0.0, out_ls = 0.0, out_rs = 0.0, out_lr = 0.0, out_rr = 0.0;
 		sample_t out_ls_dir = 0.0, out_rs_dir = 0.0, out_lr_dir = 0.0, out_rr_dir = 0.0;
 		const sample_t s_syn[2] = {
@@ -263,32 +254,31 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		};
 		filter_bank_run_syn(&state->fb, s_syn);
 		filter_bank_run_an(&state->fb, s_an);
-		#if DOWNSAMPLE_FACTOR > 1
+	#if DOWNSAMPLE_FACTOR > 1
 		state->s = (state->s + 1 >= DOWNSAMPLE_FACTOR) ? 0 : state->s + 1;
+	#endif
+
+		for (int k = 0; k < state->n_bands; ++k) {
+			struct matrix4_band *band = &state->band[k];
+			if (!(state->fb.an.p & state->fb.an.mask[k]))
+				calc_input_envs(&band->sm, state->fb.an.s[k][0], state->fb.an.s[k][1], &band->env, &band->pwr_env);
+		}
+
+	#if DOWNSAMPLE_FACTOR > 1
 		if (state->s == 0) {
-		#else
+	#else
 		if (1) {
-		#endif
+	#endif
+			int n_angles = 0;
+			struct axes angles[FB_MAX_BANDS];
 			/* find bands with possible events */
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
 				if (band->ax_f.ev_maybe) angles[n_angles++] = band->ax_f.diff_last;
 			}
-		}
-		for (int k = 0; k < state->n_bands; ++k) {
-			struct matrix4_band *band = &state->band[k];
 
-			const sample_t s0_d_fb = state->fb.syn[0].s[k];
-			const sample_t s1_d_fb = state->fb.syn[1].s[k];
-
-			if (!(state->fb.an.p & state->fb.an.mask[k]))
-				calc_input_envs(&band->sm, state->fb.an.s[k][0], state->fb.an.s[k][1], &band->env, &band->pwr_env);
-
-			#if DOWNSAMPLE_FACTOR > 1
-			if (state->s == 0) {
-			#else
-			if (1) {
-			#endif
+			for (int k = 0; k < state->n_bands; ++k) {
+				struct matrix4_band *band = &state->band[k];
 				/* modulate event threshold based on the number of
 				   bands with similar differential steering angles */
 				double ev_thresh_fact = 0.0;
@@ -339,6 +329,13 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->evl_samples += 2;
 				#endif
 
+				double cur_fade_mult = 1.0;
+				if (state->fade_p > 0) {
+					cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
+					--state->fade_p;
+				}
+				else if (state->disable) cur_fade_mult = 0.0;
+
 				const double w = smoothstep(band->ax_f.ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
 				const double ct_pcf = state->contour_pwrcmp * band->ax_f.pwrcmp_factor;
@@ -377,7 +374,12 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 				}
 			}
+		}
 
+		for (int k = 0; k < state->n_bands; ++k) {
+			struct matrix4_band *band = &state->band[k];
+			const sample_t s0_d_fb = state->fb.syn[0].s[k];
+			const sample_t s1_d_fb = state->fb.syn[1].s[k];
 			sample_t b_l = s0_d_fb*cs_interp(&band->m_interp.ll, state->s) + s1_d_fb*cs_interp(&band->m_interp.lr, state->s);
 			sample_t b_r = s0_d_fb*cs_interp(&band->m_interp.rl, state->s) + s1_d_fb*cs_interp(&band->m_interp.rr, state->s);
 			sample_t b_ls = s0_d_fb*cs_interp(&band->m_interp.lsl, state->s) + s1_d_fb*cs_interp(&band->m_interp.lsr, state->s);
@@ -714,7 +716,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	#endif
 	}
 
-	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, istream->fs);
+	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, DOWNSAMPLED_FS(istream->fs));
 	event_config_init(&state->evc, istream, config.rear_ev_mask);
 #endif
 	fshape_init(&state->fshape[0], istream->fs, fshape_lf, fshape_hf, 0);
