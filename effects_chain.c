@@ -973,8 +973,10 @@ static int ec_align_channels(struct ec_postproc_state *state, struct effects_cha
 			/* FIXME: should store fractional samples as well, but the error is generally small */
 			const int gcd = find_gcd(e->ostream.fs, e->istream.fs);
 			const int ratio_n = e->ostream.fs/gcd, ratio_d = e->istream.fs/gcd;
-			for (int i = 0; i < e->ostream.channels; ++i)
+			for (int i = 0; i < e->ostream.channels; ++i) {
 				delays[i] = ratio_mult_ceil(delays[i], ratio_n, ratio_d);
+				offsets[i] = ratio_mult_ceil(offsets[i], ratio_n, ratio_d);
+			}
 		}
 		nd_part = 0;
 		for (int i = 0; i < e->ostream.channels; ++i)
