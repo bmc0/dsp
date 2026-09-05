@@ -277,6 +277,13 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				if (band->ax_f.ev_maybe) angles[n_angles++] = band->ax_f.diff_last;
 			}
 
+			double cur_fade_mult = 1.0;
+			if (state->fade_p > 0) {
+				cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
+				--state->fade_p;
+			}
+			else if (state->disable) cur_fade_mult = 0.0;
+
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
 				/* modulate event threshold based on the number of
@@ -328,13 +335,6 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					}
 					band->evl_samples += 2;
 				#endif
-
-				double cur_fade_mult = 1.0;
-				if (state->fade_p > 0) {
-					cur_fade_mult = fade_mult(state->fade_p, state->fade_frames, state->disable);
-					--state->fade_p;
-				}
-				else if (state->disable) cur_fade_mult = 0.0;
 
 				const double w = smoothstep(band->ax_f.ax.cs*(-2/M_PI_4));
 				const double surr_mult = (w*state->surr_mult[1] + (1.0-w)*state->surr_mult[0])*cur_fade_mult;
