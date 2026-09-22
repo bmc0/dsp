@@ -41,7 +41,6 @@
 #define ORD_FACTOR_DECAY     10.0
 #define EVENT_SAMPLE_TIME    30.0
 #define EVENT_MAX_HOLD_TIME 200.0
-#define EVENT_MIN_HOLD_TIME  30.0
 #define EVENT_MASK_TIME     100.0
 #define ORD_SENS_ERR          2.0
 #define ORD_SENS_WEIGHT       3.0
@@ -159,7 +158,7 @@ struct event_state {
 };
 
 struct event_config {
-	int sample_frames, max_hold_frames, min_hold_frames;
+	int sample_frames, max_hold_frames;
 	double ord_factor_c, diff_lim, rear_ev_mask, offset_scale_slope;
 };
 

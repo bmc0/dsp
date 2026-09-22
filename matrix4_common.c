@@ -502,12 +502,11 @@ void event_config_init_priv(struct event_config *evc, double fs, double rear_ev_
 {
 	evc->sample_frames = TIME_TO_FRAMES(EVENT_SAMPLE_TIME, fs);
 	evc->max_hold_frames = TIME_TO_FRAMES(EVENT_MAX_HOLD_TIME, fs);
-	evc->min_hold_frames = TIME_TO_FRAMES(EVENT_MIN_HOLD_TIME, fs);
 	evc->ord_factor_c = exp(-1.0/(fs*ORD_FACTOR_DECAY));
 	evc->diff_lim = M_PI_4*diff_overshoot;
 	evc->rear_ev_mask = rear_ev_mask;
-	evc->offset_scale_slope = (EVENT_MAX_HOLD_TIME/EVENT_MIN_HOLD_TIME-1.0)
-		/ ((EVENT_MAX_HOLD_TIME-EVENT_MIN_HOLD_TIME)*fs/1000.0);
+	evc->offset_scale_slope = (EVENT_MAX_HOLD_TIME/EVENT_SAMPLE_TIME-1.0)
+		/ ((EVENT_MAX_HOLD_TIME-EVENT_SAMPLE_TIME)*fs/1000.0);
 }
 
 void phase_flip_init_params(struct phase_flip_params *pf, double fs)
