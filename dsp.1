@@ -341,6 +341,14 @@ axes). If set to \fIalign\fR, opposite-channel matrix inputs are advanced
 or delayed according to the detected interchannel time difference. The
 default is \fIalign\fR.
 .TP
+xtc[=\fIild\fR[:\fIitd\fR[:\fIfl\fR[-\fIfh\fR]]]|\fInone\fR] (\fBmatrix4_mb\fR only)
+Recursive acoustic crosstalk cancellation for front phantom sources.
+The parameters \fIild\fR and \fIitd\fR are the interaural level difference in
+dB and the interaural time difference in microseconds. \fIfl\fR and \fIfh\fR
+set the low and high passband edges for the cancellation signal. If
+unspecified, the parameters default to 14dB, 250\[mc]s, 0Hz, and 4kHz,
+respectively. The default setting is \fInone\fR.
+.TP
 filter_bank=\fIid\fR (\fBmatrix4_mb\fR only)
 .TS
 tab (|);

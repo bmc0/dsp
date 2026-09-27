@@ -331,6 +331,13 @@ Example:
 		axes). If set to `align`, opposite-channel matrix inputs are advanced
 		or delayed according to the detected interchannel time difference. The
 		default is `align`.
+	* `xtc[=ild[:itd[:fl[-fh]]]|none]` (`matrix4_mb` only)  
+		Recursive acoustic crosstalk cancellation for front phantom sources.
+		The parameters `ild` and `itd` are the interaural level difference in
+		dB and the interaural time difference in microseconds. `fl` and `fh`
+		set the low and high passband edges for the cancellation signal. If
+		unspecified, the parameters default to 14dB, 250µs, 0Hz, and 4kHz,
+		respectively. The default setting is `none`.
 	* `filter_bank=id` (`matrix4_mb` only)  
 
 		ID           | Notes

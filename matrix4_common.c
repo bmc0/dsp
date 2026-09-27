@@ -126,6 +126,11 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 	config->matrix_adj[0] = MATRIX_V4_ADJ0_DEFAULT;
 	config->matrix_adj[1] = MATRIX_V4_ADJ1_DEFAULT;
 	config->channel_layout = &ch_layout_info[0];
+	config->do_xtc = (is_mb) ? DO_XTC_MB_DEFAULT : 0;
+	config->xtc_gain = XTC_GAIN_DEFAULT;
+	config->xtc_itd = XTC_ITD_DEFAULT;
+	config->xtc_bp[0] = XTC_BP_FL_DEFAULT;
+	config->xtc_bp[1] = XTC_BP_FH_DEFAULT;
 
 	/* parse args */
 	for (int i = 1; i < argc; ++i) {
@@ -295,6 +300,37 @@ int matrix4_config_init(const struct effect_info *ei, const struct stream_info *
 					else {
 						LOG_FMT(LL_ERROR, "%s: error: unrecognized unaligned event action: %s", ei->name, opt_arg);
 						goto opt_fail;
+					}
+				}
+				else if (is_opt(opt, "xtc=")) {
+					char *opt_arg = isolate(opt, '=');
+					if (!is_mb) goto mb_only;
+					if (strcmp(opt_arg, "none") == 0) config->do_xtc = 0;
+					else {
+						config->do_xtc = 1;
+						char *opt_subarg = isolate(opt_arg, ':');
+						char *opt_subarg1 = isolate(opt_subarg, ':');
+						char *opt_subarg2 = isolate(opt_subarg1, '-');
+						if (*opt_arg != '\0') {
+							config->xtc_gain = pow(10.0, strtod(opt_arg, &endptr)/-20.0);
+							CHECK_ENDPTR(opt_arg, endptr, "xtc: ild", goto opt_fail);
+							CHECK_RANGE(config->xtc_gain <= 0.8 && config->xtc_gain >= 1e-2, "xtc: ild", goto opt_fail);
+						}
+						if (*opt_subarg != '\0') {
+							config->xtc_itd = strtod(opt_subarg, &endptr);
+							CHECK_ENDPTR(opt_subarg, endptr, "xtc: itd", goto opt_fail);
+							CHECK_RANGE(config->xtc_itd <= 1000.0 && config->xtc_itd >= 40.0, "xtc: itd", goto opt_fail);
+						}
+						if (*opt_subarg1 != '\0') {
+							config->xtc_bp[0] = parse_freq(opt_subarg1, &endptr);
+							CHECK_ENDPTR(opt_subarg1, endptr, "xtc: fl", goto opt_fail);
+							CHECK_RANGE(config->xtc_bp[0] <= 1000.0 && config->xtc_bp[0] >= 0.0, "xtc: fl", goto opt_fail);
+						}
+						if (*opt_subarg2 != '\0') {
+							config->xtc_bp[1] = parse_freq(opt_subarg2, &endptr);
+							CHECK_ENDPTR(opt_subarg2, endptr, "xtc: fh", goto opt_fail);
+							CHECK_RANGE(config->xtc_bp[1] <= 10000.0 && config->xtc_bp[1] >= 2000.0, "xtc: fh", goto opt_fail);
+						}
 					}
 				}
 				else if (is_opt(opt, "filter_bank=")) {

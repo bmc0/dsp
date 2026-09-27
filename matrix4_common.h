@@ -89,6 +89,11 @@
 #define DO_DPWR_DECOUPLE_DEFAULT   1
 #define DIRECT_PATH_MODE_DEFAULT   DIRECT_PATH_NONE
 #define UEV_ACTION_MB_DEFAULT      UNALIGNED_EVENT_ACTION_ALIGN
+#define DO_XTC_MB_DEFAULT          0
+#define XTC_GAIN_DEFAULT           0.2
+#define XTC_ITD_DEFAULT          250.0
+#define XTC_BP_FL_DEFAULT          0.0
+#define XTC_BP_FH_DEFAULT       4000.0
 
 #define FILTER_BANK_TYPE_DEFAULT CAPN_FILTER_ELLIPTIC
 
@@ -232,9 +237,10 @@ enum direct_path_mode {
 
 struct matrix4_config {
 	int c0, c1, enable_signal, do_phase_flip, use_fir_p;
-	int lookahead_frames, do_dpwr_decouple;
+	int do_xtc, lookahead_frames, do_dpwr_decouple;
 	double surr_mult[2], fb_stop[2], rear_ev_mask;
 	double shelf_mult, shelf_f0, lowpass_f0, lowpass_order, contour_pwrcmp;
+	double xtc_gain, xtc_itd, xtc_bp[2];
 	enum status_type status_type;
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;

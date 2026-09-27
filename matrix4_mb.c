@@ -73,6 +73,12 @@ struct ch_align_syn_state {
 	int dt[4];
 };
 
+struct xtc_state {
+	struct ap1_state ap[2];
+	sample_t g, (*buf)[2];
+	int p, len;
+};
+
 struct matrix4_band {
 	struct smooth_state sm;
 	struct envs env, pwr_env;
@@ -84,13 +90,14 @@ struct matrix4_band {
 	struct {
 		struct cs_interp_state ll, lr, rl, rr;
 		struct cs_interp_state lsl, lsr, rsl, rsr;
-		struct cs_interp_state sg, rg;
+		struct cs_interp_state sg, rg, xg;
 		struct cs_interp_state amb, sdir, rdir;
 	} m_interp;
 	struct cs_interp_state pf_ap_c0[2];
 	struct ap1_state pf_ap[2];
 	struct direct_path_state dp;
 	struct ewma_state ev_thresh;
+	struct xtc_state xtc;
 	struct ax_buf_frame *ax_buf;
 	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
 	double syn_dt, syn_tol_r, align_xfade_scale;
@@ -343,6 +350,35 @@ static inline void ch_align_syn_run(struct ch_align_syn_state *a, struct matrix4
 	}
 }
 
+#define XTC_FTZ ((2e3*DBL_MIN)/DBL_EPSILON)
+static int xtc_state_init(struct xtc_state *xtc, double itd, double ild)
+{
+	memset(xtc, 0, sizeof(struct xtc_state));
+	if (ild < 1e-3) return 0;
+	const int itd_int = (int) (itd-0.1);
+	const double itd_frac = itd-itd_int;
+	xtc->ap[0].c0 = (1.0-itd_frac)/(1.0+itd_frac);
+	xtc->ap[0].o0 = xtc->ap[0].i0 = XTC_FTZ;
+	xtc->ap[1] = xtc->ap[0];
+	xtc->g = ild;
+	xtc->len = itd_int;
+	xtc->buf = calloc(xtc->len, sizeof(double [2]));
+	if (check_alloc(__func__, xtc->buf)) return 1;
+	//LOG_FMT(LL_VERBOSE, "%s: itd=%g ild=%g", __func__, itd, ild);
+	return 0;
+}
+
+static inline void xtc_run(struct xtc_state *xtc, double g, double *l, double *r)
+{
+	const double s[2] = { *l, *r }, d[2] = {
+		(ap1_run(&xtc->ap[0], xtc->buf[xtc->p][0]+XTC_FTZ)-XTC_FTZ)*xtc->g,
+		(ap1_run(&xtc->ap[1], xtc->buf[xtc->p][1]+XTC_FTZ)-XTC_FTZ)*xtc->g,
+	};
+	xtc->buf[xtc->p][0] = s[0]*g-d[1]; *l = s[0]-d[1];
+	xtc->buf[xtc->p][1] = s[1]*g-d[0]; *r = s[1]-d[0];
+	xtc->p = CBUF_NEXT(xtc->p, xtc->len);
+}
+
 static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sample_t *ibuf, sample_t *obuf)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
@@ -499,6 +535,10 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					cs_interp_insert(&band->m_interp.sg, sg*s_norm);
 					cs_interp_insert(&band->m_interp.rg, s_norm);
 				}
+				if (band->xtc.buf) {
+					const double xg = (band->ax_f.ax.cs > 0.0) ? sin(2.0*band->ax_f.ax.cs) : 0.0;
+					cs_interp_insert(&band->m_interp.xg, xg*cur_fade_mult);
+				}
 				if (state->do_phase_flip) {
 					const double pf_pos_rs = phase_flip_pos_rs(&band->ax_f.ax);
 					cs_interp_insert(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
@@ -560,8 +600,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			}
 		#endif
 
-			out_l += b_l;
-			out_r += b_r;
+			if (band->xtc.buf) xtc_run(&band->xtc, cs_interp(&band->m_interp.xg, state->s), &b_l, &b_r);
+			out_l += b_l; out_r += b_r;
 			sample_t b_ls_pf = b_ls, b_rs_pf = b_rs;
 			if (state->do_phase_flip) {
 				band->pf_ap[0].c0 = cs_interp(&band->pf_ap_c0[0], state->s);
@@ -777,6 +817,12 @@ static const char * matrix4_mb_effect_channel_label(struct effect *e, int ch, in
 	}
 	return matrix4_common_channel_label(e, state->layout_id, state->c0, state->c1, ch, out);
 }
+
+static inline double gauss_mag(double f0, double f, int hp)
+{
+	if (hp) return 1.0-exp(-1.227947177299516*(f/f0)*(f/f0));
+	else return exp(-3.465735902799727e-01*(f/f0)*(f/f0));
+}
 #endif
 
 struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struct stream_info *istream, const char *channel_selector, const char *dir, int argc, const char *const *argv)
@@ -884,9 +930,8 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double thresh_scale = (fbp->thresh_scale[k] > 0.0) ? fbp->thresh_scale[k] : 1.0;
 		band->ev_thresh_max = EVENT_THRESH_MAX * thresh_scale;
 		band->ev_thresh_min = EVENT_THRESH_MIN * thresh_scale;
-		const double ns_fc = fbp->fc[k]/BASE_ORD_NOTCH_SCALE_F0;
 		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH),
-			exp(-3.465735902799727e-01*ns_fc*ns_fc))) goto fail;
+			gauss_mag(BASE_ORD_NOTCH_SCALE_F0, fbp->fc[k], 0))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
 		const double an_tpeak = fbp->an_tpeak[k] + ((state->syn_buf) ? (state->fb.an.mask[k]+1)*1000.0/istream->fs : 0.0);
@@ -908,6 +953,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 			ch_align_an_state_init(&band->align_an, &band->de);
 			ch_align_syn_state_init(&band->align_syn, state->align_ref_syn);
 		}
+		if (config.do_xtc && xtc_state_init(&band->xtc,
+			config.xtc_itd*1e-6*istream->fs*(1.0+smoothstep(1.0-(log(fbp->fc[k])-5.704)*0.4343)*0.47),
+			config.xtc_gain*gauss_mag(config.xtc_bp[0], fbp->fc[k], 1)*gauss_mag(config.xtc_bp[1], fbp->fc[k], 0))) goto fail;
 	#if DEBUG_POWER_ERROR
 		ewma_init(&band->pwr_err[0], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
 		ewma_init(&band->pwr_err[1], istream->fs, EWMA_RISE_TIME(ENV_SMOOTH_TIME));
