@@ -10,11 +10,11 @@
 #     2: Left Surround
 #     3: Right Surround
 
-matrix4_mb signal,matrix=v4:0.39:1,direct_path,rear_event_mask=0
+matrix4_mb signal,direct_path,rear_event_mask=0
 :2,3 {
 	# delayed path
-	delay -m3.1m -b0.5 5m decorrelate -s1 -m -f0.7k -l35m 5
-	allpass 80 0.6 allpass 25 0.8
+	decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6 allpass 25 0.8
+	delay -M2.1m -b0.5 5m
 } :
 :4,5 {
 	# direct path

@@ -12,11 +12,12 @@
 #     4: Left Rear
 #     5: Right Rear
 
-matrix4_mb signal,layout=2/4,matrix=v4:0.39:1,direct_path,rear_event_mask=0
+matrix4_mb signal,layout=2/4,direct_path,rear_event_mask=0
 :2-5 {
 	# delayed path
-	delay -m3.1m -b0.5 5m decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
+	decorrelate -s1 -m -f0.7k -l35m 5 allpass 80 0.6
 	:2,3 delay 2m decorrelate -s7 -m -f0.7k -l35m 5 allpass 80 0.6 allpass 25 0.8 :
+	:0,1 delay -M2.1m -b0.5 5m :2,3 delay -M2.7m -b0.5 5m :
 } :
 :6-9 {
 	# direct path
