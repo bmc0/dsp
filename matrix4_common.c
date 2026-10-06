@@ -1566,7 +1566,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 		if (abs_ph_cs < abs_ph_lr) {
 			const double w = (abs_ph_lr+abs_ph_cs > DBL_MIN) ? (abs_ph_lr-abs_ph_cs)/(abs_ph_lr+abs_ph_cs) : 0.0;
 			const double pd_fw = pd_f*w*surr_mult2, pd_sw = pd_s*(1.0-w);
-			pdc_wf = ((pd_fw >= pd_sw) ? M_PI_2-atan(pd_sw/pd_fw) : atan(pd_fw/pd_sw))*M_2_PI;
+			pdc_wf = ((pd_fw >= pd_sw) ? M_PI_2-atan_approx(pd_sw/pd_fw) : atan_approx(pd_fw/pd_sw))*M_2_PI;
 			if (pdc_wf < 1e-6) pdc_wf = 1e-6;
 		}
 		else pdc_wf = 1e-6;
