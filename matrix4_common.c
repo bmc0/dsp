@@ -1482,7 +1482,7 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 #if MATRIX_V4_PREEMPH
 	/* pre-emphasis of directional component */
 	const double pe_gl = 1.0+tan(abs_ph_lr-M_PI_4), pe_gl2 = pe_gl*pe_gl;
-	const double pe[2] = { pe_gl2*(1.0+cos(abs_ph_lr+M_PI_4)), pe_gl-pe_gl2 };
+	const double pe[2] = { pe_gl2*(1.0+cos(abs_ph_lr+M_PI_4)), pe_gl*tan(abs_ph_cs) };
 	const double pe_sf = sqrt(1.0+square(MINIMUM(p->surr_mult[0], 1.0)))-1.0;
 	if (ph_cs >= 0.0) {
 		const double pe_gcs = (0.5+0.5*tan(abs_ph_cs-M_PI_4))*pe_sf;
