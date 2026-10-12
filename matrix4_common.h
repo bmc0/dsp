@@ -162,15 +162,14 @@ struct event_state {
 	struct ewma_state pwrcmp_factor, ord_notch_scale, align_avg, rs_scale;
 	struct biquad_state ord_lp[2];
 	struct svf_pk_state ord_notch[4];
-	struct axes dir, diff_last, *ord_buf, *ord_lp_buf;
+	struct axes dir, diff_last, align_max, *ord_buf, *ord_lp_buf;
 #if ENABLE_LOOKBACK
 	struct axes *diff_buf;
 	double (*slope_buf)[2];
 #endif
 	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
 	double ord_factor, base_ord_ns, adj, ds_diff, off_thresh, rts_off;
-	double align_dt[2], align_max;
-	double *ds_ord_buf, *max_buf;
+	double align_dt[2], *ds_ord_buf, *max_buf;
 	ssize_t t, t_sample, t_delay_est, t_hold, t_end[2], t_off_ord;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	int buf_len, buf_p, unaligned, realign;

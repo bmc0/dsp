@@ -436,8 +436,8 @@ int delay_est_state_init(struct delay_est_state *de, double fs, double fc, doubl
 	de->ra_tol = fs/MAXIMUM(fc*64.0, 8e4);   /* ±5.625° at fc or ±12.5µs */
 	de->bin_tol = fs/MAXIMUM(fc*16.0, 2e4);  /* ±22.5° at fc or ±50µs */
 	if (bw > 0.0) {
-		de->thresh = 1.0/sqrt(sqrt(bw*st_sc*(DELAY_EST_SAMPLE_TIME/1000.0)));
-		if (de->thresh > 0.9) de->thresh = 0.9;
+		de->thresh = 1.2/sqrt(sqrt(bw*st_sc*(DELAY_EST_SAMPLE_TIME/1000.0)));
+		if (de->thresh > 0.95) de->thresh = 0.95;
 		else if (de->thresh < 0.5) de->thresh = 0.5;
 	}
 	else de->thresh = 0.5;
@@ -611,6 +611,9 @@ static inline double square(double x) { return x*x; }
 static inline double pwr_sum(double a, double b) { return sqrt(a*a+b*b); }
 static inline double safe_sqrt(double x) { return (x>0.0)?sqrt(x):0.0; }
 
+static inline double axes_mag(const struct axes *ax) { return fabs(ax->lr)+fabs(ax->cs); }
+static inline int axes_rear(const struct axes *ax) { return (ax->cs < 0.06*square(ax->lr)-(M_PI/64)); }
+
 /* valid for 0≤x≤1 */
 static inline double atan_approx(double x)
 {
@@ -637,17 +640,16 @@ static inline double calc_angle_pwr(double a, double b)
 
 static inline void norm_axes(struct axes *ax)
 {
-	const double abs_sum = fabs(ax->lr)+fabs(ax->cs);
-	if (abs_sum > M_PI_4) {
-		const double norm = M_PI_4 / abs_sum;
-		ax->lr *= norm;
-		ax->cs *= norm;
+	const double mag = axes_mag(ax);
+	if (mag > M_PI_4) {
+		const double norm = M_PI_4 / mag;
+		ax->lr *= norm; ax->cs *= norm;
 	}
 }
 
 static inline double ord_notch_scale(const struct axes *ax)
 {
-	double z = (fabs(ax->lr)+fabs(ax->cs))*(2/M_PI_4)-1.0;
+	double z = axes_mag(ax)*(2/M_PI_4)-1.0;
 	if (z < 0.0) z = 0.0;
 	return 1.0 - z*z*0.99;
 }
@@ -675,7 +677,7 @@ static void delay_est_hist_insert(struct delay_est_hist *hist, double ndt)
 	hist->p = CBUF_NEXT(hist->p, hist->len);
 }
 
-static double delay_est_hist_weight(struct delay_est_hist *hist, double ndt, double ntol_r, double ref_ndt, double cs)
+static double delay_est_hist_weight(struct delay_est_hist *hist, double ndt, double ntol_r, double ref_ndt)
 {
 	if (!hist || !hist->h) return 1.0;
 	double n = 1.0 + smoothstep(1.5-fabs(ndt-ref_ndt)*ntol_r);
@@ -786,45 +788,46 @@ static void delay_est_oversample(const double y[8][2], double z[2][2])
 #endif /* DELAY_EST_POLYPHASE_TAPS */
 #endif /* DELAY_EST_OVERSAMPLE */
 
-static int delay_est_ihc_model(struct delay_est_state *de)
+static void delay_est_ihc_model(struct delay_est_state *de)
 {
 	ewma_set(&de->agc[1], ewma_set(&de->agc[0], 0.35));
 	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
-	double max[2] = {0};
+	const double norm[2] = { de->ihc_norm[0]*0.25, de->ihc_norm[1]*0.25 };
 	for (int i = 0; i < de->os_len; ++i) {
+		const double v[2] = { de->os[i][0]*norm[0], de->os[i][1]*norm[1] };
 		const double x[2] = {
-			(smoothstep(de->os[i][0]*0.25+0.1)+smoothstep(de->os[i][0]*-0.25+0.1))*(1.0-ewma_get_last(&de->agc[0])),
-			(smoothstep(de->os[i][1]*0.25+0.1)+smoothstep(de->os[i][1]*-0.25+0.1))*(1.0-ewma_get_last(&de->agc[1])),
+			(smoothstep(v[0]+0.1)+smoothstep(-v[0]+0.1))*(1.0-ewma_get_last(&de->agc[0])),
+			(smoothstep(v[1]+0.1)+smoothstep(-v[1]+0.1))*(1.0-ewma_get_last(&de->agc[1])),
 		};
 		ewma_run(&de->agc[0], x[0]*10.0);
 		ewma_run(&de->agc[1], x[1]*10.0);
 		de->ihc[i][0] = ewma_run(&de->sm[0], x[0]*0.5);
 		de->ihc[i][1] = ewma_run(&de->sm[1], x[1]*0.5);
-		if (de->ihc[i][0] > max[0]) max[0] = de->ihc[i][0];
-		if (de->ihc[i][1] > max[1]) max[1] = de->ihc[i][1];
 	}
 	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
 	for (int i = de->os_len-1; i >= 0; --i) {
 		de->ihc[i][0] = ewma_run(&de->sm[0], de->ihc[i][0]);
 		de->ihc[i][1] = ewma_run(&de->sm[1], de->ihc[i][1]);
 	}
-	if (MINIMUM(max[0], max[1]) < MAXIMUM(max[0], max[1])*0.3+0.021) return 1;
-	return 0;
 }
 
-static inline double delay_est_step(struct delay_est_state *de, int dt, double *r_wt)
+static inline double delay_est_step(struct delay_est_state *de, int dt, double *r_lr, double *r_cs, double *r_wt)
 {
-	double avg[2] = {0}, wt = 0.0;
+	double avg[4] = {0}, wt = 0.0;
 	const int dt0 = MINIMUM(-dt, 0), dt1 = MINIMUM(dt, 0);
 	for (int i = de->dt; i < de->os_len; ++i) {
 		const double w = de->ihc[i+dt0][0]*de->ihc[i+dt1][1];
 		const double v[2] = { de->os[i+dt0][0], de->os[i+dt1][1] };
-		avg[0] += square(v[0]+v[1])*w;
-		avg[1] += square(v[0]-v[1])*w;
+		avg[0] += square(v[0])*w;      avg[1] += square(v[1])*w;
+		avg[2] += square(v[0]+v[1])*w; avg[3] += square(v[0]-v[1])*w;
 		wt += w;
 	}
+	const double lr = calc_angle_pwr(avg[0], avg[1]);
+	const double cs = calc_angle_pwr(avg[2], avg[3]);
+	if (r_lr) *r_lr = lr;
+	if (r_cs) *r_cs = cs;
 	if (r_wt) *r_wt = wt;
-	return calc_angle_pwr(avg[0], avg[1]);
+	return copysign(fabs(lr)+fabs(cs), cs);
 }
 
 static inline double interp_peak_quadratic(const double y[3], double *r_pk)
@@ -847,87 +850,85 @@ static inline double interp_pts_quadratic(const double y[3], double t)
 	return (c[2]*t+c[1])*t+c[0];
 }
 
-static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *hist,
-	double ref_dt, const double accom[2], double *r_max_cs)
+static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *hist, double ref_dt, struct axes *r_max)
 {
 	memcpy(de->rot, de->buf[de->p], sizeof(double [2])*(de->len-de->p));
 	memcpy(de->rot[de->len-de->p], de->buf, sizeof(double [2])*de->p);
-	/* compute accommodated l/r normalization */
-	double norm[2] = {0};
-	for (int i = 0; i < de->len; ++i) {
-		norm[0] += square(de->rot[i][0]);
-		norm[1] += square(de->rot[i][1]);
-	}
-	norm[0] /= de->len; norm[1] /= de->len;
-	const double norm_accom[2] = { norm[0]-accom[0], norm[1]-accom[1] };
-	if (MINIMUM(norm_accom[0], norm_accom[1]) < MAXIMUM(norm_accom[0], norm_accom[1])*0.01) return ref_dt;
-	norm[0] = 1.0/(sqrt((accom[0] < norm[0]*0.9) ? norm_accom[0] : norm[0]*0.1)*de->ihc_norm[0]);
-	norm[1] = 1.0/(sqrt((accom[1] < norm[1]*0.9) ? norm_accom[1] : norm[1]*0.1)*de->ihc_norm[1]);
-	/* normalize for IHC model */
-	for (int i = 0; i < de->len; ++i) {
-		de->rot[i][0] *= de->ihc_norm[0];
-		de->rot[i][1] *= de->ihc_norm[1];
-	}
-	/* oversample */
 	for (int i = 0; i < de->len-DELAY_EST_POLYPHASE_TAPS; ++i)
 		delay_est_oversample(&de->rot[i], &de->os[i*DELAY_EST_OVERSAMPLE]);
-	if (delay_est_ihc_model(de)) return ref_dt;
-	/* re-normalize for c/s computation */
-	for (int i = 0; i < de->os_len; ++i) {
-		de->os[i][0] *= norm[0];
-		de->os[i][1] *= norm[1];
-	}
-	/* find c/s values; interpolate peaks */
+	delay_est_ihc_model(de);
+	/* find lr/cs values; interpolate peaks */
 	const double ref_ndt = ref_dt*de->ws, ntol_r = 1.0/(de->tol*de->ws);
-	double max_cs[3] = {0}, max_cs_dt = NAN;
-	double w[3] = {0}, y[3] = {
+	const int ref_dt_step = lrint(ref_dt*DELAY_EST_OVERSAMPLE);
+	struct axes max = {0}, ref = {0};
+	double max_sum[3] = {0}, max_dt = NAN;
+	double lr[3] = {0}, cs[3] = {0}, w[3] = {0}, y[3] = {
 		0.0,
-		delay_est_step(de, -de->dt,   &w[1]),
-		delay_est_step(de, -de->dt+1, &w[2]),
+		delay_est_step(de, -de->dt,   &lr[1], &cs[1], &w[1]),
+		delay_est_step(de, -de->dt+1, &lr[2], &cs[2], &w[2]),
 	};
 	for (int dt = -de->dt+2; dt <= de->dt; ++dt) {
+		lr[0] = lr[1]; lr[1] = lr[2];
+		cs[0] = cs[1]; cs[1] = cs[2];
 		w[0] = w[1]; w[1] = w[2];
-		y[0] = y[1]; y[1] = y[2]; y[2] = delay_est_step(de, dt, &w[2]);
-		double cs;
-		const double x = interp_peak_quadratic(y, &cs);
+		y[0] = y[1]; y[1] = y[2];
+		y[2] = delay_est_step(de, dt, &lr[2], &cs[2], &w[2]);
+		double iy;
+		const double x = interp_peak_quadratic(y, &iy);
 		if (!isnan(x)) {
 			const double idt = ((dt-1)+x)*(1.0/DELAY_EST_OVERSAMPLE);
 			const double abs_idt = fabs(idt), wx = abs_idt*de->ws;
 			if (wx < 1.0) {
-				const double awcs = fabs(cs) * interp_pts_quadratic(w, x) *
-					delay_est_hist_weight(hist, idt*de->ws, ntol_r, ref_ndt, cs) *
+				const double awiy = fabs(iy) * interp_pts_quadratic(w, x) *
+					delay_est_hist_weight(hist, idt*de->ws, ntol_r, ref_ndt) *
 					smoothstep((1.0-wx)*(1.0/DELAY_EST_WINDOW_ALPHA));
-				if (awcs > max_cs[1]) {
-					max_cs[0] = cs;
-					max_cs[2] = max_cs[1];
-					max_cs[1] = awcs;
-					max_cs_dt = idt;
+				if (awiy > max_sum[1]) {
+					max_sum[0] = iy;
+					max_sum[2] = max_sum[1];
+					max_sum[1] = awiy;
+					max_dt = idt;
+					max.lr = interp_pts_quadratic(lr, x);
+					max.cs = interp_pts_quadratic(cs, x);
 				}
-				else if (awcs > max_cs[2])
-					max_cs[2] = awcs;
+				else if (awiy > max_sum[2])
+					max_sum[2] = awiy;
 			}
 			#if DELAY_EST_VERBOSITY > 2
 				LOG_FMT(LL_VERBOSE, "%s: peak at dt=%.1fµs (%.2f): %g°",
-					__func__, idt*1e6/de->fs, idt, TO_DEGREES(cs));
+					__func__, idt*1e6/de->fs, idt, TO_DEGREES(iy));
 			#endif
+		}
+		if (dt-1 == ref_dt_step) {
+			const double x = ref_dt*DELAY_EST_OVERSAMPLE - ref_dt_step;
+			ref.lr = interp_pts_quadratic(lr, x);
+			ref.cs = interp_pts_quadratic(cs, x);
 		}
 	}
 	#if DELAY_EST_VERBOSITY > 1
-		LOG_FMT(LL_VERBOSE, "%s: max_cs=%g° dt=%.1fµs (%.2f)", __func__,
-			TO_DEGREES(max_cs[0]), max_cs_dt*(1000.0*1000.0)/de->fs, max_cs_dt);
+		LOG_FMT(LL_VERBOSE, "%s: max_sum=%g° dt=%.1fµs (%.2f)", __func__,
+			TO_DEGREES(max_sum[0]), max_dt*(1000.0*1000.0)/de->fs, max_dt);
 	#endif
-	if (isnan(max_cs_dt)) return NAN;
-	if (max_cs[2] > DBL_MIN && fabs(max_cs_dt-ref_dt) > de->tol
-			&& max_cs[1] < max_cs[2]*DELAY_EST_INDETERM) {
+	if (isnan(max_dt)) return NAN;
+	if (fabs(max.cs) < M_PI/32) {
+		if (r_max) *r_max = ref;
+		return ref_dt;
+	}
+	if (max_sum[2] > DBL_MIN && fabs(max_dt-ref_dt) > de->tol
+			&& max_sum[1] < max_sum[2]*DELAY_EST_INDETERM) {
 		#if DELAY_EST_VERBOSITY
 			LOG_FMT(LL_VERBOSE, "%s: likely indeterminate dt: close peak magnitudes %g %g",
-				__func__, max_cs[1], max_cs[2]);
+				__func__, max_sum[1], max_sum[2]);
 		#endif
 		return NAN;
 	}
-	if (fabs(max_cs[0]) > de->thresh) {
+	if (fabs(ref.cs-max.cs) < M_PI/64) {
+		max_sum[0] = copysign(axes_mag(&ref), ref.cs);
+		max_dt = ref_dt;
+		max = ref;
+	}
+	if (fabs(max_sum[0]) > de->thresh) {
 		int b = 0;
-		while (b < de->n_bins && fabs(max_cs_dt-de->bin[b].dt) > de->bin_tol) ++b;
+		while (b < de->n_bins && fabs(max_dt-de->bin[b].dt) > de->bin_tol) ++b;
 		if (b > 0) {
 			if (b < de->n_bins) {
 				char tmp_bin[sizeof(de->bin[0])];
@@ -943,12 +944,12 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 			}
 		}
 		++de->bin[0].n;
-		de->bin[0].dt = max_cs_dt = de->bin[0].dt + (max_cs_dt-de->bin[0].dt)/MINIMUM(de->bin[0].n, 16);
+		de->bin[0].dt = max_dt = de->bin[0].dt + (max_dt-de->bin[0].dt)/MINIMUM(de->bin[0].n, 16);
 		/* LOG_FMT(LL_VERBOSE, "%s: binned: dt=%g n=%zd (n_bins=%d)", __func__, de->bin[0].dt, de->bin[0].n, de->n_bins); */
-		delay_est_hist_insert(hist, max_cs_dt*de->ws);
+		delay_est_hist_insert(hist, max_dt*de->ws);
 	}
-	if (r_max_cs) *r_max_cs = max_cs[0];
-	return max_cs_dt;
+	if (r_max) *r_max = max;
+	return max_dt;
 }
 
 void process_events_priv(struct event_state *ev, const struct event_config *evc, const struct envs *env,
@@ -1060,7 +1061,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			de->ihc_norm[0] = 1.0/(sqrt(de->ihc_norm[0]/de->len)+DBL_MIN);
 			de->ihc_norm[1] = 1.0/(sqrt(de->ihc_norm[1]/de->len)+DBL_MIN);
 		}
-		ev->align_max = 0.0;
+		memset(&ev->align_max, 0, sizeof(struct axes));
 	}
 
 	if (ev->t_sample) {
@@ -1077,21 +1078,20 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			if (r_event > ev->max[1]) ev->max[1] = r_event;
 		}
 		if (ev->t_delay_est && ev->t >= ev->t_delay_est) {
-			const double lr_accom[2] = { ewma_get_last(&ev->accom[0]), ewma_get_last(&ev->accom[1]) };
-			const double dt = ev->align_dt[1] = estimate_delay(de, hist, ev->align_dt[0], lr_accom, &ev->align_max);
+			const double dt = ev->align_dt[1] = estimate_delay(de, hist, ev->align_dt[0], &ev->align_max);
 			const double tol = (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN) ? de->ra_tol : de->tol;
 			const double avg_v = (isnan(dt) || fabs(dt) > de->tol) ? -1.0 : 1.0;
 			const double align_wavg = (hist && hist->h) ? ewma_run(&ev->align_avg, avg_v)*0.5 +
 				ewma_run(&hist->align_avg, avg_v)*0.5 : ewma_run(&ev->align_avg, avg_v);
 			if (isnan(dt) || fabs(dt-ev->align_dt[0]) > tol
 		#if DELAY_EST_FRONT_BIAS
-				|| (ev->align_max < 0.0 && (fabs(dt) > de->tol || align_wavg < DELAY_EST_AVG_THRESH))
+				|| (axes_rear(&ev->align_max) && (fabs(dt) > de->tol || align_wavg < DELAY_EST_AVG_THRESH))
 		#endif
 			) {
 				ev->flags[1] |= EVENT_FLAG_UNALIGNED;
 				#if DELAY_EST_VERBOSITY
 					LOG_FMT(LL_VERBOSE, "%s: unaligned event: max_cs=%g° dt=%.1fµs (%.2f)", __func__,
-						TO_DEGREES(ev->align_max), dt*(1000.0*1000.0)/de->fs, dt);
+						TO_DEGREES(ev->align_max.cs), dt*(1000.0*1000.0)/de->fs, dt);
 				#endif
 			}
 			ev->t_delay_est = 0;
@@ -1129,14 +1129,13 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 				}
 				if (ev->flags[1] & EVENT_FLAG_USE_ORD) ev->ord_factor += 1.0;
 				if (ev->flags[1] & EVENT_FLAG_UNALIGNED) {
-					const int dt_valid = (!isnan(ev->align_dt[1]) && fabs(ev->align_max) >= de->thresh);
+					const int dt_valid = (!isnan(ev->align_dt[1]) && axes_mag(&ev->align_max) >= de->thresh);
 					if (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN && dt_valid
 				#if DELAY_EST_FRONT_BIAS
-						&& !(ev->align_max < 0.0 && fabs(ev->align_dt[1]) > de->tol)
+						&& !(axes_rear(&ev->align_max) && fabs(ev->align_dt[1]) > de->tol)
 				#endif
 					) {
-						ev->dir.lr = ewma_get_last(&ev->avg[2]);
-						ev->dir.cs = ev->align_max * (1.0 - fabs(ev->dir.lr)*(1.0/M_PI_4));
+						ev->dir = ev->align_max;
 						ev->align_dt[0] = ev->align_dt[1];
 						ev->realign = 1;
 						#if DELAY_EST_VERBOSITY
@@ -1145,8 +1144,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 						#endif
 					}
 					else if (evc->uev_action) {
-						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH
-								&& ev->dir.cs < 0.06*square(ev->dir.lr)-(M_PI_4/16))) {
+						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH && axes_rear(&ev->dir))) {
 							ev->dir.cs = ev->dir.lr = 0.0;
 						#if DELAY_EST_ALIGN_RESET
 							if (align_wavg >= DELAY_EST_AVG_THRESH && ev->align_dt[0] != 0.0) {
@@ -1161,8 +1159,8 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 						}
 					}
 				}
-				else if (!(ev->flags[1] & EVENT_FLAG_USE_ORD) && fabs(ev->align_max) > fabs(ev->dir.lr)+fabs(ev->dir.cs))
-					ev->dir.cs = ev->align_max * (1.0 - fabs(ev->dir.lr)*(1.0/M_PI_4));
+				else if (!(ev->flags[1] & EVENT_FLAG_USE_ORD) && axes_mag(&ev->align_max) > axes_mag(&ev->dir))
+					ev->dir = ev->align_max;
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
 				ev->t_end[0] = ev->t_end[1];
