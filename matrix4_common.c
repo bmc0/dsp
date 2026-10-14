@@ -1622,6 +1622,8 @@ void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs, do
 					if (ax->cs >= y0) goto direct_path_finish;
 					else dp->enable = 2;
 				}
+				else if (dp->enable > 1 && ev_cs < y1 && !ev_unaligned)
+					dp->enable = 1;
 			}
 			else if (ax->cs >= y0) {
 				direct_path_finish:
@@ -1630,7 +1632,7 @@ void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs, do
 				return;
 			}
 			const double zs = ewma_run_scale(&dp->zs, (dp->enable == 1) ? 1.0 : 0.0, ev_ds_diff);
-			if (dp->enable > 1 && zs < 1e-6) goto direct_path_finish;
+			if (dp->enable > 1 && zs < 1e-4) goto direct_path_finish;
 			const double m = M_PI_2/(y1-y0);
 			const double z = MINIMUM(MAXIMUM((ax->cs-y0)*m, 0.0), M_PI_2) * zs;
 			r[0] = cos(z); r[1] = sin(z); r[3] = z*(1.0/M_PI_2);
