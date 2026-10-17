@@ -1136,19 +1136,42 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			ev->t_delay_est = ev->t_sample = 0;
 			const double align_wavg = (hist && hist->h) ? ewma_get_last(&ev->align_avg)*0.5 +
 				ewma_get_last(&hist->align_avg)*0.5 : ewma_get_last(&ev->align_avg);
-			double ev_dir_lr = ewma_get_last(&ev->avg[2]);
-			double ev_dir_cs = ewma_get_last(&ev->avg[3]);
-			if (fabs(ev_dir_lr)+fabs(ev_dir_cs) > evc->diff_lim) {
+			double ev_dt = ev->align_dt[0];
+			struct axes ev_dir = { ewma_get_last(&ev->avg[2]), ewma_get_last(&ev->avg[3]) };
+			if (ev->flags[1] & EVENT_FLAG_UNALIGNED) {
+				const int dt_valid = (!isnan(ev->align_dt[1]) && axes_mag(&ev->align_max) >= de->thresh);
+				if (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN && dt_valid
+			#if DELAY_EST_FRONT_BIAS
+					&& !(axes_rear(&ev->align_max) && fabs(ev->align_dt[1]) > de->tol)
+			#endif
+				) {
+					ev_dir = ev->align_max;
+					ev_dt = ev->align_dt[1];
+				}
+				else if (evc->uev_action) {
+					if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH && axes_rear(&ev_dir))) {
+						ev_dir.cs = ev_dir.lr = 0.0;
+					#if DELAY_EST_ALIGN_RESET
+						if (align_wavg >= DELAY_EST_AVG_THRESH) ev_dt = 0.0;
+					#endif
+					}
+					else goto ev_use_ord;  /* indeterminate/unreliable dt; use ord angles */
+				}
+			}
+			else if (!(ev->flags[1] & EVENT_FLAG_USE_ORD) && axes_mag(&ev->align_max) > axes_mag(&ev_dir))
+				ev_dir = ev->align_max;
+			else if (axes_mag(&ev_dir) > evc->diff_lim) {
+				ev_use_ord:
 				ev->flags[1] |= EVENT_FLAG_USE_ORD;
-				ev_dir_lr = ewma_get_last(&ev->avg[0]);
-				ev_dir_cs = ewma_get_last(&ev->avg[1]);
+				ev_dir.lr = ewma_get_last(&ev->avg[0]);
+				ev_dir.cs = ewma_get_last(&ev->avg[1]);
 			}
 			if (ev->flags[1] & EVENT_FLAG_FUSE && ev->flags[1] & EVENT_FLAG_USE_ORD && !(ev->flags[0] & EVENT_FLAG_USE_ORD)) {
 				++ev->ignore_count;
 				/* LOG_FMT(LL_VERBOSE, "%s(): ignoring event: lr: %+06.2f°; cs: %+06.2f°",
 					__func__, TO_DEGREES(ev_dir_lr), TO_DEGREES(ev_dir_cs)); */
 			}
-			else if (evc->rear_ev_mask > 0.0 && ev_dir_cs < -M_PI_4/12
+			else if (evc->rear_ev_mask > 0.0 && axes_rear(&ev_dir)
 					&& ((ev->flags[1] & EVENT_FLAG_L && l_event < thresh*evc->rear_ev_mask)
 						|| (ev->flags[1] & EVENT_FLAG_R && r_event < thresh*evc->rear_ev_mask))) {
 				++ev->ignore_count;
@@ -1156,47 +1179,21 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					__func__, TO_DEGREES(ev_dir_lr), TO_DEGREES(ev_dir_cs)); */
 			}
 			else {
-				ev->dir.lr = ev_dir_lr;
-				ev->dir.cs = ev_dir_cs;
+				ev->dir = ev_dir;
 				if (!(ev->flags[1] & EVENT_FLAG_FUSE)) {
 					ev->t_hold = ev->t;
 					if (ev->flags[1] & EVENT_FLAG_USE_ORD) ++ev->ord_count;
 					else ++ev->diff_count;
 				}
 				if (ev->flags[1] & EVENT_FLAG_USE_ORD) ev->ord_factor += 1.0;
-				if (ev->flags[1] & EVENT_FLAG_UNALIGNED) {
-					const int dt_valid = (!isnan(ev->align_dt[1]) && axes_mag(&ev->align_max) >= de->thresh);
-					if (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN && dt_valid
-				#if DELAY_EST_FRONT_BIAS
-						&& !(axes_rear(&ev->align_max) && fabs(ev->align_dt[1]) > de->tol)
-				#endif
-					) {
-						ev->dir = ev->align_max;
-						ev->align_dt[0] = ev->align_dt[1];
-						ev->realign = 1;
-						#if DELAY_EST_VERBOSITY
-							LOG_FMT(LL_VERBOSE, "%s: align: dt=%.1fµs cs=%g°→%g°", __func__,
-								ev->align_dt[0]*(1000.0*1000.0)/de->fs, TO_DEGREES(ev_dir_cs), TO_DEGREES(ev->dir.cs));
-						#endif
-					}
-					else if (evc->uev_action) {
-						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH && axes_rear(&ev->dir))) {
-							ev->dir.cs = ev->dir.lr = 0.0;
-						#if DELAY_EST_ALIGN_RESET
-							if (align_wavg >= DELAY_EST_AVG_THRESH && ev->align_dt[0] != 0.0) {
-								ev->align_dt[0] = 0.0;
-								ev->realign = 1;
-							}
-						#endif
-						}
-						else {  /* indeterminate/unreliable dt; use ord angles */
-							ev->dir.lr = ewma_get_last(&ev->avg[0]);
-							ev->dir.cs = ewma_get_last(&ev->avg[1]);
-						}
-					}
+				if (ev_dt != ev->align_dt[0]) {
+					ev->align_dt[0] = ev_dt;
+					ev->realign = 1;
+					#if DELAY_EST_VERBOSITY
+						LOG_FMT(LL_VERBOSE, "%s: align: dt=%.1fµs cs=%g°", __func__,
+							ev->align_dt[0]*(1000.0*1000.0)/de->fs, TO_DEGREES(ev->dir.cs));
+					#endif
 				}
-				else if (!(ev->flags[1] & EVENT_FLAG_USE_ORD) && axes_mag(&ev->align_max) > axes_mag(&ev->dir))
-					ev->dir = ev->align_max;
 				ev->flags[0] = ev->flags[1];
 				ev->max[0] = ev->max[1];
 				ev->t_end[0] = ev->t_end[1];
