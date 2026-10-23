@@ -63,8 +63,6 @@
 #define DELAY_EST_MAX_DELTA    1.0
 #define DELAY_EST_SAMPLE_TIME 15.0
 #define DELAY_EST_WINDOW_ALPHA 0.35
-#define DELAY_EST_HIST_BASE_N  8
-#define DELAY_EST_HIST_SCALE   0.1
 #define DELAY_EST_FRONT_BIAS   1
 #define DELAY_EST_INDETERM     1.05
 #define DELAY_EST_AVG_THRESH  -0.3
@@ -157,8 +155,6 @@ struct delay_est_state {
 
 struct delay_est_hist {
 	struct ewma_state align_avg;
-	double *h, scale;
-	int p, len;
 };
 
 struct event_state {
@@ -278,7 +274,6 @@ void smooth_state_init(struct smooth_state *, double);
 int delay_est_state_init(struct delay_est_state *, double, double, double, double, double);
 void delay_est_state_cleanup(struct delay_est_state *);
 int delay_est_hist_init(struct delay_est_hist *, int);
-void delay_est_hist_cleanup(struct delay_est_hist *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);

@@ -510,20 +510,8 @@ void delay_est_state_cleanup(struct delay_est_state *de)
 
 int delay_est_hist_init(struct delay_est_hist *hist, int n)
 {
-	if (n > 0) {
-		hist->len = n;
-		hist->scale = DELAY_EST_HIST_SCALE/log(hist->len+2);
-		ewma_init(&hist->align_avg, 1.0, 10.0*n);
-		hist->h = calloc(hist->len, sizeof(double));
-		if (check_alloc(__func__, hist->h)) return 1;
-	}
-	else memset(hist, 0, sizeof(struct delay_est_hist));
+	ewma_init(&hist->align_avg, 1.0, 80.0*pow(n, 0.7));
 	return 0;
-}
-
-void delay_est_hist_cleanup(struct delay_est_hist *hist)
-{
-	free(hist->h);
 }
 
 /* SVF based on F. Adriaensen, "Digital State-Variable Filters" */
@@ -706,22 +694,6 @@ static inline double ewma_run_scale_abs_asym(struct ewma_state *state, double s,
 }
 #endif
 
-static void delay_est_hist_insert(struct delay_est_hist *hist, double ndt)
-{
-	if (!hist || !hist->h) return;
-	hist->h[hist->p] = ndt;
-	hist->p = CBUF_NEXT(hist->p, hist->len);
-}
-
-static double delay_est_hist_weight(struct delay_est_hist *hist, double ndt, double ntol_r, double ref_ndt)
-{
-	if (!hist || !hist->h) return 1.0;
-	double n = 1.0 + smoothstep(1.5-fabs(ndt-ref_ndt)*ntol_r);
-	for (int i = 0; i < hist->len; ++i)
-		n += smoothstep(1.5-fabs(ndt-hist->h[i])*ntol_r);
-	return 1.0 + log(n)*hist->scale;
-}
-
 #if DELAY_EST_OVERSAMPLE == 4
 #if DELAY_EST_POLYPHASE_TAPS == 10
 static void delay_est_oversample(const double y[10][2], double z[4][2])
@@ -860,9 +832,7 @@ static inline double delay_est_step(struct delay_est_state *de, int dt, double *
 	}
 	const double lr = calc_angle_pwr(avg[0], avg[1]);
 	const double cs = calc_angle_pwr(avg[2], avg[3]);
-	if (r_lr) *r_lr = lr;
-	if (r_cs) *r_cs = cs;
-	if (r_wt) *r_wt = wt;
+	*r_lr = lr; *r_cs = cs; *r_wt = wt;
 	return copysign(fabs(lr)+fabs(cs), cs);
 }
 
@@ -894,7 +864,6 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 		delay_est_oversample(&de->rot[i], &de->os[i*DELAY_EST_OVERSAMPLE]);
 	delay_est_ihc_model(de);
 	/* find lr/cs values; interpolate peaks */
-	const double ref_ndt = ref_dt*de->ws, ntol_r = 1.0/(de->tol*de->ws);
 	const int ref_dt_step = lrint(ref_dt*DELAY_EST_OVERSAMPLE);
 	struct axes max = {0}, ref = {0};
 	double max_sum[3] = {0}, max_dt = NAN;
@@ -915,9 +884,8 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 			const double idt = ((dt-1)+x)*(1.0/DELAY_EST_OVERSAMPLE);
 			const double abs_idt = fabs(idt), wx = abs_idt*de->ws;
 			if (wx < 1.0) {
-				const double awiy = fabs(iy) * interp_pts_quadratic(w, x) *
-					delay_est_hist_weight(hist, idt*de->ws, ntol_r, ref_ndt) *
-					smoothstep((1.0-wx)*(1.0/DELAY_EST_WINDOW_ALPHA));
+				const double awiy = fabs(iy) * interp_pts_quadratic(w, x)
+					* smoothstep((1.0-wx)*(1.0/DELAY_EST_WINDOW_ALPHA));
 				if (awiy > max_sum[1]) {
 					max_sum[0] = iy;
 					max_sum[2] = max_sum[1];
@@ -982,7 +950,6 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 		++de->bin[0].n;
 		de->bin[0].dt = max_dt = de->bin[0].dt + (max_dt-de->bin[0].dt)/MINIMUM(de->bin[0].n, 16);
 		/* LOG_FMT(LL_VERBOSE, "%s: binned: dt=%g n=%zd (n_bins=%d)", __func__, de->bin[0].dt, de->bin[0].n, de->n_bins); */
-		delay_est_hist_insert(hist, max_dt*de->ws);
 	}
 	if (r_max) *r_max = max;
 	return max_dt;
@@ -1117,8 +1084,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			const double dt = ev->align_dt[1] = estimate_delay(de, hist, ev->align_dt[0], &ev->align_max);
 			const double tol = (evc->uev_action == UNALIGNED_EVENT_ACTION_ALIGN) ? de->ra_tol : de->tol;
 			const double avg_v = (isnan(dt) || fabs(dt) > de->tol) ? -1.0 : 1.0;
-			const double align_wavg = (hist && hist->h) ? ewma_run(&ev->align_avg, avg_v)*0.5 +
-				ewma_run(&hist->align_avg, avg_v)*0.5 : ewma_run(&ev->align_avg, avg_v);
+			const double align_wavg = (ewma_run(&ev->align_avg, avg_v)+ewma_run(&hist->align_avg, avg_v))*0.5;
 			if (isnan(dt) || fabs(dt-ev->align_dt[0]) > tol
 		#if DELAY_EST_FRONT_BIAS
 				|| (axes_rear(&ev->align_max) && (fabs(dt) > de->tol || align_wavg < DELAY_EST_AVG_THRESH))
@@ -1134,8 +1100,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 		}
 		if (ev->t - ev->t_sample >= evc->sample_frames || (ev->flags[1] & EVENT_FLAG_FUSE && ev->t_end[1])) {
 			ev->t_delay_est = ev->t_sample = 0;
-			const double align_wavg = (hist && hist->h) ? ewma_get_last(&ev->align_avg)*0.5 +
-				ewma_get_last(&hist->align_avg)*0.5 : ewma_get_last(&ev->align_avg);
+			const double align_wavg = (ewma_get_last(&ev->align_avg)+ewma_get_last(&hist->align_avg))*0.5;
 			double ev_dt = ev->align_dt[0];
 			struct axes ev_dir = { ewma_get_last(&ev->avg[2]), ewma_get_last(&ev->avg[3]) };
 			if (ev->flags[1] & EVENT_FLAG_UNALIGNED) {

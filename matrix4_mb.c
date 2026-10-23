@@ -757,7 +757,6 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 		event_state_cleanup(&state->band[i].ev);
 		free(state->band[i].ax_buf);
 	}
-	delay_est_hist_cleanup(&state->de_hist);
 	free(state->syn_buf);
 #if DEBUG_POWER_ERROR
 	if (state->pwr_err_file)
@@ -915,8 +914,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		state->syn_buf = calloc(state->syn_buf_len, sizeof(sample_t)*state->n_bands*2);
 		if (check_alloc(ei->name, state->syn_buf)) goto fail;
 	}
-	if (config.uev_action && delay_est_hist_init(&state->de_hist,
-		lround(pow(state->n_bands, 0.7)*DELAY_EST_HIST_BASE_N))) goto fail;
+	if (config.uev_action && delay_est_hist_init(&state->de_hist, state->n_bands)) goto fail;
 	phase_flip_init_params(&state->pf_params, istream->fs);
 	const double an_tpeak_ref = fbp->an_tpeak[0] + ((state->syn_buf) ? (state->fb.an.mask[0]+1)*1000.0/istream->fs : 0.0);
 	for (int k = 0; k < state->n_bands; ++k) {
