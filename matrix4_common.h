@@ -60,13 +60,13 @@
 #define PWRCMP_FACTOR_SENS    0.1
 #define OFFSET_BASE_SCALE     1.0
 
-#define DELAY_EST_MAX_DELTA    1.0
+#define DELAY_EST_MAX_DELTA    0.8
 #define DELAY_EST_SAMPLE_TIME 15.0
-#define DELAY_EST_WINDOW_ALPHA 0.35
 #define DELAY_EST_FRONT_BIAS   1
 #define DELAY_EST_INDETERM     1.05
 #define DELAY_EST_AVG_THRESH  -0.3
 #define DELAY_EST_ALIGN_RESET  1
+#define DELAY_EST_XBAND_SCALE  0.15
 
 #define MATRIX_RS_DEFAULT          1.0
 #define MATRIX_ADJ0_DEFAULT        0.5
@@ -82,7 +82,7 @@
 #define LOWPASS_F0_DEFAULT      6000.0
 #define LOWPASS_ORDER_DEFAULT      0.5
 #define REAR_EVENT_MASK_DEFAULT    1.0
-#define REAR_EVENT_MASK_MB_DEFAULT 0.3
+#define REAR_EVENT_MASK_MB_DEFAULT 0.0
 #define DO_PHASE_FLIP_DEFAULT      0
 #define USE_FIR_P_DEFAULT          0
 #define DO_DPWR_DECOUPLE_DEFAULT   1
@@ -149,13 +149,18 @@ struct svf_pk_state {
 struct delay_est_state {
 	struct ewma_state agc[2], sm[2];
 	double (*buf)[2], (*rot)[2], (*os)[2], (*ihc)[2];
-	double fs, tol, ra_tol, bin_tol, thresh, ws, ihc_norm[2];
-	int p, len, os_len, dt, ev_lag, n_bins;
+	double *y, *w, *lr, *cs, *ym, *xy, *xlr;
+	double fs, tol, ra_tol, bin_tol, thresh, ws;
+	double tos, max_abs_cs, ihc_norm[2];
 	struct { double dt; size_t n; } bin[8];
+	int p, len, os_len, dt, ev_lag, n_bins, t_on_adj;
+	ssize_t t_on;
 };
 
 struct delay_est_hist {
 	struct ewma_state align_avg;
+	struct delay_est_state *de;
+	int n;
 };
 
 struct event_state {
@@ -181,6 +186,7 @@ struct event_state {
 		EVENT_FLAG_USE_ORD = 1<<2,
 		EVENT_FLAG_FUSE = 1<<3,
 		EVENT_FLAG_UNALIGNED = 1<<4,
+		EVENT_FLAG_NO_DIRECT = 1<<5,
 	} flags[2];
 	enum { OFF_FLAG_L = 1<<0, OFF_FLAG_R = 1<<1 } off_flags;
 };
@@ -268,16 +274,16 @@ struct direct_path_state {
 int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
 	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, double);
-int delay_est_state_init(struct delay_est_state *, double, double, double, double, double);
+int delay_est_state_init(struct delay_est_state *, double, double, double, double, double, double);
 void delay_est_state_cleanup(struct delay_est_state *);
-int delay_est_hist_init(struct delay_est_hist *, int);
+int delay_est_hist_init(struct delay_est_hist *, struct delay_est_state *, int);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
 void calc_matrix_coefs(const struct axes *, const struct axes *, const struct cmc_params *,
 	struct matrix_coefs *, union cmc_shelf_mult *, int);
 void surr_direct_pan(struct direct_path_state *, const struct axes *, const struct axes *,
-	int, double, int, int, double [4]);
+	int, double, int, int, int, double [4]);
 const char * matrix4_common_channel_label(struct effect *, enum channel_layout, int, int, int, int);
 
 #ifdef DSP_STATUSLINES

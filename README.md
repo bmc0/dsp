@@ -320,7 +320,7 @@ Example:
 		Sensitivity to rear-encoded sound events. If set to zero, sensitivity
 		is the same for all directions. If set to a high value (e.g. 5), most
 		rear events will be ignored. The default values are 1 for `matrix4`
-		and 0.3 for `matrix4_mb`.
+		and 0 for `matrix4_mb`.
 	* `unaligned_event_action=none|neutralize|align` (`matrix4_mb` only)  
 		The standard matrix surround signal model assumes zero interchannel
 		time difference for direct sound components, making it incompatible

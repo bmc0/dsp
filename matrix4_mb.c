@@ -55,9 +55,9 @@ struct matrix4_mb_input_state {
 };
 
 struct ax_buf_frame {
-	struct axes ax, ax_ev, ax_dpwr, diff_last, ev_dir;
-	double pwrcmp_factor, ev_ds_diff, align_syn_dt, rs_scale;
-	int ev_hold, ev_maybe, ev_unaligned, ev_realign;
+	struct axes ax, ax_ev, ax_dpwr, ev_dir;
+	double pwrcmp_factor, ev_ds_diff, syn_dt, rs_scale;
+	int ev_hold, ev_unaligned, ev_realign, ev_no_direct;
 };
 
 struct ch_align_an_state {
@@ -82,7 +82,6 @@ struct xtc_state {
 struct matrix4_band {
 	struct smooth_state sm;
 	struct envs env, pwr_env;
-	struct delay_est_state de;
 	struct event_state ev;
 	struct ax_buf_frame ax_f;
 	struct ch_align_an_state align_an;
@@ -101,7 +100,7 @@ struct matrix4_band {
 	struct ax_buf_frame *ax_buf;
 	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
 	double syn_dt, syn_tol_r, align_xfade_scale;
-	int ax_buf_p, ax_buf_len, align_xfade_p;
+	int ev_maybe, ax_buf_p, ax_buf_len, align_xfade_p;
 #if DEBUG_POWER_ERROR
 	struct ewma_state pwr_err[2];
 	struct smf_state pwr_err_sm;
@@ -125,8 +124,9 @@ struct matrix4_mb_state {
 	struct fshape_state fshape[2];
 	struct filter_bank fb;
 	struct matrix4_band band[FB_MAX_BANDS];
-	struct event_config evc;
+	struct delay_est_state de[FB_MAX_BANDS];
 	struct delay_est_hist de_hist;
+	struct event_config evc;
 	struct phase_flip_params pf_params;
 	sample_t *syn_buf;
 	double matrix_rs, matrix_adj[2];
@@ -283,7 +283,7 @@ static void ch_align_an_state_init(struct ch_align_an_state *a, struct delay_est
 	else a->s[1] = a->s[0] = 0.0;
 }
 
-static inline void ch_align_an_set(struct ch_align_an_state *a, struct delay_est_state *de, double dt)
+static void ch_align_an_set(struct ch_align_an_state *a, struct delay_est_state *de, double dt)
 {
 	if (!de->buf) return;
 	ch_align_set(fabs(dt)+CH_ALIGN_LATENCY, &a->dt, &a->ap);
@@ -291,7 +291,7 @@ static inline void ch_align_an_set(struct ch_align_an_state *a, struct delay_est
 	ap1_reset(&a->ap);
 }
 
-static inline void ch_align_an_run(struct ch_align_an_state *a, struct delay_est_state *de, sample_t *s0, sample_t *s1)
+static void ch_align_an_run(struct ch_align_an_state *a, struct delay_est_state *de, sample_t *s0, sample_t *s1)
 {
 	if (de->buf) {
 		const int p = de->p-1;
@@ -319,7 +319,7 @@ static void ch_align_syn_state_init(struct ch_align_syn_state *a, int ref)
 	}
 }
 
-static inline void ch_align_syn_xfade_start(struct ch_align_syn_state *a, int ref, double dt)
+static void ch_align_syn_xfade_start(struct ch_align_syn_state *a, int ref, double dt)
 {
 	a->ap[0] = a->ap[2]; a->ap[1] = a->ap[3];
 	a->dt[0] = a->dt[2]; a->dt[1] = a->dt[3];
@@ -335,7 +335,7 @@ static inline sample_t * syn_buf_get_frame(struct matrix4_mb_state *state, int d
 	return state->syn_buf + p*state->n_bands*2;
 }
 
-static inline void ch_align_syn_run(struct ch_align_syn_state *a, struct matrix4_mb_state *state,
+static void ch_align_syn_run(struct ch_align_syn_state *a, struct matrix4_mb_state *state,
 	int k, double t, sample_t *s0, sample_t *s1)
 {
 	const sample_t s_dt2 = syn_buf_get_frame(state, a->dt[2])[state->n_bands+k];
@@ -368,7 +368,7 @@ static int xtc_state_init(struct xtc_state *xtc, double itd, double ild)
 	return 0;
 }
 
-static inline void xtc_run(struct xtc_state *xtc, double g, double *l, double *r)
+static void xtc_run(struct xtc_state *xtc, double g, double *l, double *r)
 {
 	const double s[2] = { *l, *r }, d[2] = {
 		(ap1_run(&xtc->ap[0], xtc->buf[xtc->p][0]+XTC_FTZ)-XTC_FTZ)*xtc->g,
@@ -402,9 +402,9 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		for (int k = 0; k < state->n_bands; ++k) {
 			struct matrix4_band *band = &state->band[k];
 			if (!(state->fb.an.p & state->fb.an.mask[k])) {
-				delay_est_insert(&band->de, state->fb.an.s[k][0], state->fb.an.s[k][1]);
+				delay_est_insert(&state->de[k], state->fb.an.s[k][0], state->fb.an.s[k][1]);
 				sample_t s0a_an = state->fb.an.s[k][0], s1a_an = state->fb.an.s[k][1];
-				if (state->syn_buf) ch_align_an_run(&band->align_an, &band->de, &s0a_an, &s1a_an);
+				if (state->syn_buf) ch_align_an_run(&band->align_an, &state->de[k], &s0a_an, &s1a_an);
 				calc_input_envs(&band->sm, s0a_an, s1a_an, &band->env, &band->pwr_env);
 			}
 		}
@@ -422,8 +422,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			/* find bands with possible events */
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
-				if (band->ax_f.ev_maybe) {
-					angles[n_angles].ax = band->ax_f.diff_last;
+				if (band->ev_maybe) {
+					angles[n_angles].ax = band->ev.diff_last;
 					angles[n_angles].dt = band->syn_dt;
 					angles[n_angles].tol_r = band->syn_tol_r;
 					++n_angles;
@@ -439,13 +439,14 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
+				struct event_state *ev = &band->ev;
 				/* modulate event threshold based on the number of
 				   bands with similar differential steering angles */
 				double ev_thresh_fact = 0.0;
-				if (band->ax_f.ev_maybe) {
+				if (band->ev_maybe) {
 					for (int j = 0; j < n_angles; ++j) {
-						const double d_lr = fabs(angles[j].ax.lr - band->ax_f.diff_last.lr);
-						const double d_cs = fabs(angles[j].ax.cs - band->ax_f.diff_last.cs);
+						const double d_lr = fabs(angles[j].ax.lr - ev->diff_last.lr);
+						const double d_cs = fabs(angles[j].ax.cs - ev->diff_last.cs);
 						ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI)) *
 							smoothstep(2.0-fabs(band->syn_dt-angles[j].dt)*MINIMUM(band->syn_tol_r, angles[j].tol_r));
 					}
@@ -455,24 +456,23 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 
 				struct ax_buf_frame ax_f = {0};
-				struct event_state *ev = &band->ev;
-				process_events(ev, &state->evc, &band->env, &band->pwr_env, &band->de, &state->de_hist,
+				process_events(ev, &state->evc, &band->env, &band->pwr_env, &state->de[k], &state->de_hist,
 					ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
-				ax_f.diff_last = ev->diff_last;
+				band->ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
+					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
 				ax_f.ev_dir = ev->dir;
 				ax_f.pwrcmp_factor = ewma_get_last(&ev->pwrcmp_factor);
 				ax_f.ev_ds_diff = ev->ds_diff;
 				ax_f.rs_scale = ewma_get_last(&ev->rs_scale);
 				ax_f.ev_hold = !!ev->t_hold;
-				ax_f.ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
-					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
 				ax_f.ev_unaligned = ev->unaligned;
 				ax_f.ev_realign = ev->realign;
+				ax_f.syn_dt = band->syn_dt = ev->align_dt[0] * (state->fb.an.mask[k]+1);
 				if (ax_f.ev_realign) {
-					ax_f.align_syn_dt = ev->align_dt[0] * (state->fb.an.mask[k]+1);
-					ch_align_an_set(&band->align_an, &band->de, ev->align_dt[0]);
+					ch_align_an_set(&band->align_an, &state->de[k], ev->align_dt[0]);
 					ev->realign = 0;
 				}
+				ax_f.ev_no_direct = (ev->flags[0] & EVENT_FLAG_NO_DIRECT);
 				if (band->ax_buf_len > 0) {
 					band->ax_f = band->ax_buf[band->ax_buf_p];
 					band->ax_buf[band->ax_buf_p] = ax_f;
@@ -483,7 +483,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				if (state->do_direct_path) {
 					double r_pan[4];
 					surr_direct_pan(&band->dp, &band->ax_f.ax, &band->ax_f.ax_ev, band->ax_f.ev_hold,
-						band->ax_f.ev_ds_diff, band->ax_f.ev_unaligned, state->have_rears, r_pan);
+						band->ax_f.ev_ds_diff, band->ax_f.ev_unaligned, band->ax_f.ev_no_direct, state->have_rears, r_pan);
 					cs_interp_insert(&band->m_interp.amb, r_pan[0]);
 					cs_interp_insert(&band->m_interp.sdir, r_pan[1]);
 					if (state->have_rears) cs_interp_insert(&band->m_interp.rdir, r_pan[2]);
@@ -546,8 +546,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					cs_interp_insert(&band->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 				}
 				if (state->syn_buf && band->ax_f.ev_realign) {
-					band->syn_dt = band->ax_f.align_syn_dt;
-					ch_align_syn_xfade_start(&band->align_syn, state->align_ref_syn, band->syn_dt);
+					ch_align_syn_xfade_start(&band->align_syn, state->align_ref_syn, band->ax_f.syn_dt);
 					const double align_xfade_frames = e->istream.fs * (RISE_TIME_FAST*1.183/1000.0)/band->ax_f.ev_ds_diff;
 					band->align_xfade_p = lrint(align_xfade_frames) + CS_INTERP_DELAY_FRAMES;
 					band->align_xfade_scale = 1.0/align_xfade_frames;
@@ -685,7 +684,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					band->ev.adj, ewma_get_last(&band->ev_thresh), state->contour_pwrcmp*band->ax_f.pwrcmp_factor,
 					band->ev.ord_count, band->ev.diff_count, band->ev.early_count, band->ev.ignore_count
 				#if STATUS_SHOW_ALIGN
-					, band->syn_dt*(1000.0*1000.0)/e->istream.fs, (band->ev.unaligned) ? "*" : ""
+					, band->ax_f.syn_dt*1e6/e->istream.fs, (band->ev.unaligned) ? "*" : ""
 				#endif
 				#if DEBUG_POWER_ERROR
 					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
@@ -709,7 +708,7 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					, e->name, (state->disable) ? " [off]" : "", i,
 					band->lr_bar.s, band->cs_bar.s, band->ev.ord_count, band->ev.diff_count, band->ev.ignore_count
 				#if STATUS_SHOW_ALIGN
-					, band->syn_dt*(1000.0*1000.0)/e->istream.fs, (band->ev.unaligned) ? "*" : ""
+					, band->ax_f.syn_dt*1e6/e->istream.fs, (band->ev.unaligned) ? "*" : ""
 				#endif
 				#if DEBUG_POWER_ERROR
 					, 10.0*log10(smf_get_last(&band->pwr_err_sm))
@@ -754,7 +753,7 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 {
 	struct matrix4_mb_state *state = (struct matrix4_mb_state *) e->data;
 	for (int i = 0; i < state->n_bands; ++i) {
-		delay_est_state_cleanup(&state->band[i].de);
+		delay_est_state_cleanup(&state->de[i]);
 		event_state_cleanup(&state->band[i].ev);
 		free(state->band[i].ax_buf);
 	}
@@ -915,16 +914,17 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		state->syn_buf = calloc(state->syn_buf_len, sizeof(sample_t)*state->n_bands*2);
 		if (check_alloc(ei->name, state->syn_buf)) goto fail;
 	}
-	if (config.uev_action && delay_est_hist_init(&state->de_hist, state->n_bands)) goto fail;
+	if (config.uev_action && delay_est_hist_init(&state->de_hist, state->de, state->n_bands)) goto fail;
 	phase_flip_init_params(&state->pf_params, istream->fs);
 	const double an_tpeak_ref = fbp->an_tpeak[0] + ((state->syn_buf) ? (state->fb.an.mask[0]+1)*1000.0/istream->fs : 0.0);
 	for (int k = 0; k < state->n_bands; ++k) {
 		struct matrix4_band *band = &state->band[k];
 		const double an_fs = (double) istream->fs / (state->fb.an.mask[k]+1);
+		const double an_tpeak = fbp->an_tpeak[k] + ((state->syn_buf) ? (state->fb.an.mask[k]+1)*1000.0/istream->fs : 0.0);
 		smooth_state_init(&band->sm, an_fs);
-		if (config.uev_action && delay_est_state_init(&band->de, an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
+		if (config.uev_action && delay_est_state_init(&state->de[k], an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
 			MAXIMUM(MINIMUM(2.0-0.241*(log(fbp->fc[k])-3.4), 2.0), 0.5),
-			DOWNSAMPLED_FS(istream->fs))) goto fail;
+			DOWNSAMPLED_FS(istream->fs), -0.7*an_tpeak)) goto fail;
 		band->syn_tol_r = (fbp->fc[k]*8.0)/istream->fs;  /* ±45°; for event threshold modulation */
 		const double thresh_scale = (fbp->thresh_scale[k] > 0.0) ? fbp->thresh_scale[k] : 1.0;
 		band->ev_thresh_max = EVENT_THRESH_MAX * thresh_scale;
@@ -933,7 +933,6 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 			gauss_mag(BASE_ORD_NOTCH_SCALE_F0, fbp->fc[k], 0))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
 		ewma_set(&band->ev_thresh, band->ev_thresh_max);
-		const double an_tpeak = fbp->an_tpeak[k] + ((state->syn_buf) ? (state->fb.an.mask[k]+1)*1000.0/istream->fs : 0.0);
 		band->ax_buf_len = TIME_TO_FRAMES((an_tpeak_ref-an_tpeak)*0.7, DOWNSAMPLED_FS(istream->fs));
 		if (band->ax_buf_len > 0) {
 			band->ax_buf = calloc(band->ax_buf_len, sizeof(struct ax_buf_frame));
@@ -953,7 +952,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		cs_interp_set(&band->m_interp.rdir, 0.0);
 		direct_path_state_init(&band->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
 		if (state->syn_buf) {
-			ch_align_an_state_init(&band->align_an, &band->de);
+			ch_align_an_state_init(&band->align_an, &state->de[k]);
 			ch_align_syn_state_init(&band->align_syn, state->align_ref_syn);
 		}
 		if (config.do_xtc && xtc_state_init(&band->xtc,
