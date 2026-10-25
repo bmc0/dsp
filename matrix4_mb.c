@@ -536,7 +536,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 					cs_interp_insert(&band->m_interp.rg, s_norm);
 				}
 				if (band->xtc.buf) {
-					const double xg = (band->ax_f.ax.cs > 0.0) ? sin(2.0*band->ax_f.ax.cs) : 0.0;
+					const double ax_cs = band->ax_f.ax.cs;
+					const double xg = sin(2.0*((ax_cs >= 0.0) ? ax_cs : (rs_scale-1.0)*ax_cs));
 					cs_interp_insert(&band->m_interp.xg, xg*cur_fade_mult);
 				}
 				if (state->do_phase_flip) {
