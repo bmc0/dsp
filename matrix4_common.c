@@ -1599,15 +1599,16 @@ void calc_matrix_coefs_v4(const struct axes *ax, const struct axes *ax_dpwr, con
 	m->rsr *= pdc_s;
 }
 
-void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs, double ev_ds_diff,
-	const struct axes *ax, int ev_unaligned, int have_rears, double r[4])
+void surr_direct_pan(struct direct_path_state *dp, const struct axes *ax, const struct axes *ax_ev,
+	int ev_hold, double ev_ds_diff, int ev_unaligned, int have_rears, double r[4])
 {
 	const double x = fabs(ax->lr);
 	r[0] = 1.0; r[1] = 0.0; r[2] = 0.0; r[3] = 0.0;
 	if (dp->mode == DIRECT_PATH_EVENT) {
+		const double x_ev = fabs(ax_ev->lr);
 		if (!dp->enable && ev_hold && !ev_unaligned) {
-			const double eb = (-0.45*x+0.8)*x*x-(M_PI/8);
-			if (ev_cs <= eb) {
+			const double eb = (-0.45*x_ev+0.8)*x_ev*x_ev-(M_PI/8);
+			if (ax_ev->cs <= eb) {
 				if (ax->cs >= 0.0) ewma_set(&dp->zs, 1.0);
 				dp->enable = 1;
 			}
@@ -1616,11 +1617,12 @@ void surr_direct_pan(struct direct_path_state *dp, int ev_hold, double ev_cs, do
 			const double y0 = (-0.05*x+0.17)*x*x-(M_PI/32);
 			const double y1 = (-0.15*x+0.37)*x*x-(M_PI/12);
 			if (ev_hold) {
-				if (ev_cs >= y1 || ev_unaligned) {
-					if (ax->cs >= y0) goto direct_path_finish;
+				const double y1_ev = (-0.15*x_ev+0.37)*x_ev*x_ev-(M_PI/12);
+				if (ax_ev->cs >= y1_ev || ev_unaligned) {
+					if (ax->cs >= 0.0) goto direct_path_finish;
 					else dp->enable = 2;
 				}
-				else if (dp->enable > 1 && ev_cs < y1 && !ev_unaligned)
+				else if (dp->enable > 1 && ax_ev->cs < y1_ev && !ev_unaligned)
 					dp->enable = 1;
 			}
 			else if (ax->cs >= y0) {

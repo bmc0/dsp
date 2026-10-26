@@ -277,7 +277,8 @@ int delay_est_hist_init(struct delay_est_hist *, int);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
-void surr_direct_pan(struct direct_path_state *, int, double, double, const struct axes *, int, int, double [4]);
+void surr_direct_pan(struct direct_path_state *, const struct axes *, const struct axes *,
+	int, double, int, int, double [4]);
 const char * matrix4_common_channel_label(struct effect *, enum channel_layout, int, int, int, int);
 
 #ifdef DSP_STATUSLINES
