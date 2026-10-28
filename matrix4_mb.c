@@ -938,6 +938,10 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		if (band->ax_buf_len > 0) {
 			band->ax_buf = calloc(band->ax_buf_len, sizeof(struct ax_buf_frame));
 			if (check_alloc(ei->name, band->ax_buf)) goto fail;
+			for (int i = 0; i < band->ax_buf_len; ++i) {
+				band->ax_buf[i].pwrcmp_factor = ewma_get_last(&band->ev.pwrcmp_factor);
+				band->ax_buf[i].rs_scale = ewma_get_last(&band->ev.rs_scale);
+			}
 		}
 		const double pf_pos_rs = phase_flip_pos_rs(&band->ax_f.ax, ewma_get_last(&band->ev.rs_scale));
 		cs_interp_set(&band->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
