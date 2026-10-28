@@ -370,12 +370,12 @@ static inline void delay_est_insert(struct delay_est_state *de, double l, double
 	}
 }
 
-static inline double phase_flip_pos_rs(struct axes *ax)
+static inline double phase_flip_pos_rs(struct axes *ax, double rs)
 {
 	if (ax->cs >= 0.0) return 0.5;
-	double x = ax->cs*(-2/M_PI_4);
+	double x = ax->cs*rs*(-2/M_PI_4);
 	x = x*x*0.5+0.5;
-	return MINIMUM(x, 1.0);
+	return MINIMUM(x, rs);
 }
 
 static inline double phase_flip_ap1_c0(const struct phase_flip_params *pf, double pos)

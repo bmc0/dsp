@@ -186,7 +186,7 @@ static sample_t * matrix4_effect_run(struct effect *e, ssize_t *frames, sample_t
 				cs_interp_insert(&state->m_interp.g_rear_shelf, s_norm);
 			}
 			if (state->do_phase_flip) {
-				const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
+				const double pf_pos_rs = phase_flip_pos_rs(&state->ax, rs_scale);
 				cs_interp_insert(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
 				cs_interp_insert(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 			}
@@ -456,10 +456,6 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	for (int i = 0; i < 4; ++i) dyn_shelf_init(&state->sr_shelf[i], istream->fs, config.shelf_f0);
 	smf_asym_init(&state->bg_cs, DOWNSAMPLED_FS(istream->fs), SMF_RISE_TIME(ACCOM_TIME*2.0), 0.01, 1e-6);
 	smf_set(&state->bg_cs, 1.0);
-	phase_flip_init_params(&state->pf_params, istream->fs);
-	const double pf_pos_rs = phase_flip_pos_rs(&state->ax);
-	cs_interp_set(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
-	cs_interp_set(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 	ap1_reset(&state->pf_ap[0]);
 	ap1_reset(&state->pf_ap[1]);
 	cs_interp_set(&state->m_interp.amb, 1.0);
@@ -468,6 +464,10 @@ struct effect * matrix4_effect_init(const struct effect_info *ei, const struct s
 	direct_path_state_init(&state->dp, DOWNSAMPLED_FS(istream->fs), config.dp_mode);
 	smooth_state_init(&state->sm, istream->fs);
 	if (event_state_init(&state->ev, istream, 1.0, BASE_ORD_NOTCH_SCALE)) goto fail;
+	phase_flip_init_params(&state->pf_params, istream->fs);
+	const double pf_pos_rs = phase_flip_pos_rs(&state->ax, ewma_get_last(&state->ev.rs_scale));
+	cs_interp_set(&state->pf_ap_c0[0], phase_flip_ap1_c0(&state->pf_params, 1.0-pf_pos_rs));
+	cs_interp_set(&state->pf_ap_c0[1], phase_flip_ap1_c0(&state->pf_params, pf_pos_rs));
 #if DEBUG_POWER_ERROR
 	for (int i = 0; i < 6; ++i) {
 		biquad_init_using_type(&state->pwr_err_bp.lp[i], BIQUAD_LOWPASS, istream->fs, 14000.0, 0.5, 0, 0, BIQUAD_WIDTH_Q);
