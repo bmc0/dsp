@@ -128,9 +128,9 @@ struct matrix4_mb_state {
 	struct event_config evc;
 	struct delay_est_hist de_hist;
 	struct phase_flip_params pf_params;
-	calc_matrix_coefs_func calc_matrix_coefs;
 	sample_t *syn_buf;
-	double matrix_adj[2], surr_mult[2], contour_pwrcmp;
+	double matrix_rs, matrix_adj[2];
+	double surr_mult[2], contour_pwrcmp;
 	ssize_t drain_frames, latency_frames, align_latency_frames;
 	int syn_buf_p, syn_buf_len, align_ref_syn, fade_frames, fade_p;
 #if DEBUG_POWER_ERROR
@@ -513,10 +513,10 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				struct matrix_coefs m = {0};
 				struct cmc_params cmc_p = {
 					.surr_mult = { surr_mult*ct1, surr_mult_rear },
-					.rs = rs_scale,
+					.rs = state->matrix_rs*rs_scale,
 					.adj = matrix_adj,
 				};
-				state->calc_matrix_coefs(&band->ax_f.ax, ax_dpwr, &cmc_p, &m, NULL, 0);
+				calc_matrix_coefs(&band->ax_f.ax, ax_dpwr, &cmc_p, &m, NULL, 0);
 
 				cs_interp_insert(&band->m_interp.ll, m.ll);
 				cs_interp_insert(&band->m_interp.lr, m.lr);
@@ -899,7 +899,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->do_direct_path = !!config.dp_mode;
 	state->do_dpwr_decouple = !!config.do_dpwr_decouple;
 	state->have_rears = (config.channel_layout->ns >= 4);
-	state->calc_matrix_coefs = config.calc_matrix_coefs;
+	state->matrix_rs = config.matrix_rs;
 	state->matrix_adj[0] = config.matrix_adj[0];
 	state->matrix_adj[1] = config.matrix_adj[1];
 	e->signal = (config.enable_signal) ? matrix4_mb_effect_signal : NULL;

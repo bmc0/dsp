@@ -68,8 +68,9 @@
 #define DELAY_EST_AVG_THRESH  -0.3
 #define DELAY_EST_ALIGN_RESET  1
 
-#define MATRIX_V4_ADJ0_DEFAULT     0.5
-#define MATRIX_V4_ADJ1_DEFAULT     1.0
+#define MATRIX_RS_DEFAULT          1.0
+#define MATRIX_ADJ0_DEFAULT        0.5
+#define MATRIX_ADJ1_DEFAULT        1.0
 #define SURR_MULT_DEFAULT          M_SQRT1_2
 #define SURR_MULT_REAR_DEFAULT     1.0
 #define LOOKAHEAD_DEFAULT          0.5
@@ -122,7 +123,7 @@
 #define ENABLE_LOOKBACK 1
 #define ORD_DPWR_USE_ABS_MAX 0
 #define DEBUG_POWER_ERROR 0
-#define MATRIX_V4_PREEMPH 1
+#define MATRIX_PREEMPH 1
 
 struct envs {
 	double l, r, sum, diff;
@@ -211,9 +212,6 @@ union cmc_shelf_mult {
 	struct { double front, surr; } ret;
 };
 
-typedef void (*calc_matrix_coefs_func)(const struct axes *, const struct axes *, const struct cmc_params *,
-	struct matrix_coefs *, union cmc_shelf_mult *, int);
-
 enum channel_layout {
 	CHANNEL_LAYOUT_2_2 = 0,
 	CHANNEL_LAYOUT_2_4,
@@ -241,8 +239,7 @@ struct matrix4_config {
 	enum direct_path_mode dp_mode;
 	enum capn_filter_type fb_type;
 	enum unaligned_event_action uev_action;
-	calc_matrix_coefs_func calc_matrix_coefs;
-	double matrix_adj[2];
+	double matrix_rs, matrix_adj[2];
 	const struct channel_layout_info *channel_layout;
 	char fb_id[32];
 #if DEBUG_POWER_ERROR
@@ -277,6 +274,8 @@ int delay_est_hist_init(struct delay_est_hist *, int);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
+void calc_matrix_coefs(const struct axes *, const struct axes *, const struct cmc_params *,
+	struct matrix_coefs *, union cmc_shelf_mult *, int);
 void surr_direct_pan(struct direct_path_state *, const struct axes *, const struct axes *,
 	int, double, int, int, double [4]);
 const char * matrix4_common_channel_label(struct effect *, enum channel_layout, int, int, int, int);
