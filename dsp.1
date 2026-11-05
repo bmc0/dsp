@@ -789,7 +789,8 @@ causes any character that follows to be intepreted as literal. Example:
 .SS Threads
 An effects chain may be manually split amongst multiple threads using the
 `new_thread' directive. Each additional thread increases total input\(enoutput
-latency by one block.
+latency by one block. Effects chain threading is not currently implemented in
+\fBladspa_dsp\fR.
 .SS Other directives
 An exclamation mark (`!') allows initialization failure of the effect that
 follows.

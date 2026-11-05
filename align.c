@@ -151,7 +151,11 @@ int align_effect_insert(struct effects_subchain *sc, struct effect *prev, struct
 		for (int k = 0; k < e->istream.channels; ++k)
 			offsets[k] -= min_ref;
 		state->discard_frames = min_ref;
+	#ifndef SYMMETRIC_IO
 		LOG_FMT(LL_VERBOSE, "%s (%s): info: discarding %zd frames", e->name, next_name, state->discard_frames);
+	#else
+		LOG_FMT(LL_VERBOSE, "%s (%s): info: %zd leading frames", e->name, next_name, state->discard_frames);
+	#endif
 	}
 	state->frames = -state->discard_frames;
 

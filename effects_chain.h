@@ -29,7 +29,10 @@ struct effects_chain {
 	struct { int n, d; } ratio;
 	ssize_t drain_frames, iframes, oframes;
 	ssize_t zero_ref, buf_len;
-	int delay, frac, new_sc;
+	int delay, frac;
+#ifndef SYMMETRIC_IO
+	int new_sc;
+#endif
 };
 
 #define EFFECTS_CHAIN_INITIALIZER {0}

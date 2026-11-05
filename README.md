@@ -700,7 +700,8 @@ causes any character that follows to be intepreted as literal. Example:
 
 An effects chain may be manually split amongst multiple threads using the
 `new_thread` directive. Each additional thread increases total input–output
-latency by one block.
+latency by one block. Effects chain threading is not currently implemented in
+`ladspa_dsp`.
 
 #### Other directives
 

@@ -22,8 +22,10 @@
 #include <ctype.h>
 #include <math.h>
 #include <errno.h>
-#include <pthread.h>
-#include <semaphore.h>
+#ifndef SYMMETRIC_IO
+	#include <pthread.h>
+	#include <semaphore.h>
+#endif
 #include "effects_chain.h"
 #include "util.h"
 #include "list_util.h"
@@ -34,17 +36,21 @@ struct effects_subchain {
 	struct effects_subchain *prev, *next;
 	struct effect *head, *tail;
 	sample_t *buf1, *buf2;
+#ifndef SYMMETRIC_IO
 	pthread_t thread;
 	pthread_mutex_t lock;
 	struct {
 		sem_t in, out;
 		sem_t *prev, *next;
 	} sync;
+#endif
 	struct {
 		sample_t *buf;
 		ssize_t frames;
 	} out;
+#ifndef SYMMETRIC_IO
 	int has_thread, flush;
+#endif
 };
 
 enum ec_token_id {
@@ -262,24 +268,38 @@ void effects_subchain_insert(struct effects_subchain *sc, struct effect *e, stru
 	LIST_INSERT(sc, e, prev);
 }
 
+#ifndef SYMMETRIC_IO
+	#define ec_subchain_lock(X)   pthread_mutex_lock(&(X)->lock)
+	#define ec_subchain_unlock(X) pthread_mutex_unlock(&(X)->lock)
+#else
+	#define ec_subchain_lock(X)   /* noop */
+	#define ec_subchain_unlock(X) /* noop */
+#endif
+
 static int ec_add_subchain(struct effects_chain *chain)
 {
 	struct effects_subchain *sc = calloc(1, sizeof(struct effects_subchain));
 	if (!sc) return DSP_ENOMEM;
+#ifndef SYMMETRIC_IO
 	pthread_mutex_init(&sc->lock, NULL);
 	sem_init(&sc->sync.in, 0, 0);
 	sem_init(&sc->sync.out, 0, 1);
+#endif
 	LIST_APPEND(chain, sc);
 	return 0;
 }
 
 static int ec_append(struct effects_chain *chain, struct effect *e)
 {
+#ifndef SYMMETRIC_IO
 	if (!chain->tail || chain->new_sc) {
 		LOG_FMT(LL_VERBOSE, "info: new subchain: %s", e->name);
+		chain->new_sc = 0;
+#else
+	if (!chain->tail) {
+#endif
 		const int err = ec_add_subchain(chain);
 		if (err) return err;
-		chain->new_sc = 0;
 	}
 	LIST_APPEND(chain->tail, e);
 	return 0;
@@ -502,7 +522,11 @@ static struct ec_token * ec_parse(struct ec_parser_state *state, struct ec_token
 			tok = tok->next; continue;
 		}
 		if (tok->id == EC_TOKEN_NEW_THREAD) {
+		#ifndef SYMMETRIC_IO
 			state->chain->new_sc = 1;
+		#else
+			LOG_S(LL_VERBOSE, "warning: ignoring new_thread directive");
+		#endif
 			tok = tok->next; continue;
 		}
 		if (state->last_stream_ch != state->stream->channels) {  /* construct new channel mask */
@@ -1075,10 +1099,12 @@ static int build_effects_chain_finish(struct effects_chain *chain)
 		ec_set_drain_frames(&state, chain);
 		ec_postproc_state_cleanup(&state);
 	}
+#ifndef SYMMETRIC_IO
 	LIST_FOREACH(chain, sc) {
 		sc->sync.prev = (sc->prev) ? &sc->prev->sync.out : &chain->tail->sync.out;
 		sc->sync.next = (sc->next) ? &sc->next->sync.in : &chain->head->sync.in;
 	}
+#endif
 	return 0;
 }
 
@@ -1126,13 +1152,13 @@ static ssize_t effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_
 {
 	ssize_t frames = in_frames, len, max_len = in_frames * chain->istream.channels;
 	LIST_FOREACH(chain, sc) {
-		pthread_mutex_lock(&sc->lock);
+		ec_subchain_lock(sc);
 		LIST_FOREACH(sc, e) {
 			frames = effect_max_out_frames(e, frames);
 			len = frames * e->ostream.channels;
 			if (len  > max_len) max_len = len;
 		}
-		pthread_mutex_unlock(&sc->lock);
+		ec_subchain_unlock(sc);
 	}
 	return max_len;
 }
@@ -1140,6 +1166,7 @@ static ssize_t effects_chain_buffer_len(struct effects_chain *chain, ssize_t in_
 static sample_t * ec_cycle_blocks(struct effects_chain *chain, ssize_t *frames)
 {
 	struct effects_subchain *sc = chain->head;
+#ifndef SYMMETRIC_IO
 	if (sc->next) {
 		/* write block */
 		while (sem_wait(&sc->sync.out) != 0);
@@ -1153,15 +1180,17 @@ static sample_t * ec_cycle_blocks(struct effects_chain *chain, ssize_t *frames)
 		*frames = chain->tail->out.frames;
 		sem_post(sc->sync.prev);
 	}
+#endif
 	return sc->buf1;
 }
 
+#ifndef SYMMETRIC_IO
 static void ec_flush_begin(struct effects_chain *chain)
 {
 	LIST_FOREACH(chain, sc) {
-		pthread_mutex_lock(&sc->lock);
+		ec_subchain_lock(sc);
 		sc->flush = 1;
-		pthread_mutex_unlock(&sc->lock);
+		ec_subchain_unlock(sc);
 	}
 }
 
@@ -1169,6 +1198,10 @@ static void ec_flush_end(struct effects_chain *chain)
 {
 	LIST_FOREACH(chain, sc) sc->flush = 0;
 }
+#else
+	#define ec_flush_begin(X) /* noop */
+	#define ec_flush_end(X)   /* noop */
+#endif
 
 static void ec_free_buffers(struct effects_chain *chain)
 {
@@ -1186,6 +1219,7 @@ static void ec_free_buffers(struct effects_chain *chain)
 		do { free(sc->buf2); } while ((sc = sc->next));
 		ec_flush_end(chain);
 	}
+	chain->buf_len = 0;
 }
 
 static void run_effect_list(struct effect *e, ssize_t *frames, sample_t **buf1, sample_t **buf2)
@@ -1225,6 +1259,7 @@ static void drain_effect_list(struct effect *e, ssize_t *frames, sample_t **buf1
 	else *frames = -(*frames);
 }
 
+#ifndef SYMMETRIC_IO
 static void * subchain_worker(void *arg)
 {
 	struct effects_subchain *sc = (struct effects_subchain *) arg;
@@ -1242,23 +1277,25 @@ static void * subchain_worker(void *arg)
 		frames = sc->prev->out.frames;
 		sem_post(sc->sync.prev);
 
-		pthread_mutex_lock(&sc->lock);
+		ec_subchain_lock(sc);
 		if (sc->flush) frames = 0;
 		else if (frames < 0) {
 			frames = -frames;
 			drain_effect_list(sc->head, &frames, &sc->buf1, &sc->buf2);
 		}
 		else run_effect_list(sc->head, &frames, &sc->buf1, &sc->buf2);
-		pthread_mutex_unlock(&sc->lock);
+		ec_subchain_unlock(sc);
 	}
 	return NULL;
 }
+#endif
 
 int effects_chain_realloc_buffers(struct effects_chain *chain, ssize_t in_frames)
 {
 	if (in_frames < 1) return 1;
 	const ssize_t new_buf_len = effects_chain_buffer_len(chain, in_frames);
 	if (new_buf_len > chain->buf_len) {
+	#ifndef SYMMETRIC_IO
 		if (chain->buf_len == 0) {
 			/* spawn worker threads */
 			struct effects_subchain *sc = chain->head;
@@ -1271,6 +1308,9 @@ int effects_chain_realloc_buffers(struct effects_chain *chain, ssize_t in_frames
 			}
 		}
 		else ec_free_buffers(chain);
+	#else
+		if (chain->buf_len) ec_free_buffers(chain);
+	#endif
 		/* alloc and distribute all buf1 */
 		ssize_t frames;
 		do {
@@ -1315,9 +1355,9 @@ int effects_chain_set_dither_params(struct effects_chain *chain, int prec, int e
 	int r = 1;
 	LIST_FOREACH(chain, sc) LIST_FOREACH(sc, e) {
 		if (effect_is_dither(e)) {
-			pthread_mutex_lock(&sc->lock);
+			ec_subchain_lock(sc);
 			dither_effect_set_params(e, prec, enabled);
-			pthread_mutex_unlock(&sc->lock);
+			ec_subchain_unlock(sc);
 			r = 0;
 		}
 		else if (!(e->flags & EFFECT_FLAG_NO_DITHER)) r = 1;
@@ -1337,6 +1377,7 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames)
 
 	chain->iframes += iframes;
 	chain->oframes += oframes;
+#ifndef SYMMETRIC_IO
 	if (chain->istream.fs == chain->ostream.fs)
 		chain->delay += iframes - oframes;
 	else {
@@ -1349,6 +1390,9 @@ sample_t * run_effects_chain(struct effects_chain *chain, ssize_t *frames)
 		}
 		chain->delay += oframes_nd - oframes;
 	}
+#elif 0
+	if (iframes != oframes) LOG_FMT(LL_ERROR, "%s(): BUG: iframes != oframes", __func__);
+#endif
 	return obuf;
 }
 
@@ -1377,9 +1421,9 @@ void reset_effects_chain(struct effects_chain *chain)
 void signal_effects_chain(struct effects_chain *chain)
 {
 	LIST_FOREACH(chain, sc) {
-		pthread_mutex_lock(&sc->lock);
+		ec_subchain_lock(sc);
 		LIST_FOREACH(sc, e) if (e->signal) e->signal(e);
-		pthread_mutex_unlock(&sc->lock);
+		ec_subchain_unlock(sc);
 	}
 }
 
@@ -1631,12 +1675,14 @@ sample_t * drain_effects_chain(struct effects_chain *chain, ssize_t *frames)
 void destroy_effects_chain(struct effects_chain *chain)
 {
 	ec_free_buffers(chain);
+#ifndef SYMMETRIC_IO
 	LIST_FOREACH(chain, sc) {
 		if (sc->has_thread) {
 			pthread_cancel(sc->thread);
 			pthread_join(sc->thread, NULL);
 		}
 	}
+#endif
 	while (chain->head) {
 		struct effects_subchain *sc = chain->head;
 		LIST_REMOVE(chain, sc);
@@ -1645,9 +1691,11 @@ void destroy_effects_chain(struct effects_chain *chain)
 			LIST_REMOVE(sc, e);
 			destroy_effect(e);
 		}
+	#ifndef SYMMETRIC_IO
 		sem_destroy(&sc->sync.out);
 		sem_destroy(&sc->sync.in);
 		pthread_mutex_destroy(&sc->lock);
+	#endif
 		free(sc);
 	}
 	*chain = (struct effects_chain) EFFECTS_CHAIN_INITIALIZER;
