@@ -45,9 +45,11 @@
 #include "matrix4_filter_bank.c"
 
 #define REPORT_EVENT_LEVELS 0
-#define EVENT_TARGET_BASE   (EVENT_THRESH_MAX*0.15)
-#define EVENT_TARGET_EXP1   0.17
-#define EVENT_TARGET_EXP2   0.28
+#define EVENT_TARGET_BASE (EVENT_THRESH_MAX*0.15)
+#define EVENT_TARGET0_EXP1 0.17
+#define EVENT_TARGET0_EXP2 0.28
+#define EVENT_TARGET1_EXP1 0.05
+#define EVENT_TARGET1_EXP2 0.2
 
 struct matrix4_mb_input_state {
 	int c0, c1;
@@ -98,8 +100,7 @@ struct matrix4_band {
 	struct ewma_state ev_thresh;
 	struct xtc_state xtc;
 	struct ax_buf_frame *ax_buf;
-	double ev_thresh_max, ev_thresh_min, contour, rear_shelf;
-	double syn_dt, syn_tol_r, align_xfade_scale;
+	double ev_thresh_max, ev_thresh_min, contour, rear_shelf, align_xfade_scale;
 	int ev_maybe, ax_buf_p, ax_buf_len, align_xfade_p;
 #if DEBUG_POWER_ERROR
 	struct ewma_state pwr_err[2];
@@ -415,18 +416,15 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 		if (1) {
 	#endif
 			int n_angles = 0;
-			struct {
-				struct axes ax;
-				double dt, tol_r;
-			} angles[FB_MAX_BANDS];
-			/* find bands with possible events */
-			for (int k = 0; k < state->n_bands; ++k) {
-				struct matrix4_band *band = &state->band[k];
-				if (band->ev_maybe) {
-					angles[n_angles].ax = band->ev.diff_last;
-					angles[n_angles].dt = band->syn_dt;
-					angles[n_angles].tol_r = band->syn_tol_r;
-					++n_angles;
+			struct axes angles[FB_MAX_BANDS];
+			if (state->evc.uev_action == UNALIGNED_EVENT_ACTION_NONE) {
+				/* find bands with possible events */
+				for (int k = 0; k < state->n_bands; ++k) {
+					struct matrix4_band *band = &state->band[k];
+					if (band->ev_maybe) {
+						angles[n_angles] = band->ev.diff_last;
+						++n_angles;
+					}
 				}
 			}
 
@@ -440,24 +438,25 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 			for (int k = 0; k < state->n_bands; ++k) {
 				struct matrix4_band *band = &state->band[k];
 				struct event_state *ev = &band->ev;
-				/* modulate event threshold based on the number of
-				   bands with similar differential steering angles */
-				double ev_thresh_fact = 0.0;
-				if (band->ev_maybe) {
-					for (int j = 0; j < n_angles; ++j) {
-						const double d_lr = fabs(angles[j].ax.lr - ev->diff_last.lr);
-						const double d_cs = fabs(angles[j].ax.cs - ev->diff_last.cs);
-						ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI)) *
-							smoothstep(2.0-fabs(band->syn_dt-angles[j].dt)*MINIMUM(band->syn_tol_r, angles[j].tol_r));
+				if (state->evc.uev_action == UNALIGNED_EVENT_ACTION_NONE) {
+					/* modulate event threshold based on the number of
+					   bands with similar differential steering angles */
+					double ev_thresh_fact = 0.0;
+					if (band->ev_maybe) {
+						for (int j = 0; j < n_angles; ++j) {
+							const double d_lr = fabs(angles[j].lr - ev->diff_last.lr);
+							const double d_cs = fabs(angles[j].cs - ev->diff_last.cs);
+							ev_thresh_fact += smoothstep(1.0 - MAXIMUM(d_lr, d_cs)*(16/M_PI));
+						}
+						ev_thresh_fact -= 1.0;
 					}
-					ev_thresh_fact -= 1.0;
+					ewma_run_set_max(&band->ev_thresh, band->ev_thresh_max
+						- (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 				}
-				const double ev_thresh = ewma_run_set_max(&band->ev_thresh,
-					band->ev_thresh_max - (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
 
 				struct ax_buf_frame ax_f = {0};
 				process_events(ev, &state->evc, &band->env, &band->pwr_env, &state->de[k], &state->de_hist,
-					ev_thresh*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
+					ewma_get_last(&band->ev_thresh)*(1.0/EVENT_THRESH), &ax_f.ax, &ax_f.ax_ev, &ax_f.ax_dpwr);
 				band->ev_maybe = ((ev->slope_last[0] > 0.0 && ev->last[0] > band->ev_thresh_min)
 					|| (ev->slope_last[1] > 0.0 && ev->last[1] > band->ev_thresh_min));
 				ax_f.ev_dir = ev->dir;
@@ -467,9 +466,9 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 				ax_f.ev_hold = !!ev->t_hold;
 				ax_f.ev_unaligned = ev->unaligned;
 				ax_f.ev_realign = ev->realign;
-				ax_f.syn_dt = band->syn_dt = ev->align_dt[0] * (state->fb.an.mask[k]+1);
+				ax_f.syn_dt = ev->align_dt * (state->fb.an.mask[k]+1);
 				if (ax_f.ev_realign) {
-					ch_align_an_set(&band->align_an, &state->de[k], ev->align_dt[0]);
+					ch_align_an_set(&band->align_an, &state->de[k], ev->align_dt);
 					ev->realign = 0;
 				}
 				ax_f.ev_no_direct = (ev->flags[0] & EVENT_FLAG_NO_DIRECT);
@@ -784,7 +783,14 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 		for (int i = 0; i < state->n_bands; ++i) {
 			struct matrix4_band *band = &state->band[i];
 			const double norm_fc = band->fbp->fc[i]/700.0, ws = band->fbp->width_scale;
-			const double rms_target = EVENT_TARGET_BASE*pow(1.0/(1.0+norm_fc*norm_fc), EVENT_TARGET_EXP1)/pow(ws, EVENT_TARGET_EXP2);
+			const double rms_target = EVENT_TARGET_BASE*pow(1.0/(1.0+norm_fc*norm_fc), EVENT_TARGET0_EXP1)/pow(ws, EVENT_TARGET0_EXP2);
+			dsp_log_printf(" %.3g%c", sqrt(band->evl_sum_sq/band->evl_samples)/rms_target, (i < state->n_bands-1) ? ',' : ' ');
+		}
+		dsp_log_puts("},\n  {");
+		for (int i = 0; i < state->n_bands; ++i) {
+			struct matrix4_band *band = &state->band[i];
+			const double norm_fc = band->fbp->fc[i]/700.0, ws = band->fbp->width_scale;
+			const double rms_target = EVENT_TARGET_BASE*pow(1.0/(1.0+norm_fc*norm_fc), EVENT_TARGET1_EXP1)/pow(ws, EVENT_TARGET1_EXP2);
 			dsp_log_printf(" %.3g%c", sqrt(band->evl_sum_sq/band->evl_samples)/rms_target, (i < state->n_bands-1) ? ',' : ' ');
 		}
 		dsp_log_puts("}\n");
@@ -922,17 +928,18 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		const double an_fs = (double) istream->fs / (state->fb.an.mask[k]+1);
 		const double an_tpeak = fbp->an_tpeak[k] + ((state->syn_buf) ? (state->fb.an.mask[k]+1)*1000.0/istream->fs : 0.0);
 		smooth_state_init(&band->sm, an_fs);
+		double thresh_scale[2] = { fbp->thresh_scale[0][k], fbp->thresh_scale[1][k] };
+		if (thresh_scale[0] <= 0.0) thresh_scale[0] = 1.0;
+		if (thresh_scale[1] <= 0.0) thresh_scale[1] = 1.0;
 		if (config.uev_action && delay_est_state_init(&state->de[k], an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
-			MAXIMUM(MINIMUM(2.0-0.241*(log(fbp->fc[k])-3.4), 2.0), 0.5),
-			DOWNSAMPLED_FS(istream->fs), -0.7*an_tpeak)) goto fail;
-		band->syn_tol_r = (fbp->fc[k]*8.0)/istream->fs;  /* ±45°; for event threshold modulation */
-		const double thresh_scale = (fbp->thresh_scale[k] > 0.0) ? fbp->thresh_scale[k] : 1.0;
-		band->ev_thresh_max = EVENT_THRESH_MAX * thresh_scale;
-		band->ev_thresh_min = EVENT_THRESH_MIN * thresh_scale;
+			MAXIMUM(MINIMUM(2.0-0.241*(log(fbp->fc[k])-3.4), 2.0), 0.5), DOWNSAMPLED_FS(istream->fs),
+			(EVENT_THRESH_MAX/EVENT_THRESH_MIN)*sqrt(thresh_scale[0]/thresh_scale[1]), -0.7*an_tpeak)) goto fail;
+		band->ev_thresh_max = EVENT_THRESH_MAX*thresh_scale[0];
+		band->ev_thresh_min = EVENT_THRESH_MIN*thresh_scale[0];
 		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH),
 			gauss_mag(BASE_ORD_NOTCH_SCALE_F0, fbp->fc[k], 0))) goto fail;
 		ewma_init(&band->ev_thresh, DOWNSAMPLED_FS(istream->fs), EWMA_RISE_TIME(EVENT_SAMPLE_TIME));
-		ewma_set(&band->ev_thresh, band->ev_thresh_max);
+		ewma_set(&band->ev_thresh, (config.uev_action) ? EVENT_THRESH_MIN*thresh_scale[1] : band->ev_thresh_max);
 		band->ax_buf_len = TIME_TO_FRAMES((an_tpeak_ref-an_tpeak)*0.7, DOWNSAMPLED_FS(istream->fs));
 		if (band->ax_buf_len > 0) {
 			band->ax_buf = calloc(band->ax_buf_len, sizeof(struct ax_buf_frame));

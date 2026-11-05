@@ -151,8 +151,9 @@ struct delay_est_state {
 	double (*buf)[2], (*rot)[2], (*os)[2], (*ihc)[2];
 	double *y, *w, *lr, *cs, *ym, *xy, *xlr;
 	double fs, tol, ra_tol, bin_tol, thresh, ws;
-	double tos, max_abs_cs, ihc_norm[2];
+	double tos, ev_thr, max_abs_cs, ihc_norm[2];
 	struct { double dt; size_t n; } bin[8];
+	struct { struct axes ax; double ndt; ssize_t t_on; } prev[2];
 	int p, len, os_len, dt, ev_lag, n_bins, t_on_adj;
 	ssize_t t_on;
 };
@@ -175,8 +176,9 @@ struct event_state {
 	double (*slope_buf)[2];
 #endif
 	double last[2], slope_last[2], clip_thresh, pcf_sens, max[2];
-	double ord_factor, base_ord_ns, adj, ds_diff, off_thresh, rts_off;
-	double align_dt[2], *ds_ord_buf, *max_buf;
+	double ord_factor, base_ord_ns, adj, ds_diff, off_thresh;
+	double ds_ord_thresh, rts_off, align_dt;
+	double *ds_ord_buf, *max_buf;
 	ssize_t t, t_sample, t_delay_est, t_hold, t_end[2], t_off_ord;
 	ssize_t ord_count, diff_count, early_count, ignore_count;
 	int buf_len, buf_p, unaligned, realign;
@@ -184,11 +186,10 @@ struct event_state {
 		EVENT_FLAG_L = 1<<0,
 		EVENT_FLAG_R = 1<<1,
 		EVENT_FLAG_USE_ORD = 1<<2,
-		EVENT_FLAG_FUSE = 1<<3,
+		EVENT_FLAG_ALLOW_MASK = 1<<3,
 		EVENT_FLAG_UNALIGNED = 1<<4,
 		EVENT_FLAG_NO_DIRECT = 1<<5,
-	} flags[2];
-	enum { OFF_FLAG_L = 1<<0, OFF_FLAG_R = 1<<1 } off_flags;
+	} flags[2], sample_flags, off_flags;
 };
 
 enum unaligned_event_action {
@@ -274,7 +275,7 @@ struct direct_path_state {
 int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
 	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, double);
-int delay_est_state_init(struct delay_est_state *, double, double, double, double, double, double);
+int delay_est_state_init(struct delay_est_state *, double, double, double, double, double, double, double);
 void delay_est_state_cleanup(struct delay_est_state *);
 int delay_est_hist_init(struct delay_est_hist *, struct delay_est_state *, int);
 void phase_flip_init_params(struct phase_flip_params *, double);

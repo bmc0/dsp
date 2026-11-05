@@ -32,8 +32,10 @@ static const int fb_ap_idx_13band[] =
 	{ 6, 4, 7, 3, 8, 2, 9, 1, 10, 0, 11, 3, 1, 9, 7, 4, 0, 10, 6, 11, 1, 4, 7, 11, 9 };
 static const double fb_stop_scale_13band[] =
 	{ 1.5, 1.2, 1.1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-static const double fb_thresh_scale_13band[] =
-	{ 1.06, 0.936, 0.792, 0.695, 0.634, 0.585, 0.539, 0.512, 0.484, 0.451, 0.433, 0.431, 0.4 };
+static const double fb_thresh_scale_13band[2][13] = {
+	{ 1.06, 0.936, 0.792, 0.695, 0.634, 0.585, 0.539, 0.512, 0.484, 0.451, 0.433, 0.431, 0.4 },
+	{ 0.973, 0.848, 0.702, 0.593, 0.512, 0.443, 0.38, 0.334, 0.293, 0.252, 0.225, 0.207, 0.169 },
+};
 static const double an_fb_tpeak_13band[] =
 	{ 5.98, 4.31, 2.98, 1.98, 1.31, 0.896, 0.646, 0.479, 0.312, 0.229, 0.146, 0.104, 0.0625 };
 
@@ -44,8 +46,10 @@ static const double fb_fc_13band_lfx[] =
 #define fb_ap_idx_13band_lfx fb_ap_idx_13band
 static const double fb_stop_scale_13band_lfx[] =
 	{ 1.7, 1.3, 1.2, 1.1, 1, 1, 1, 1, 1, 1, 1, 1 };
-static const double fb_thresh_scale_13band_lfx[] =
-	{ 1.22, 1.01, 0.841, 0.721, 0.649, 0.599, 0.549, 0.517, 0.49, 0.458, 0.435, 0.432, 0.4 };
+static const double fb_thresh_scale_13band_lfx[2][13] = {
+	{ 1.22, 1.01, 0.841, 0.721, 0.649, 0.599, 0.549, 0.517, 0.49, 0.458, 0.435, 0.432, 0.4 },
+	{ 1.11, 0.915, 0.752, 0.624, 0.535, 0.463, 0.394, 0.343, 0.3, 0.259, 0.228, 0.209, 0.169 },
+};
 static const double an_fb_tpeak_13band_lfx[] =
 	{ 7.31, 5.31, 3.31, 2.15, 1.48, 1.06, 0.729, 0.479, 0.354, 0.229, 0.167, 0.104, 0.0625 };
 
@@ -57,8 +61,10 @@ static const int fb_ap_idx_21band[] =
 	{ 10, 8, 11, 7, 12, 6, 13, 5, 14, 4, 15, 3, 16, 2, 17, 1, 18, 0, 19, 5, 3, 15, 13, 6, 2, 16, 12, 7, 1, 17, 11, 8, 0, 18, 10, 19, 2, 0, 7, 5, 12, 10, 18, 16, 3, 8, 13, 19, 15, 3, 8, 13, 16, 19 };
 static const double fb_stop_scale_21band[] =
 	{ 2, 1.5, 1.3, 1.2, 1.1, 1.1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-static const double fb_thresh_scale_21band[] =
-	{ 1.31, 1.19, 1.1, 0.986, 0.899, 0.844, 0.795, 0.739, 0.719, 0.68, 0.637, 0.627, 0.609, 0.579, 0.56, 0.53, 0.503, 0.502, 0.502, 0.5, 0.5 };
+static const double fb_thresh_scale_21band[2][21] = {
+	{ 1.31, 1.19, 1.1, 0.986, 0.899, 0.844, 0.795, 0.739, 0.719, 0.68, 0.637, 0.627, 0.609, 0.579, 0.56, 0.53, 0.503, 0.502, 0.502, 0.5, 0.5 },
+	{ 1.24, 1.12, 1.03, 0.918, 0.823, 0.755, 0.689, 0.616, 0.575, 0.519, 0.462, 0.433, 0.399, 0.361, 0.331, 0.298, 0.268, 0.255, 0.242, 0.229, 0.201 },
+};
 static const double an_fb_tpeak_21band[] =
 	{ 18, 15.3, 12.6, 8.65, 6.31, 5.65, 4.31, 3.31, 2.65, 2.15, 1.65, 1.31, 1.06, 0.812, 0.646, 0.438, 0.396, 0.25, 0.229, 0.208, 0.0625 };
 
@@ -111,7 +117,7 @@ struct filter_bank_params {
 	enum filter_bank_id id;
 	enum filter_bank_order order;
 	int n_bands, n_ap, min_fs;
-	const double *fdiv, *fc, *stop_scale, *thresh_scale, *an_tpeak;
+	const double *fdiv, *fc, *stop_scale, *thresh_scale[2], *an_tpeak;
 	const int *ap_idx;
 	double fir_len, width_scale, an_stop;
 };
@@ -126,7 +132,8 @@ struct filter_bank_params {
 	.fdiv = fb_fdiv_ ## ID + 1, \
 	.fc = fb_fc_ ## ID, \
 	.stop_scale = fb_stop_scale_ ## ID, \
-	.thresh_scale = fb_thresh_scale_ ## ID, \
+	.thresh_scale[0] = fb_thresh_scale_ ## ID [0], \
+	.thresh_scale[1] = fb_thresh_scale_ ## ID [1], \
 	.ap_idx = fb_ap_idx_ ## ID, \
 	.fir_len = FIR_LEN, \
 	.width_scale = WS, \
