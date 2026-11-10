@@ -808,9 +808,9 @@ static void delay_est_oversample(const double y[8][2], double z[2][2])
 
 static void delay_est_ihc_model(struct delay_est_state *de)
 {
-	ewma_set(&de->agc[1], ewma_set(&de->agc[0], 0.35));
+	ewma_set(&de->agc[1], ewma_set(&de->agc[0], 0.63));
 	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
-	const double norm[2] = { de->ihc_norm[0]*0.25, de->ihc_norm[1]*0.25 };
+	const double norm[2] = { de->ihc_norm[0]*0.18, de->ihc_norm[1]*0.18 };
 	for (int i = 0; i < de->os_len; ++i) {
 		const double v[2] = { de->os[i][0]*norm[0], de->os[i][1]*norm[1] };
 		const double x[2] = {
@@ -819,8 +819,8 @@ static void delay_est_ihc_model(struct delay_est_state *de)
 		};
 		ewma_run(&de->agc[0], x[0]*10.0);
 		ewma_run(&de->agc[1], x[1]*10.0);
-		de->ihc[i][0] = ewma_run(&de->sm[0], x[0]*0.5);
-		de->ihc[i][1] = ewma_run(&de->sm[1], x[1]*0.5);
+		de->ihc[i][0] = ewma_run(&de->sm[0], x[0]);
+		de->ihc[i][1] = ewma_run(&de->sm[1], x[1]);
 	}
 	ewma_set(&de->sm[1], ewma_set(&de->sm[0], 0.0));
 	for (int i = de->os_len-1; i >= 0; --i) {
