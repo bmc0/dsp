@@ -970,7 +970,7 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 	state->fade_frames = TIME_TO_FRAMES(FADE_TIME, DOWNSAMPLED_FS(istream->fs));
 	event_config_init(&state->evc, istream, config.rear_ev_mask, config.uev_action);
 #endif
-	fshape_init(&state->fshape[0], istream->fs, fshape_lf, fshape_hf, 0);
+	fshape_init(&state->fshape[0], istream->fs);
 	state->fshape[1] = state->fshape[0];
 
 	const double shelf_mult2 = config.shelf_mult*config.shelf_mult;

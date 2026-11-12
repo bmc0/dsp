@@ -139,32 +139,20 @@ static const struct filter_bank_params fb_params[] = {
 	FB_PARAMS_DEF(13band_lfx, 5, 32000,  70.0, 2.99404, 18.0),
 };
 
-typedef const double fshape_params[4];
-static fshape_params fshape_lf = { 10, M_SQRT1_2, 180, 0.4 };
-static fshape_params fshape_hf = { 0.46, 0.35, 16000, 0.35 };  /* note: [0] is multiplied by fs */
-
 struct fshape_state {
 	struct biquad_state lf, hf;
 };
 
-static void fshape_filter_init(struct biquad_state *b, double fs, fshape_params p, int is_hf, int is_inv)
+static void fshape_init(struct fshape_state *fsh, double fs)
 {
-	const int type = (is_hf) ? BIQUAD_LOWPASS_TRANSFORM : BIQUAD_HIGHPASS_TRANSFORM;
-	const double f0 = (is_hf) ? fs*p[0] : p[0];
-	const double f2 = (is_hf) ? MINIMUM(f0*0.9, p[2]) : p[2];
-	if (is_inv) biquad_init_using_type(b, type, fs, f2, p[3], f0, p[1], BIQUAD_WIDTH_Q);
-	else biquad_init_using_type(b, type, fs, f0, p[1], f2, p[3], BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&fsh->lf, BIQUAD_HIGHPASS, fs, 180.0, 0.4, 0, 0, BIQUAD_WIDTH_Q);
+	biquad_init_using_type(&fsh->hf, BIQUAD_LOWPASS_TRANSFORM, fs,
+		0.46*fs, 0.35, MINIMUM(16000.0, 0.9*0.46*fs), 0.35, BIQUAD_WIDTH_Q);
 }
 
-static void fshape_init(struct fshape_state *state, double fs, fshape_params lfp, fshape_params hfp, int is_inv)
+static inline sample_t fshape_run(struct fshape_state *fsh, sample_t s)
 {
-	fshape_filter_init(&state->lf, fs, lfp, 0, is_inv);
-	fshape_filter_init(&state->hf, fs, hfp, 1, is_inv);
-}
-
-static inline sample_t fshape_run(struct fshape_state *state, sample_t s)
-{
-	return biquad(&state->hf, biquad(&state->lf, s));
+	return biquad(&fsh->hf, biquad(&fsh->lf, s));
 }
 
 static double get_stop_scale(const struct filter_bank_params *fbp, int i, double fs)
