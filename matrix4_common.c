@@ -484,7 +484,7 @@ int delay_est_state_init(struct delay_est_state *de, double fs, double fc,
 	de->ws = 1000.0/(DELAY_EST_MAX_DELTA*os_fs);
 	de->tos = 1000.0/(sample_time*ev_fs);
 	de->ev_thr = MAXIMUM(ev_thr, 1.0);
-	de->dt = TIME_TO_FRAMES(MINIMUM(DELAY_EST_MAX_DELTA+2000.0/fc, sample_time), os_fs) + 1;
+	de->dt = TIME_TO_FRAMES(MINIMUM(DELAY_EST_MAX_DELTA+2700.0/fc, sample_time), os_fs) + 1;
 	for (int i = 0; i < 2; ++i) ewma_init(&de->agc[i], os_fs, EWMA_RISE_TIME(63.0));
 	for (int i = 0; i < 2; ++i) ewma_init(&de->sm[i], os_fs, EWMA_RISE_TIME(0.5));
 	de->len = sample_frames + DELAY_EST_POLYPHASE_TAPS + (de->dt/DELAY_EST_OVERSAMPLE + (de->dt&(DELAY_EST_OVERSAMPLE-1)));
@@ -948,6 +948,7 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 		double xcorr = 0.0;
 		if (de->ws < xde->ws) {  /* oversample xde */
 			const int xdt_lim = xde->dt-1;
+			const double wwc = 1.0/(de->dt*de->ws-1.0);
 			for (int dt = -de->dt, k = 0; dt <= de->dt; ++dt, ++k) {
 				const double xfdt = dt*dt_cf;
 				int xdt = lrint(xfdt);
@@ -956,7 +957,7 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 				if (fabs(x) <= 1.0) {
 					de->xy[k] = interp_point_quadratic(&xde->y[xdt+xde->dt-1], x);
 					de->xlr[k] = interp_point_quadratic(&xde->lr[xdt+xde->dt-1], x);
-					xcorr += de->y[k]*de->xy[k]*de->w[k];
+					xcorr += de->y[k]*de->xy[k]*de->w[k]*smoothstep(1.0+(1.0-abs(dt)*de->ws)*wwc);
 				}
 			}
 		}
@@ -966,7 +967,9 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 				const int min_dt = MINIMUM(de->dt, xde->dt), n = min_dt*2+1;
 				memcpy(&de->xy[de->dt-min_dt], &xde->y[xde->dt-min_dt], n*sizeof(double));
 				memcpy(&de->xlr[de->dt-min_dt], &xde->lr[xde->dt-min_dt], n*sizeof(double));
-				for (int k = 0; k < n_steps; ++k) xcorr += de->y[k]*de->xy[k]*de->w[k];
+				const double wwc = 1.0/(min_dt*de->ws-1.0);
+				for (int dt = -min_dt, k = de->dt-min_dt; dt <= min_dt; ++dt, ++k)
+					xcorr += de->y[k]*de->xy[k]*de->w[k]*smoothstep(1.0+(1.0-abs(dt)*de->ws)*wwc);
 			}
 			else {
 				const double width_r = 1.0/width;
@@ -986,6 +989,7 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 				/* oversample de for xcorr */
 				const int dt_lim = de->dt-1;
 				const double xdt_cf = xde->ws/de->ws;
+				const double wwc = 1.0/(xde->dt*xde->ws-1.0);
 				for (int xdt = -xde->dt, k = 0; xdt <= xde->dt; ++xdt, ++k) {
 					const double fdt = xdt*xdt_cf;
 					int dt = lrint(fdt);
@@ -993,7 +997,8 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 					const double x = fdt-dt;
 					if (fabs(x) <= 1.0) xcorr += xde->y[k]
 						* interp_point_quadratic(&de->y[dt+de->dt-1], x)
-						* interp_point_quadratic(&de->w[dt+de->dt-1], x);
+						* interp_point_quadratic(&de->w[dt+de->dt-1], x)
+						* smoothstep(1.0+(1.0-abs(xdt)*xde->ws)*wwc);
 				}
 			}
 		}
@@ -1001,11 +1006,11 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 			const double xntol = xde->tol*DELAY_EST_OVERSAMPLE*xde->ws;
 			const double scale = wto * ((xntol > ntol) ? square(ntol/xntol) : 1.0);
 			for (int k = 0; k < n_steps; ++k)
-				de->ym[k] += de->xy[k]*scale*smoothstep(1.0-fabs(de->xlr[k]-de->lr[k])*(32/M_PI));
+				de->ym[k] += de->xy[k]*scale*smoothstep(1.0-fabs(de->xlr[k]-de->lr[k])*(24/M_PI));
 		}
 	}
 	for (int k = 0; k < n_steps; ++k)
-		de->ym[k] = de->y[k] + de->ym[k]*fabs(de->y[k])*DELAY_EST_XBAND_SCALE;
+		de->ym[k] = de->y[k]*(1.0+de->y[k]*de->ym[k]*DELAY_EST_XBAND_SCALE);
 
 	struct axes max = {0};
 	double max_awiy[2] = {0}, max_dt = NAN;
