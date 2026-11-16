@@ -32,7 +32,7 @@
 
 #define BASE_ORD_NOTCH_SCALE_F0 700.0  /* -3dB point; Gaussian lowpass */
 #define EVENT_THRESH_MAX 3.6
-#define EVENT_THRESH_MIN 1.4
+#define EVENT_THRESH_MIN 2.4
 
 #define PHASE_LIN_TRUNC_THRESH 1e-6
 #define DO_FILTER_BANK_TEST 0
@@ -450,8 +450,8 @@ static sample_t * matrix4_mb_effect_run(struct effect *e, ssize_t *frames, sampl
 						}
 						ev_thresh_fact -= 1.0;
 					}
-					ewma_run_set_max(&band->ev_thresh, band->ev_thresh_max
-						- (band->ev_thresh_max-band->ev_thresh_min)*ev_thresh_fact/(state->n_bands-1));
+					ewma_run_set_max(&band->ev_thresh, event_thresh_adj(band->ev_thresh_min,
+						band->ev_thresh_max, ev_thresh_fact/(state->n_bands-1)));
 				}
 
 				struct ax_buf_frame ax_f = {0};
@@ -756,6 +756,7 @@ static void matrix4_mb_effect_destroy(struct effect *e)
 		event_state_cleanup(&state->band[i].ev);
 		free(state->band[i].ax_buf);
 	}
+	delay_est_hist_cleanup(&state->de_hist);
 	free(state->syn_buf);
 #if DEBUG_POWER_ERROR
 	if (state->pwr_err_file)
@@ -931,9 +932,9 @@ struct effect * matrix4_mb_effect_init(const struct effect_info *ei, const struc
 		double thresh_scale[2] = { fbp->thresh_scale[0][k], fbp->thresh_scale[1][k] };
 		if (thresh_scale[0] <= 0.0) thresh_scale[0] = 1.0;
 		if (thresh_scale[1] <= 0.0) thresh_scale[1] = 1.0;
-		if (config.uev_action && delay_est_state_init(&state->de[k], an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
+		if (config.uev_action && delay_est_state_init(&state->de[k], k, an_fs, fbp->fc[k], fbp->fdiv[k]-fbp->fdiv[k-1],
 			MAXIMUM(MINIMUM(2.0-0.241*(log(fbp->fc[k])-3.4), 2.0), 0.5), DOWNSAMPLED_FS(istream->fs),
-			(EVENT_THRESH_MAX/EVENT_THRESH_MIN)*sqrt(thresh_scale[0]/thresh_scale[1]), -0.7*an_tpeak)) goto fail;
+			(EVENT_THRESH_MAX/EVENT_THRESH_MIN)*pow(thresh_scale[0]/thresh_scale[1], 0.7), -0.7*an_tpeak)) goto fail;
 		band->ev_thresh_max = EVENT_THRESH_MAX*thresh_scale[0];
 		band->ev_thresh_min = EVENT_THRESH_MIN*thresh_scale[0];
 		if (event_state_init(&band->ev, istream, band->ev_thresh_max*(1.0/EVENT_THRESH),

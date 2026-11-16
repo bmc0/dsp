@@ -63,10 +63,10 @@
 #define DELAY_EST_MAX_DELTA    0.8
 #define DELAY_EST_SAMPLE_TIME 15.0
 #define DELAY_EST_FRONT_BIAS   1
-#define DELAY_EST_INDETERM     1.05
+#define DELAY_EST_INDETERM     1.1
 #define DELAY_EST_AVG_THRESH  -0.3
 #define DELAY_EST_ALIGN_RESET  1
-#define DELAY_EST_XBAND_SCALE  0.15
+#define DELAY_EST_XBAND_SCALE  0.5
 
 #define MATRIX_RS_DEFAULT          1.0
 #define MATRIX_ADJ0_DEFAULT        0.5
@@ -149,18 +149,22 @@ struct svf_pk_state {
 struct delay_est_state {
 	struct ewma_state agc[2], sm[2];
 	double (*buf)[2], (*rot)[2], (*os)[2], (*ihc)[2];
-	double *y, *w, *lr, *cs, *ym, *xy, *xlr;
-	double fs, tol, ra_tol, bin_tol, thresh, ws;
-	double tos, ev_thr, max_abs_cs, ihc_norm[2];
+	double *y, *w, *lr, *cs, *ym, *xy, *wn;
+	double fs, tol, ra_tol, bin_tol, thresh, ws, tos;
+	double ev_thr, max_abs_cs, lr_avg, area, width, ihc_norm[2];
 	struct { double dt; size_t n; } bin[8];
 	struct { struct axes ax; double ndt; ssize_t t_on; } prev[2];
-	int p, len, os_len, dt, ev_lag, n_bins, t_on_adj;
+	int p, len, os_len, idx, dt, ev_lag, n_bins, t_on_adj;
 	ssize_t t_on;
 };
 
 struct delay_est_hist {
 	struct ewma_state align_avg;
 	struct delay_est_state *de;
+	struct {
+		char *mask;
+		struct { double x, s; } *mat;
+	} sim;
 	int n;
 };
 
@@ -275,9 +279,10 @@ struct direct_path_state {
 int matrix4_config_init(const struct effect_info *, const struct stream_info *, const char *,
 	const char *, int, const char *const *, int, struct matrix4_config *);
 void smooth_state_init(struct smooth_state *, double);
-int delay_est_state_init(struct delay_est_state *, double, double, double, double, double, double, double);
+int delay_est_state_init(struct delay_est_state *, int, double, double, double, double, double, double, double);
 void delay_est_state_cleanup(struct delay_est_state *);
 int delay_est_hist_init(struct delay_est_hist *, struct delay_est_state *, int);
+void delay_est_hist_cleanup(struct delay_est_hist *);
 void phase_flip_init_params(struct phase_flip_params *, double);
 void direct_path_state_init(struct direct_path_state *, double, enum direct_path_mode);
 void event_state_cleanup(struct event_state *);
@@ -312,6 +317,19 @@ static inline double smoothstep(double x)
 	if (x >= 1.0) return 1.0;
 	if (x <= 0.0) return 0.0;
 	return smoothstep_nc(x);
+}
+
+static inline double event_thresh_adj(double min, double max, double x)
+{
+#if 0
+	const double c0 = 4.97870683678639430e-02;  /* exp(-3) */
+	const double c1 = 1.05239569649125595e+00;  /* 1/(1+exp(-3)) */
+	return (exp(-3.0*x)-c0)*c1*(max-min)+min;
+#else
+	const double c0 = 1.35335283236612692e-01;  /* exp(-2) */
+	const double c1 = 1.15651764274966565e+00;  /* 1/(1+exp(-2)) */
+	return (exp(-2.0*x)-c0)*c1*(max-min)+min;
+#endif
 }
 
 #ifndef DSP_MATRIX4_COMMON_H_NO_STATIC_FUNCTIONS

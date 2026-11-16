@@ -460,7 +460,7 @@ void smooth_state_init(struct smooth_state *sm, double fs)
 #define DELAY_EST_VERBOSITY      0
 #define DELAY_EST_OVERSAMPLE     2
 #define DELAY_EST_POLYPHASE_TAPS 8
-int delay_est_state_init(struct delay_est_state *de, double fs, double fc,
+int delay_est_state_init(struct delay_est_state *de, int idx, double fs, double fc,
 	double bw, double st_sc, double ev_fs, double ev_thr, double t_on_adj)
 {
 	de->fs = fs;
@@ -484,6 +484,7 @@ int delay_est_state_init(struct delay_est_state *de, double fs, double fc,
 	de->ws = 1000.0/(DELAY_EST_MAX_DELTA*os_fs);
 	de->tos = 1000.0/(sample_time*ev_fs);
 	de->ev_thr = MAXIMUM(ev_thr, 1.0);
+	de->idx = idx;
 	de->dt = TIME_TO_FRAMES(MINIMUM(DELAY_EST_MAX_DELTA+2700.0/fc, sample_time), os_fs) + 1;
 	for (int i = 0; i < 2; ++i) ewma_init(&de->agc[i], os_fs, EWMA_RISE_TIME(63.0));
 	for (int i = 0; i < 2; ++i) ewma_init(&de->sm[i], os_fs, EWMA_RISE_TIME(0.5));
@@ -511,7 +512,12 @@ int delay_est_state_init(struct delay_est_state *de, double fs, double fc,
 	de->cs = de->lr+n_steps;
 	de->ym = de->cs+n_steps;
 	de->xy = de->ym+n_steps;
-	de->xlr = de->xy+n_steps;
+	de->wn = de->xy+n_steps;
+
+	const double wwc = 1.0/((de->dt+1)*de->ws-1.0);
+	for (int dt = -de->dt, k = 0; dt <= de->dt; ++dt, ++k)
+		de->wn[k] = smoothstep(1.0+(1.0-abs(dt)*de->ws)*wwc);
+
 	return 0;
 }
 
@@ -525,8 +531,18 @@ int delay_est_hist_init(struct delay_est_hist *hist, struct delay_est_state *de,
 {
 	ewma_init(&hist->align_avg, 1.0, 80.0*pow(n, 0.7));
 	hist->de = de;
+	hist->sim.mask = NEW_SELECTOR(n);
+	if (check_alloc(__func__, hist->sim.mask)) return 1;
+	hist->sim.mat = calloc(n*n, sizeof(*hist->sim.mat));
+	if (check_alloc(__func__, hist->sim.mat)) return 1;
 	hist->n = n;
 	return 0;
+}
+
+void delay_est_hist_cleanup(struct delay_est_hist *hist)
+{
+	free(hist->sim.mask);
+	free(hist->sim.mat);
 }
 
 /* SVF based on F. Adriaensen, "Digital State-Variable Filters" */
@@ -835,15 +851,25 @@ static void delay_est_ihc_model(struct delay_est_state *de)
 	}
 }
 
-static void delay_est_compute_steps(struct delay_est_state *de, ssize_t t_sample)
+static inline double interp_point_quadratic(const double y[3], double t)
+{
+	const double c[3] = {
+		y[1],
+		(1.0/2.0)*(y[2]-y[0]),
+		(1.0/2.0)*(y[2]+y[0]) - y[1],
+	};
+	return (c[2]*t+c[1])*t+c[0];
+}
+
+static void delay_est_compute_steps(struct delay_est_state *de, struct delay_est_hist *hist, ssize_t t_sample)
 {
 	memcpy(de->rot, de->buf[de->p], sizeof(double [2])*(de->len-de->p));
 	memcpy(de->rot[de->len-de->p], de->buf, sizeof(double [2])*de->p);
 	for (int i = 0; i < de->len-DELAY_EST_POLYPHASE_TAPS; ++i)
 		delay_est_oversample(&de->rot[i], &de->os[i*DELAY_EST_OVERSAMPLE]);
 	delay_est_ihc_model(de);
-	double max_mag = 0.0;
-	de->max_abs_cs = 0.0;
+	double max_mag = 0.0, max_w = 0.0, w_sum = 0.0;
+	de->lr_avg = de->max_abs_cs = 0.0;
 	for (int dt = -de->dt, k = 0; dt <= de->dt; ++dt, ++k) {
 		double avg[4] = {0}, wt = 0.0;
 		const int dt0 = MINIMUM(-dt, 0), dt1 = MINIMUM(dt, 0);
@@ -854,17 +880,105 @@ static void delay_est_compute_steps(struct delay_est_state *de, ssize_t t_sample
 			avg[2] += square(v[0]+v[1])*w; avg[3] += square(v[0]-v[1])*w;
 			wt += w;
 		}
+		if (wt > max_w) max_w = wt;
+		de->w[k] = wt;
+		w_sum += wt;
 		const double lr = de->lr[k] = calc_angle_pwr(avg[0], avg[1]);
 		const double cs = de->cs[k] = calc_angle_pwr(avg[2], avg[3]);
 		const double abs_lr = fabs(lr), abs_cs = fabs(cs);
-		const double mag = abs_lr+abs_cs;
 		if (abs_cs > de->max_abs_cs) de->max_abs_cs = abs_cs;
+		de->lr_avg += lr*wt;
+		const double mag = abs_lr+abs_cs;
 		if (mag > max_mag) max_mag = mag;
-		de->y[k] = copysign(mag, cs)*(4/M_PI);
-		de->w[k] = wt;
+		de->y[k] = copysign(mag, cs);
 	}
+	de->lr_avg /= w_sum;
+	const int n_steps = de->dt*2+1;
+	const double y_norm = 1.0/max_mag, w_norm = 1.0/max_w;
+	for (int k = 0; k < n_steps; ++k) de->y[k] *= y_norm;
+	for (int k = 0; k < n_steps; ++k) de->w[k] *= w_norm;
 	de->t_on = (max_mag < de->thresh) ? 0 : t_sample+de->t_on_adj;
 	//if (max_mag < de->thresh) LOG_FMT(LL_VERBOSE, "%s: below thresh: %g", __func__, max_mag);
+
+	/* find rough frequency and xcorr normalization */
+	int n_zx = 0;
+	de->width = de->area = 0.0;
+	double last_zx = 0.0, wa_norm = 0.0, integ = 0.0, integ_peak = 0.0;
+	for (int k = 1; k < n_steps; ++k) {
+		if (signbit(de->y[k]) != signbit(de->y[k-1])) {
+			const double x = -de->y[k-1]/(de->y[k]-de->y[k-1]);
+			integ += 0.5*x*fabs(de->y[k-1]);
+			const double zx = k-1+x;
+			if (last_zx > 0.0) {
+				const double width = zx-last_zx;
+				de->width += integ_peak*width;
+				de->area += integ/width;
+				wa_norm += integ_peak;
+			}
+			const double abs_y = fabs(de->y[k]);
+			integ = 0.5*(1.0-x)*abs_y;
+			integ_peak = abs_y;
+			last_zx = zx;
+			++n_zx;
+		}
+		else {
+			const double abs_y = fabs(de->y[k]);
+			if (abs_y > integ_peak) integ_peak = abs_y;
+			integ += 0.5*fabs(de->y[k-1]+de->y[k]);
+		}
+	}
+	de->width = (n_zx > 1) ? de->width/wa_norm : de->tol*(DELAY_EST_OVERSAMPLE*8);
+	de->area = (n_zx > 1) ? de->area/wa_norm : 0.5;
+
+	/* update similarity matrix */
+	for (int i = 0; i < hist->n; ++i) {
+		if (i == de->idx) continue;
+		struct delay_est_state *xde = &hist->de[i];
+		double xcorr[2] = {0}, scale[2] = {0};
+		if (de->t_on && de->max_abs_cs >= M_PI/32 && xde->t_on && xde->max_abs_cs >= M_PI/32) {
+			const double ntol = de->tol*de->ws, xntol = xde->tol*xde->ws;
+			const int order = (ntol <= xntol);
+			struct delay_est_state *de_hf = (order)?de:xde, *de_lf = (order)?xde:de;
+			const double dt_cf = de_hf->ws/de_lf->ws;
+			if (de_hf->ws == de_lf->ws) {  /* no interpolation needed */
+				for (int dt_hf = -de_hf->dt, k = 0, l = de_lf->dt-de_hf->dt; dt_hf <= de_hf->dt; ++dt_hf, ++k, ++l) {
+					const double v = de_hf->y[k]*de_hf->wn[k]*de_lf->y[l];
+					const double w[2] = { de_hf->w[k], de_lf->w[l] };
+					xcorr[0] += v*w[!order]; xcorr[1] += v*w[order];
+				}
+			}
+			else {  /* interpolate de_lf */
+				const int dt_lf_lim = de_lf->dt-1;
+				for (int dt_hf = -de_hf->dt, k = 0; dt_hf <= de_hf->dt; ++dt_hf, ++k) {
+					const double fdt_lf = dt_hf*dt_cf;
+					int dt_lf = lrint(fdt_lf);
+					dt_lf = MINIMUM(MAXIMUM(dt_lf, -dt_lf_lim), dt_lf_lim);
+					const double x = fdt_lf-dt_lf;
+					if (fabs(x) <= 1.0) {
+						const int l = dt_lf+dt_lf_lim;
+						const double v = de_hf->y[k]*de_hf->wn[k]*interp_point_quadratic(&de_lf->y[l], x);
+						const double w[2] = { de_hf->w[k], interp_point_quadratic(&de_lf->w[l], x) };
+						xcorr[0] += v*w[!order]; xcorr[1] += v*w[order];
+					}
+				}
+			}
+			const double lf_tf = 2.0*dt_cf*(1.0-de_lf->area);
+			const double xc_norm = de_hf->width*((1.0/2.0)*(1.0-lf_tf)+(1.0/3.0)*lf_tf);
+			xcorr[0] = copysign(calc_angle(fabs(xcorr[0]), xc_norm)*(4/M_PI), xcorr[0]);
+			xcorr[1] = copysign(calc_angle(fabs(xcorr[1]), xc_norm)*(4/M_PI), xcorr[1]);
+			scale[1] = scale[0] = smoothstep(1.0-fabs(de_hf->lr_avg-de_lf->lr_avg)*(8/M_PI));
+			scale[0] *= exp(-square((de->t_on-xde->t_on)*de->tos));
+			scale[1] *= exp(-square((de->t_on-xde->t_on)*xde->tos));
+			if (ntol < xntol) scale[0] *= square(ntol/xntol);
+			else if (ntol > xntol) scale[1] *= square(xntol/ntol);
+			if (scale[0] < DBL_EPSILON) scale[0] = 0.0;
+			if (scale[1] < DBL_EPSILON) scale[1] = 0.0;
+		}
+		hist->sim.mat[de->idx*hist->n + i].x = xcorr[0];
+		hist->sim.mat[de->idx*hist->n + i].s = scale[0];
+		hist->sim.mat[i*hist->n + de->idx].x = xcorr[1];
+		hist->sim.mat[i*hist->n + de->idx].s = scale[1];
+	}
 }
 
 static inline double interp_peak_quadratic(const double y[3], double *r_pk)
@@ -875,16 +989,6 @@ static inline double interp_peak_quadratic(const double y[3], double *r_pk)
 	const double x = num/(2.0*den);
 	*r_pk = y[1]-0.25*num*x;
 	return x;
-}
-
-static inline double interp_point_quadratic(const double y[3], double t)
-{
-	const double c[3] = {
-		y[1],
-		(1.0/2.0)*(y[2]-y[0]),
-		(1.0/2.0)*(y[2]+y[0]) - y[1],
-	};
-	return (c[2]*t+c[1])*t+c[0];
 }
 
 static void delay_est_set_prev(struct delay_est_state *de, double dt, const struct axes *ax)
@@ -917,6 +1021,12 @@ static void delay_est_bin_event(struct delay_est_state *de, int b, double dt)
 	/* LOG_FMT(LL_VERBOSE, "%s: binned: dt=%g n=%zd (n_bins=%d)", __func__, de->bin[0].dt, de->bin[0].n, de->n_bins); */
 }
 
+static inline double delay_est_hist_w_sim(struct delay_est_hist *hist, int a, int b)
+{
+	const int i = a*hist->n + b;
+	return hist->sim.mat[i].x * hist->sim.mat[i].s;
+}
+
 static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *hist,
 	double ref_dt, struct axes *r_max, int *r_bin_idx)
 {
@@ -934,83 +1044,84 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 		return ref_dt;
 	}
 
-	const int n_steps = de->dt*2+1;
-	memset(de->ym, 0, sizeof(double)*n_steps);
-	const double ntol = de->tol*DELAY_EST_OVERSAMPLE*de->ws;
+	/* mask bands likely containing unrelated data */
+	CLEAR_SELECTOR(hist->sim.mask, hist->n);
 	for (int i = 0; i < hist->n; ++i) {
+		if (hist->sim.mat[de->idx*hist->n + i].x <= 0.0
+				|| hist->sim.mat[de->idx*hist->n + i].s <= 0.0)
+			SET_BIT(hist->sim.mask, i);
+	}
+	for (int i = 0; i < hist->n; ++i) {
+		if (GET_BIT(hist->sim.mask, i)) continue;
+		for (int k = 0; k < hist->n; ++k) {
+			if (k == i || GET_BIT(hist->sim.mask, k)) continue;
+			if (hist->sim.mat[i*hist->n + k].x <= 0.0) {
+				double sum[2] = {
+					delay_est_hist_w_sim(hist, de->idx, i),
+					delay_est_hist_w_sim(hist, de->idx, k),
+				};
+				for (int j = 0; j < hist->n; ++j) {
+					if (j != de->idx && GET_BIT(hist->sim.mask, j)) continue;
+					const double scale = hist->sim.mat[de->idx*hist->n + j].s;
+					sum[0] += hist->sim.mat[i*hist->n + j].x*scale;
+					sum[1] += hist->sim.mat[k*hist->n + j].x*scale;
+				}
+				SET_BIT(hist->sim.mask, (sum[0] < sum[1]) ? i : k);
+			}
+		}
+	}
+
+	const int n_steps = de->dt*2+1;
+	memset(de->ym, 0, n_steps*sizeof(double));
+	double max_w_sim = 0.0;
+	for (int i = 0; i < hist->n; ++i) {
+		if (GET_BIT(hist->sim.mask, i)) continue;
 		struct delay_est_state *xde = &hist->de[i];
-		if (xde == de || !xde->t_on || xde->max_abs_cs < M_PI/32) continue;
-		const double wto = exp(-square((de->t_on-xde->t_on)*de->tos));
-		if (wto < 0.01) continue;
+		const double w_sim = delay_est_hist_w_sim(hist, de->idx, i);
+		if (w_sim > max_w_sim) max_w_sim = w_sim;
 		const double dt_cf = de->ws/xde->ws;
-		memset(de->xy, 0, sizeof(double)*n_steps);
-		memset(de->xlr, 0, sizeof(double)*n_steps);
-		double xcorr = 0.0;
 		if (de->ws < xde->ws) {  /* oversample xde */
 			const int xdt_lim = xde->dt-1;
-			const double wwc = 1.0/(de->dt*de->ws-1.0);
 			for (int dt = -de->dt, k = 0; dt <= de->dt; ++dt, ++k) {
 				const double xfdt = dt*dt_cf;
 				int xdt = lrint(xfdt);
 				xdt = MINIMUM(MAXIMUM(xdt, -xdt_lim), xdt_lim);
 				const double x = xfdt-xdt;
-				if (fabs(x) <= 1.0) {
-					de->xy[k] = interp_point_quadratic(&xde->y[xdt+xde->dt-1], x);
-					de->xlr[k] = interp_point_quadratic(&xde->lr[xdt+xde->dt-1], x);
-					xcorr += de->y[k]*de->xy[k]*de->w[k]*smoothstep(1.0+(1.0-abs(dt)*de->ws)*wwc);
-				}
+				if (fabs(x) <= 1.0) de->ym[k] += w_sim
+					* interp_point_quadratic(&xde->y[xdt+xdt_lim], x);
 			}
 		}
 		else {
-			const double width = MAXIMUM(2.0*ntol/xde->ws, dt_cf);
-			if (width <= 1.0) {  /* no smoothing or resampling needed */
-				const int min_dt = MINIMUM(de->dt, xde->dt), n = min_dt*2+1;
-				memcpy(&de->xy[de->dt-min_dt], &xde->y[xde->dt-min_dt], n*sizeof(double));
-				memcpy(&de->xlr[de->dt-min_dt], &xde->lr[xde->dt-min_dt], n*sizeof(double));
-				const double wwc = 1.0/(min_dt*de->ws-1.0);
-				for (int dt = -min_dt, k = de->dt-min_dt; dt <= min_dt; ++dt, ++k)
-					xcorr += de->y[k]*de->xy[k]*de->w[k]*smoothstep(1.0+(1.0-abs(dt)*de->ws)*wwc);
+			const double width = dt_cf * MAXIMUM(de->width*(1.0/8.0), 1.0);
+			if (width <= 1.0) {  /* no downsampling or smoothing needed */
+				const int min_dt = MINIMUM(de->dt, xde->dt), k_end = de->dt+min_dt+1;
+				for (int k = de->dt-min_dt, l = xde->dt-min_dt; k < k_end; ++k, ++l)
+					de->ym[k] += xde->y[l]*w_sim;
 			}
-			else {
+			else {  /* smooth/downsample xde */
 				const double width_r = 1.0/width;
-				const int use_density = (width >= xde->tol*(6.0*DELAY_EST_OVERSAMPLE));
+				const int use_density = (width > xde->width);
+				double max_xy = 0.0;
 				for (int dt = -de->dt, k = 0; dt <= de->dt; ++dt, ++k) {
 					const double xfdt = dt*dt_cf;
 					int xdt0 = lrint(xfdt-width), xdt1 = lrint(xfdt+width);
 					xdt0 = MAXIMUM(xdt0, -xde->dt); xdt1 = MINIMUM(xdt1, xde->dt);
+					de->xy[k] = 0.0;
 					for (int xdt = xdt0; xdt <= xdt1; ++xdt) {
-						const double w = smoothstep(1.0-fabs(xfdt-xdt)*width_r);
-						const double xy = xde->y[xdt+xde->dt]*w;
-						de->xy[k] += (use_density) ? copysign(xy, de->y[k]) : xy;
-						de->xlr[k] += xde->lr[xdt+xde->dt]*w;
+						const double v = xde->y[xdt+xde->dt]*smoothstep(1.0-fabs(xfdt-xdt)*width_r);
+						de->xy[k] += (use_density) ? copysign(v, de->y[k]) : v*xde->wn[xdt+xde->dt];
 					}
-					de->xy[k] *= width_r; de->xlr[k] *= width_r;
+					const double abs_xy = fabs(de->xy[k]);
+					if (abs_xy > max_xy) max_xy = abs_xy;
 				}
-				/* oversample de for xcorr */
-				const int dt_lim = de->dt-1;
-				const double xdt_cf = xde->ws/de->ws;
-				const double wwc = 1.0/(xde->dt*xde->ws-1.0);
-				for (int xdt = -xde->dt, k = 0; xdt <= xde->dt; ++xdt, ++k) {
-					const double fdt = xdt*xdt_cf;
-					int dt = lrint(fdt);
-					dt = MINIMUM(MAXIMUM(dt, -dt_lim), dt_lim);
-					const double x = fdt-dt;
-					if (fabs(x) <= 1.0) xcorr += xde->y[k]
-						* interp_point_quadratic(&de->y[dt+de->dt-1], x)
-						* interp_point_quadratic(&de->w[dt+de->dt-1], x)
-						* smoothstep(1.0+(1.0-abs(xdt)*xde->ws)*wwc);
-				}
+				const double xy_scale = w_sim*width_r/max_xy;
+				for (int k = 0; k < n_steps; ++k) de->ym[k] += de->xy[k]*xy_scale;
 			}
 		}
-		if (xcorr > 0.0) {
-			const double xntol = xde->tol*DELAY_EST_OVERSAMPLE*xde->ws;
-			const double scale = wto * ((xntol > ntol) ? square(ntol/xntol) : 1.0);
-			for (int k = 0; k < n_steps; ++k)
-				de->ym[k] += de->xy[k]*scale*smoothstep(1.0-fabs(de->xlr[k]-de->lr[k])*(24/M_PI));
-		}
 	}
-	for (int k = 0; k < n_steps; ++k)
-		de->ym[k] = de->y[k]*(1.0+de->y[k]*de->ym[k]*DELAY_EST_XBAND_SCALE);
+	/* if (max_w_sim > 4.0) LOG_FMT(LL_VERBOSE, "%s: max_w_sim=%g", __func__, max_w_sim); */
+	const double w_sim_norm = DELAY_EST_XBAND_SCALE/MAXIMUM(max_w_sim, 1.0);
+	for (int k = 0; k < n_steps; ++k) de->ym[k] = de->y[k]*(1.0+de->y[k]*de->ym[k]*w_sim_norm);
 
 	struct axes max = {0};
 	double max_awiy[2] = {0}, max_dt = NAN;
@@ -1033,16 +1144,16 @@ static double estimate_delay(struct delay_est_state *de, struct delay_est_hist *
 			#endif
 		}
 	}
+	if (isnan(max_dt)) return NAN;
 	#if DELAY_EST_VERBOSITY > 1
 		LOG_FMT(LL_VERBOSE, "%s: max=|%g°|+|%g°|=%g° dt=%.1fµs (%.2f)", __func__,
 			TO_DEGREES(max.lr), TO_DEGREES(max.cs), TO_DEGREES(axes_mag(&max)),
 			max_dt*1e6/de->fs, max_dt);
 	#endif
-	if (isnan(max_dt)) return NAN;
 	if (fabs(max.cs) < M_PI/32) goto small_cs;
 	if (fabs(max_dt*DELAY_EST_OVERSAMPLE*de->ws) > 1.0
-			|| fabs(de->y[de->dt*2])*de->w[de->dt*2] >= max_awiy[0]
-			|| fabs(de->y[0])*de->w[0] >= max_awiy[0]) {
+			|| fabs(de->y[de->dt*2])*de->w[de->dt*2]*DELAY_EST_INDETERM > max_awiy[0]
+			|| fabs(de->y[0])*de->w[0]*DELAY_EST_INDETERM > max_awiy[0]) {
 		#if DELAY_EST_VERBOSITY
 			LOG_FMT(LL_VERBOSE, "%s: detected dt exceeds %gms", __func__, DELAY_EST_MAX_DELTA);
 		#endif
@@ -1208,7 +1319,7 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 			if (r_event > ev->max[1]) ev->max[1] = r_event;
 		}
 		if (ev->t_delay_est > 0 && ev->t >= ev->t_delay_est) {
-			delay_est_compute_steps(de, ev->t_sample);
+			delay_est_compute_steps(de, hist, ev->t_sample);
 			ev->t_delay_est = -1;
 		}
 		if (ev->t - ev->t_sample >= evc->sample_frames) {
@@ -1241,14 +1352,16 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 						ev_dt = dt;
 					}
 					else if (evc->uev_action) {
+						ev_dir = ev_ord;
 						ev->flags[1] |= EVENT_FLAG_UNALIGNED;
-						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH && axes_rear(&ev_dir))) {
-							ev_dir.cs = ev_dir.lr = 0.0;
+						if (dt_valid || (align_wavg >= DELAY_EST_AVG_THRESH && ev_dir.cs < 0.0)) {
+							if (ev_dir.cs < -M_PI/16) ev_dir.lr = 0.0;
+							else if (dt_valid) ev_dir.lr = ev->align_max.lr;
+							ev_dir.cs = 0.0;
 						#if DELAY_EST_ALIGN_RESET
 							if (align_wavg >= DELAY_EST_AVG_THRESH) ev_dt = 0.0;
 						#endif
 						}
-						else ev_dir = ev_ord;  /* indeterminate/unreliable dt; use ord angles */
 					}
 				}
 				else if (axes_mag(&ev->align_max) > axes_mag(&ev_dir)) ev_dir = ev->align_max;
@@ -1271,7 +1384,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 					}
 					if (max_wnrb*7.0 < hist->n) ev->flags[1] |= EVENT_FLAG_NO_DIRECT;
 				}
-				adj_thresh = thresh*de->ev_thr;
 				if (hist->n && !(ev->flags[1] & EVENT_FLAG_UNALIGNED)) {
 					double thresh_fact = 0.0;
 					const double ev_ndt = ev_dt*DELAY_EST_OVERSAMPLE*de->ws;
@@ -1287,7 +1399,6 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 								.cs = interp_point_quadratic(&xde->cs[xdt+xde->dt-1], xfdt-xdt),
 							};
 							thresh_fact += smoothstep(1.0-(fabs(xdir.lr-ev_dir.lr)+fabs(xdir.cs-ev_dir.cs))*(16/M_PI))
-								* smoothstep(axes_mag(&xdir)*(16/M_PI))
 								* exp(-square((de->t_on-xde->t_on)*de->tos));
 						}
 						else for (int k = 0; k < LENGTH(xde->prev) && xde->prev[k].t_on; ++k) {
@@ -1298,8 +1409,9 @@ void process_events_priv(struct event_state *ev, const struct event_config *evc,
 								* exp(-square((de->t_on-xde->prev[k].t_on)*de->tos));
 						}
 					}
-					adj_thresh -= thresh*(de->ev_thr-1.0)*thresh_fact/(hist->n-1);
+					adj_thresh = event_thresh_adj(thresh, thresh*de->ev_thr, thresh_fact/(hist->n-1));
 				}
+				else adj_thresh = thresh*de->ev_thr;
 				if (ev->max[1] < adj_thresh) {
 					ewma_set(&ev->align_avg, prev_align_avg[0]);
 					ewma_set(&hist->align_avg, prev_align_avg[1]);
